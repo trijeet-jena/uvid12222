@@ -366,18 +366,19 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .pdp__thumb--vc.pdp__thumb--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); }
 .pdp__thumb--vc.pdp__thumb--on span { color: var(--green); }
 
-/* colour swatches (one product, several colours) */
-.pdp__colours { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
-.pdp__colourslabel { font: 700 12px "Outfit", sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
-.pdp__swatch {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 2px solid var(--line); background: #fff; border-radius: 999px;
-  padding: 5px 12px 5px 5px; cursor: pointer;
-  font: 600 13px "Outfit", sans-serif; color: var(--ink);
+/* image tiles for colour/size variants */
+.pdp__variantTiles { margin-top: 14px; }
+.pdp__variantTilesLabel { display: block; margin-bottom: 8px; font: 700 12px "Outfit", sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.pdp__variantTileList { display: flex; flex-wrap: wrap; gap: 9px; }
+.pdp__variantTile {
+  width: 70px; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.pdp__swatch img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
-.pdp__swatch:hover { border-color: var(--line-2); }
-.pdp__swatch--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); color: var(--green-d); }
+.pdp__variantTile img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: var(--paper-2); }
+.pdp__variantTileName { width: 100%; min-height: 26px; display: grid; place-items: center; overflow-wrap: anywhere; text-align: center; font: 600 10.5px/1.2 "Outfit", sans-serif; }
+.pdp__variantTile:hover { border-color: var(--line-2); box-shadow: 0 2px 8px rgba(34,28,21,.08); }
+.pdp__variantTile--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); color: var(--green-d); }
 #pdpThumbs { flex-wrap: wrap; }
 .pdp__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
 .pdp__brand { margin: 0 0 4px; }
@@ -2204,10 +2205,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   /* gallery thumbnails for one colour (or the product itself) */
-  function thumbHtml(rec, active) {
+  function thumbHtml(rec, active, omitMainImage) {
     var imgs = (rec && rec.images && rec.images.length)
       ? rec.images
       : [{ id: null, url: rec ? rec.img : "", altText: rec ? rec.name : "" }];
+    if (omitMainImage && rec) imgs = imgs.filter(function (im) { return im.url !== rec.img; });
     return imgs.map(function (im, i) {
       return '<button type="button" class="pdp__thumb' + (i === (active || 0) ? " pdp__thumb--on" : "") +
         '" data-thumb="' + i + '" data-thumburl="' + esc(im.url) + '" aria-label="Photo ' + (i + 1) + '">' +
@@ -2222,10 +2224,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (!p) { view.innerHTML = emptyState("🤷", "Product not found", "It may have been removed.", '<a class="btn btn--primary" href="#/">Back to home</a>'); return; }
     if (p.tags.indexOf("vc-hidden") > -1) { mainId = p.parent; p = D.findProduct(p.parent) || p; }
     var mainP = p;
+    var selectedVariant = null;
     if (mainP.variants) {
       /* resolve the displayed record to the selected size (default 3 mm) */
-      var vSel = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v; })[0] : null) || mainP.variants[0];
-      p = D.findProduct(vSel.id) || p;
+      selectedVariant = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v; })[0] : null) || mainP.variants[0];
+      p = D.findProduct(selectedVariant.id) || p;
     }
     var hasVariants = !!mainP.variants;
     A.pushRecent && A.pushRecent(mainId);
@@ -2245,7 +2248,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         : '<td>' + esc(p.specs[k]) + '</td>';
       return '<tr><th>' + esc(k) + '</th>' + cell + '</tr>';
     }).join("");
-    var variantLabel = hasVariants ? mainP.name + " — " + p.specs["Thickness"] + " × 20 cm" : p.name;
+    var variantLabel = hasVariants
+      ? mainP.name + " — " + ((selectedVariant && selectedVariant.label) || p.variantLabel || p.name)
+      : p.name;
 
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }, { label: variantLabel }]) +
@@ -2253,13 +2258,15 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
       (hasVariants
-        ? '<div class="pdp__colours" role="group" aria-label="Colour"><span class="pdp__colourslabel">Colour</span>' +
+        ? '<div class="pdp__variantTiles" role="group" aria-label="Choose a colour"><span class="pdp__variantTilesLabel">Colour</span><div class="pdp__variantTileList">' +
           mainP.variants.map(function (v) {
-            return '<button type="button" class="pdp__swatch' + (p.id === v.id ? " pdp__swatch--on" : "") + '" data-vcsize="' + esc(v.size) + '" data-vcid="' + v.id + '" aria-pressed="' + (p.id === v.id) + '">' +
-              '<img src="' + v.img + '" alt="" />' + esc(v.label) + "</button>";
-          }).join("") + "</div>"
+            var label = v.label || v.size || "Option";
+            return '<button type="button" class="pdp__variantTile' + (p.id === v.id ? " pdp__variantTile--on" : "") + '" data-vcid="' + esc(v.id) + '" aria-label="Choose ' + esc(label) + '" aria-pressed="' + (p.id === v.id) + '">' +
+              '<img src="' + esc(v.img || BLANK_IMG) + '" alt="" />' +
+              '<span class="pdp__variantTileName">' + esc(label) + '</span></button>';
+          }).join("") + "</div></div>"
         : "") +
-      '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0) + "</div>" +
+      '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0, hasVariants) + "</div>" +
       '<div class="pdp__actions">' +
       '<div class="pdp__actions">' +
       (inCart > 0 && !hasVariants
@@ -2319,22 +2326,25 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     if (hasVariants) {
       var pdpState = { id: p.id };
-      $$(".pdp__swatch").forEach(function (b) {
+      $$(".pdp__variantTile").forEach(function (b) {
         b.addEventListener("click", function () {
           var vid = b.getAttribute("data-vcid");
           if (vid === pdpState.id) return;
           var rec = D.findProduct(vid);
           if (!rec) return;
+          var chosenVariant = mainP.variants.filter(function (v) { return v.id === rec.id; })[0];
+          var chosenLabel = (chosenVariant && chosenVariant.label) || rec.variantLabel || rec.name;
+          var chosenTitle = mainP.name + " — " + chosenLabel;
           pdpState.id = rec.id;
-          $$(".pdp__swatch").forEach(function (x) { x.classList.remove("pdp__swatch--on"); x.setAttribute("aria-pressed", "false"); });
-          b.classList.add("pdp__swatch--on");
+          $$(".pdp__variantTile").forEach(function (x) { x.classList.remove("pdp__variantTile--on"); x.setAttribute("aria-pressed", "false"); });
+          b.classList.add("pdp__variantTile--on");
           b.setAttribute("aria-pressed", "true");
           var img = $("#pdpImg"); if (img) { img.src = rec.img; img.alt = rec.name; }
           /* show this colour's own photos from the image database */
-          if (thumbs) { thumbs.innerHTML = thumbHtml(rec, 0); }
+          if (thumbs) { thumbs.innerHTML = thumbHtml(rec, 0, true); }
           var pb = $("#pdpPrice"); if (pb) pb.textContent = money(rec.price);
-          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = mainP.name + " — " + rec.specs["Thickness"] + " × 20 cm";
-          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = mainP.name + " — " + rec.specs["Thickness"] + " × 20 cm";
+          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = chosenTitle;
+          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = chosenTitle;
           var st = $("#pdpSpecThk"); if (st) st.textContent = rec.specs["Thickness"] + " × 20 cm";
           $$('#view [data-root="' + mainId + '"]').forEach(function (btn) {
             if (btn.hasAttribute("data-add")) btn.setAttribute("data-add", rec.id);
@@ -3280,7 +3290,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       }
     }
 
-    /* link size-variant children (meta.parent) to their parent product */
+    /* link variant child rows (meta.parent) to their parent product */
     var kids = {};
     for (i = 0; i < list.length; i++) {
       if (list[i].parent) (kids[list[i].parent] = kids[list[i].parent] || []).push(list[i]);
@@ -3293,8 +3303,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         var label = c.variantLabel ||
           (c.name.indexOf(" — ") > -1 ? c.name.split(" — ").slice(1).join(" — ") : c.name);
         var size = label.split(" × ")[0] || label;
-        /* the PDP size UI reads specs.Thickness — inject for admin-created sizes */
-        if (c.specs.Thickness == null) c.specs.Thickness = size;
+        /* Only size labels belong in Thickness. Colour labels such as "Maroon"
+           should remain variant names instead of appearing as fake specs. */
+        if (c.specs.Thickness == null && /^\d+(?:\.\d+)?\s*mm$/i.test(size)) c.specs.Thickness = size;
         return { id: c.id, size: size, label: label, price: c.price, mrp: c.mrp, img: c.img, images: c.images || [] };
       });
     }
