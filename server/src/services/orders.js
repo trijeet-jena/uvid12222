@@ -9,17 +9,11 @@ const crypto = require("crypto");
 const { db, touch, now } = require("../db");
 const bus = require("../events");
 
-const PAYMENT_METHODS = ["COD", "UPI", "CARD", "NETBANKING", "WALLET"];
+const PAYMENT_METHODS = ["UPI"];
 
-/* shipping + coupon rules — mirrors the storefront, enforced server-side */
+/* shipping rules — enforced server-side */
 const SHIP_FEE = 49;
 const FREE_SHIP_MIN = 499;
-const COUPONS = [
-  { code: "PAPER10", type: "percent", value: 10, cap: 150, min: 0 },
-  { code: "FIRST50", type: "flat", value: 50, cap: null, min: 199 },
-  { code: "DESK200", type: "flat", value: 200, cap: null, min: 999 },
-  { code: "FREESHIP", type: "ship", value: 0, cap: null, min: 0 },
-];
 
 function genOrderId() {
   return "UV" + Date.now().toString(36).toUpperCase() + crypto.randomInt(100, 1000);
@@ -27,18 +21,15 @@ function genOrderId() {
 
 function placeOrder(user, payload) {
   const items = Array.isArray(payload && payload.items) ? payload.items : [];
-  const method = String(payload.paymentMethod || "COD").toUpperCase();
+  const method = String(payload.paymentMethod || "UPI").toUpperCase();
   if (!items.length) { const e = new Error("Your cart is empty."); e.status = 400; throw e; }
-  if (!PAYMENT_METHODS.includes(method)) { const e = new Error("Unsupported payment method."); e.status = 400; throw e; }
+  if (!PAYMENT_METHODS.includes(method)) { const e = new Error("Only UPI QR payment is available."); e.status = 400; throw e; }
   if (items.length > 40) { const e = new Error("Too many distinct items in one order."); e.status = 400; throw e; }
 
   const address = payload.address && typeof payload.address === "object" ? payload.address : null;
   if (!address || !String(address.line || "").trim() || !String(address.city || "").trim() || !/^\d{6}$/.test(String(address.pin || ""))) {
     const e = new Error("A complete delivery address (line, city, 6-digit PIN) is required."); e.status = 400; throw e;
   }
-
-  /* optional coupon — validated against server rules, never trusted from the client */
-  const couponCode = payload.coupon ? String(payload.coupon).trim().toUpperCase() : null;
 
   /* merge duplicate lines, validate shape (productId + optional variantSku) */
   const want = new Map();
@@ -89,31 +80,20 @@ function placeOrder(user, payload) {
     }
     total = Math.round(total * 100) / 100;
 
-    /* coupon + shipping rules (mirror of the storefront, enforced here) */
-    let discount = 0, shipFree = false;
-    if (couponCode) {
-      const coupon = COUPONS.find((c) => c.code === couponCode);
-      if (!coupon) { const e = new Error("Invalid coupon code."); e.status = 400; throw e; }
-      if (total < coupon.min) {
-        const e = new Error(`"${coupon.code}" needs a minimum order of ₹${coupon.min}.`); e.status = 400; throw e;
-      }
-      if (coupon.type === "percent") discount = Math.min((total * coupon.value) / 100, coupon.cap || Infinity);
-      else if (coupon.type === "flat") discount = coupon.value;
-      else if (coupon.type === "ship") shipFree = true;
-      discount = Math.round(discount * 100) / 100;
-    }
-    const shipping = shipFree || total >= FREE_SHIP_MIN ? 0 : SHIP_FEE;
-    const grand = Math.round((Math.max(0, total - discount) + shipping) * 100) / 100;
+    /* no coupon codes are offered; apply standard shipping only */
+    const discount = 0;
+    const shipping = total >= FREE_SHIP_MIN ? 0 : SHIP_FEE;
+    const grand = Math.round((total + shipping) * 100) / 100;
 
     const orderId = genOrderId();
     db.prepare(
       `INSERT INTO orders (id, customer_id, total_amount, status, payment_method, payment_status, address_json, eta, coupon, discount, shipping)
        VALUES (?, ?, ?, 'PLACED', ?, ?, ?, ?, ?, ?, ?)`
     ).run(orderId, user.id, grand, method,
-          method === "COD" ? "PENDING" : "PAID",
+          "PENDING",
           JSON.stringify(address),
           new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10),
-          couponCode, discount, shipping);
+          null, discount, shipping);
 
     const insItem = db.prepare(
       `INSERT INTO order_items (order_id, product_id, product_name, variant_label, quantity, price_at_purchase, image_url)
@@ -222,8 +202,22 @@ function adminSetStatus(orderId, status) {
   if (!allowed.includes(v)) { const e = new Error("Invalid order status."); e.status = 400; throw e; }
   const o = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
   if (!o) { const e = new Error("Order not found."); e.status = 404; throw e; }
+  if (o.payment_method === "UPI" && o.payment_status !== "PAID" && !["PLACED", "CANCELLED"].includes(v)) {
+    const e = new Error("Confirm the UPI payment before packing or shipping this order."); e.status = 409; throw e;
+  }
   if (v === "CANCELLED" && o.status !== "CANCELLED") return cancelOrder(orderId, { role: "ADMIN", id: o.customer_id });
   db.prepare("UPDATE orders SET status = ?, updated_at = ? WHERE id = ?").run(v, now(), orderId);
+  return getOrder(orderId, { role: "ADMIN", id: o.customer_id });
+}
+
+function adminConfirmPayment(orderId) {
+  const o = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  if (!o) { const e = new Error("Order not found."); e.status = 404; throw e; }
+  if (o.payment_method !== "UPI") { const e = new Error("This order is not a UPI payment."); e.status = 409; throw e; }
+  if (o.status === "CANCELLED") { const e = new Error("A cancelled order cannot be marked paid."); e.status = 409; throw e; }
+  if (o.payment_status !== "PAID") {
+    db.prepare("UPDATE orders SET payment_status = 'PAID', updated_at = ? WHERE id = ?").run(now(), orderId);
+  }
   return getOrder(orderId, { role: "ADMIN", id: o.customer_id });
 }
 
@@ -240,7 +234,7 @@ function adminStats() {
     inactive: one("SELECT COUNT(*) AS n FROM products WHERE status = 'ARCHIVED'").n,
     orders: one("SELECT COUNT(*) AS n FROM orders").n,
     openOrders: one("SELECT COUNT(*) AS n FROM orders WHERE status IN ('PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')").n,
-    revenue: one("SELECT COALESCE(SUM(total_amount),0) AS n FROM orders WHERE status != 'CANCELLED'").n,
+    revenue: one("SELECT COALESCE(SUM(total_amount),0) AS n FROM orders WHERE status != 'CANCELLED' AND (payment_method != 'UPI' OR payment_status = 'PAID')").n,
     customers: one("SELECT COUNT(*) AS n FROM users WHERE role = 'CUSTOMER'").n,
     recentProducts: all(
       "SELECT id, product_name, category, price, stock_quantity, status, image_url, updated_at FROM products WHERE status != 'ARCHIVED' ORDER BY updated_at DESC, created_at DESC LIMIT 6"
@@ -253,4 +247,4 @@ function adminStats() {
   };
 }
 
-module.exports = { placeOrder, listOrdersForCustomer, getOrder, cancelOrder, listAllOrders, adminSetStatus, adminStats };
+module.exports = { placeOrder, listOrdersForCustomer, getOrder, cancelOrder, listAllOrders, adminSetStatus, adminConfirmPayment, adminStats };

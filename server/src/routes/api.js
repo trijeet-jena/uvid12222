@@ -177,6 +177,15 @@ router.get("/admin/orders", requireAdmin, (req, res) => {
   res.json({ orders: orders.listAllOrders({ status: req.query.status, limit: req.query.limit }) });
 });
 
+router.put("/admin/orders/:id/payment", requireAdmin, (req, res) => {
+  try {
+    const o = orders.adminConfirmPayment(String(req.params.id));
+    audit("order.payment_confirmed", req, String(req.params.id), { method: o.payment_method, paymentStatus: o.payment_status });
+    res.json({ ok: true, order: o });
+  }
+  catch (e) { res.status(e.status || 500).json({ error: e.message || "Could not confirm payment." }); }
+});
+
 router.put("/admin/orders/:id/status", requireAdmin, (req, res) => {
   try {
     const o = orders.adminSetStatus(String(req.params.id), (req.body || {}).status);

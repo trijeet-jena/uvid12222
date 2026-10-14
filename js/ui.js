@@ -172,12 +172,12 @@
       '<div class="hero__copy">' +
       '<p class="hero__hi">' + greet + (user ? ', <b>' + esc(user.name) + '</b>' : '') + ' 👋</p>' +
       '<h1>Supplies that make <em>paper feel premium.</em></h1>' +
-      '<p class="hero__sub">Pens, notebooks, planners & desk finds — free delivery over ' + money(A.FREE_SHIP_MIN) + ', easy returns, and prices that actually make sense.</p>' +
+      '<p class="hero__sub">Pens, notebooks, planners & desk finds — free delivery over ' + money(A.FREE_SHIP_MIN) + ' and prices that actually make sense.</p>' +
       '<div class="hero__cta">' +
       '<a class="btn btn--primary btn--lg" href="#/c/notebooks">Shop bestsellers</a>' +
       '<a class="btn btn--ghost btn--lg" href="#/search?sort=discount">Today’s deals</a>' +
       '</div>' +
-      '<ul class="hero__points"><li>✓ 7-day returns</li><li>✓ COD available</li><li>✓ 2–4 day delivery</li></ul>' +
+      '<ul class="hero__points"><li>✓ UPI QR payments</li><li>✓ 2–4 day delivery</li></ul>' +
       '</div>' +
       '<div class="hero__cards" aria-hidden="true">' +
       '<img class="hero__c hero__c--1" src="' + heroImg("planner-2026", 0) + '" alt="" />' +
@@ -203,14 +203,11 @@
       shelf("Just landed", "Fresh arrivals for your desk", newest, "#/search?sort=newest") +
       '<section class="perks reveal">' +
       '<div class="perk"><span>🚚</span><h4>Fast delivery</h4><p>2–4 days metro to metro, tracked end to end.</p></div>' +
-      '<div class="perk"><span>↩️</span><h4>7-day returns</h4><p>Changed your mind? No questions, instant pickup.</p></div>' +
-      '<div class="perk"><span>🔒</span><h4>Secure payments</h4><p>UPI, cards, netbanking, wallets — or cash on delivery.</p></div>' +
+      '<div class="perk"><span>🔒</span><h4>UPI QR payment</h4><p>Pay with PhonePe or another UPI app. Orders are confirmed after payment verification.</p></div>' +
       '<div class="perk"><span>🇮🇳</span><h4>Made for India</h4><p>Prices in ₹, GST invoice, support that replies.</p></div>' +
       '</section>' +
 
-      (recent.length ? shelf("Recently viewed", "Pick up where you left off", recent) : "") +
-      '<section class="couponrail reveal"><h2>Coupons for you</h2><div class="couponrail__grid">' +
-      D.COUPONS.map(couponCard).join("") + '</div></section>';
+      (recent.length ? shelf("Recently viewed", "Pick up where you left off", recent) : "");
 
     dealCountdown();
   }
@@ -481,11 +478,10 @@
       '<div class="pdp__priceblock">' +
       '<div class="pdp__price"><b id="pdpPrice">' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em class="off">' + p.discount + '% off</em>' : '') + '</div>' +
       '<p class="pdp__tax">Inclusive of all taxes</p></div>' +
-      (D.COUPONS[0] ? '<div class="pdp__coupon">🏷️ Extra ' + D.COUPONS[0].label.toLowerCase() + ' with code <b>' + D.COUPONS[0].code + '</b> — apply at checkout</div>' : "") +
       '<div class="pdp__delivery card-inset">' +
       '<p>🚚 Delivery by <b>' + etaStr + '</b> · Free above ' + money(A.FREE_SHIP_MIN) + '</p>' +
       '<p>' + (p.stock <= 20 ? "⚡ Hurry! Only " + p.stock + " left in stock" : "✅ In stock — ships in 24 hrs") + '</p>'.replace("<p>", "<p id='pdpStockBadge'>") +
-      '<p>↩️ 7-day easy returns · 💵 COD available</p></div>' +
+      '<p>📱 Pay by UPI QR</p></div>' +
       '<div class="pdp__wishrow">' +
       '<button class="heartbtn' + (wished ? " heartbtn--on" : "") + '" data-wish="' + mainId + '">' + (wished ? "♥ Wishlisted" : "♡ Add to wishlist") + '</button>' +
       '</div>' +
@@ -552,14 +548,6 @@
 
   /* ================= CART ================= */
 
-  function couponCard(c) {
-    return '<div class="coupon">' +
-      '<div class="coupon__code"><b>' + c.code + '</b><span>' + esc(c.label) + '</span></div>' +
-      '<p>' + esc(c.note) + '</p>' +
-      '<button class="btn btn--soft btn--sm" data-coupon="' + c.code + '">Apply</button>' +
-      '</div>';
-  }
-
   /* drop cart lines whose product no longer exists (archived/deleted) */
   function pruneMissingCart() {
     var before = A.state.cart.length;
@@ -579,8 +567,6 @@
         '<a class="btn btn--primary" href="#/">Start shopping</a>');
       return;
     }
-    var s = A.session();
-    var applied = t.coupon;
     var saved = A.state.cart.reduce(function (sum, l) {
       var p = D.findProduct(l.id); return sum + (p ? (p.mrp - p.price) * l.qty : 0);
     }, 0);
@@ -608,42 +594,23 @@
       '<header class="cartpage__head"><h1>Shopping cart <span>(' + t.count + ' item' + (t.count === 1 ? "" : "s") + ')</span></h1>' +
       '<button class="linkbtn linkbtn--danger" data-clearcart>Clear cart</button></header>' +
       lines +
-      '<section class="cpns card"><h3>🏷️ Apply coupon</h3>' +
-      (applied
-        ? '<div class="cpn-applied"><span>✓ <b>' + applied.code + '</b> applied — ' + esc(applied.label) + '</span><button class="linkbtn linkbtn--danger" data-uncoupon>Remove</button></div>'
-        : '<div class="cpn-input"><input id="cpnCode" placeholder="Enter coupon code" /><button class="btn btn--soft" id="cpnApply">Apply</button></div><p class="cpn-err" id="cpnErr" hidden></p>') +
-      '<div class="cpn-list">' + D.COUPONS.filter(function (c) { return !applied || c.code !== applied.code; }).map(couponCard).join("") + '</div>' +
-      '</section></section>' +
+      '</section>' +
 
       '<aside class="cartpage__side">' +
       '<div class="pricedtl card"><h3>Price details</h3>' +
       '<div class="prow"><span>Price (' + t.count + ' item' + (t.count === 1 ? "" : "s") + ')</span><b>' + money(t.mrpTotal) + '</b></div>' +
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Product discount</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
-      (t.discount ? '<div class="prow prow--green"><span>Coupon (' + applied.code + ')</span><b>− ' + money(t.discount) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>' + (t.shipping === 0 ? '<span class="green">FREE</span>' : money(t.shipping)) + '</b></div>' +
       '<div class="prow prow--total"><span>Total payable</span><b>' + money(t.total) + '</b></div>' +
-      (t.mrpTotal - t.subtotal + t.discount > 0 ? '<p class="prow--save">You save <b>' + money(t.mrpTotal - t.subtotal + t.discount) + '</b> on this order 🎉</p>' : "") +
+      (t.mrpTotal - t.subtotal > 0 ? '<p class="prow--save">You save <b>' + money(t.mrpTotal - t.subtotal) + '</b> on this order 🎉</p>' : "") +
       '<button class="btn btn--primary btn--block btn--lg" id="toCheckout">Place order →</button>' +
-      '<p class="safe-note">🔒 Safe and secure payments · Easy returns</p>' +
+      '<p class="safe-note">🔒 Safe and secure payments</p>' +
       '</div></aside></div>';
 
     $("#toCheckout").addEventListener("click", function () {
       if (!A.requireLogin("Login to checkout.")) return;
       A.navigateTo("#/checkout");
     });
-    var applyBtn = $("#cpnApply");
-    if (applyBtn) {
-      applyBtn.addEventListener("click", function () {
-        var code = ($("#cpnCode").value || "").trim().toUpperCase();
-        var err = $("#cpnErr");
-        var found = D.COUPONS.filter(function (c) { return c.code === code; })[0];
-        if (!found) { err.textContent = "That code doesn’t exist. Try PAPER10."; err.hidden = false; return; }
-        if (t.subtotal < found.min) { err.textContent = "Add " + money(found.min - t.subtotal) + " more to use " + found.code + "."; err.hidden = false; return; }
-        A.setSession({ coupon: found.code });
-        A.toast("Coupon " + found.code + " applied!", true);
-        rerender();
-      });
-    }
   }
 
   /* ================= WISHLIST ================= */
@@ -705,30 +672,7 @@
       if (a0) A.setSession({ address: a0 });
     }
 
-    var payMethods = [
-      { id: "upi", icon: "🟣", label: "UPI", sub: "Pay via any UPI app — GPay, PhonePe, Paytm" },
-      { id: "card", icon: "💳", label: "Credit / Debit card", sub: "Visa, Mastercard, RuPay, Amex" },
-      { id: "netbanking", icon: "🏦", label: "Netbanking", sub: "All major Indian banks" },
-      { id: "wallet", icon: "👛", label: "Wallets", sub: "Paytm, Amazon Pay, Mobikwik" },
-      { id: "cod", icon: "💵", label: "Cash on delivery", sub: "Pay when your order arrives" }
-    ];
-    var method = s.paymentMethod || "upi";
-
-    var paySubHtml = {
-      upi: '<div class="paysub"><input id="upiId" placeholder="yourname@upi" value="' + esc(s.upiId || "") + '" /><p class="payhint">You’ll get a collect request (simulated).</p></div>',
-      card: '<div class="paysub paysub--card">' +
-        '<input id="cardNum" inputmode="numeric" autocomplete="cc-number" placeholder="Card number (16 digits)" maxlength="19" />' +
-        '<div class="paysub__row"><input id="cardExp" autocomplete="cc-exp" placeholder="MM/YY" maxlength="5" /><input id="cardCvv" type="password" autocomplete="cc-csc" placeholder="CVV" maxlength="3" inputmode="numeric" /><input id="cardName" autocomplete="cc-name" placeholder="Name on card" /></div></div>',
-      netbanking: '<div class="paysub"><select id="bankSel">' +
-        ["HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank", "Kotak Bank"].map(function (b) {
-          return '<option' + (s.bank === b ? " selected" : "") + '>' + b + '</option>';
-        }).join("") + '</select></div>',
-      wallet: '<div class="paysub"><select id="walletSel">' +
-        ["Paytm Wallet", "Amazon Pay", "Mobikwik"].map(function (w) {
-          return '<option' + (s.wallet === w ? " selected" : "") + '>' + w + '</option>';
-        }).join("") + '</select></div>',
-      cod: '<div class="paysub"><p class="payhint">💵 Pay ' + money(t.total) + ' in cash or UPI when the order reaches your door.</p></div>'
-    };
+    A.setSession({ paymentMethod: "UPI", cardNum: null, cardExp: null, cardName: null });
 
     var addrBlock;
     if (addresses.length === 0) {
@@ -761,23 +705,20 @@
       '<div class="cbox card"><h2><span class="cbox__num">2</span> Order summary</h2>' +
       '<div class="minis">' + orderItems + '</div>' +
       '<button class="linkbtn" id="backToCart">← Edit cart</button></div>' +
-      '<div class="cbox card"><h2><span class="cbox__num">3</span> Payment method</h2>' +
-      '<div class="paylist">' + payMethods.map(function (m) {
-        var on = m.id === method;
-        return '<label class="payopt' + (on ? " payopt--on" : "") + '">' +
-          '<input type="radio" name="paySel" value="' + m.id + '"' + (on ? " checked" : "") + ' />' +
-          '<span class="payopt__icon">' + m.icon + '</span>' +
-          '<span class="payopt__body"><b>' + m.label + '</b><span>' + m.sub + '</span></span></label>' +
-          (on ? paySubHtml[m.id] : "");
-      }).join("") + '</div></div>' +
+      '<div class="cbox card"><h2><span class="cbox__num">3</span> UPI QR payment</h2>' +
+      '<div class="upi-checkout">' +
+      '<div class="payopt payopt--on"><span class="payopt__icon">📱</span><span class="payopt__body"><b>Pay by UPI QR</b><span>Scan with PhonePe or another UPI app. Payment is checked before your order is confirmed.</span></span></div>' +
+      '<p class="upi-setup" id="upiQrSetup" role="status">Checking whether the store UPI QR has been added…</p>' +
+      '<img class="upi-preflight" id="upiQrPreflight" src="/assets/upi-qr.png" alt="" aria-hidden="true" />' +
+      '</div></div>' +
       '</section>' +
       '<aside class="checkouts"><div class="pricedtl card"><h3>Price details</h3>' +
       '<div class="prow"><span>Amount (' + t.count + ' item' + (t.count === 1 ? "" : "s") + ')</span><b>' + money(t.mrpTotal) + '</b></div>' +
-      (t.mrpTotal - t.subtotal + t.discount > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal + t.discount) + '</b></div>' : "") +
+      (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>' + (t.shipping === 0 ? '<span class="green">FREE</span>' : money(t.shipping)) + '</b></div>' +
       '<div class="prow prow--total"><span>Total payable</span><b>' + money(t.total) + '</b></div>' +
-      '<button class="btn btn--primary btn--block btn--lg" id="placeOrder">Pay ' + money(t.total) + '</button>' +
-      '<p class="safe-note">🔒 Your data stays on this device (demo store)</p>' +
+      '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
+      '<p class="safe-note">Your order is confirmed only after UPI payment is verified.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -819,35 +760,30 @@
       });
     });
 
-    $$('.payopt input[name="paySel"]').forEach(function (r) {
-      r.addEventListener("change", function () {
-        A.setSession({ paymentMethod: r.value });
-        rerender();
-      });
-    });
+    var qrProbe = $("#upiQrPreflight");
+    var placeButton = $("#placeOrder");
+    var qrSetup = $("#upiQrSetup");
+    function setQrReady(ready) {
+      if (ready) {
+        placeButton.disabled = false;
+        placeButton.textContent = "Continue to UPI payment · " + money(t.total);
+        qrSetup.textContent = "UPI QR is ready. You will see the QR and order number on the next screen.";
+        qrSetup.classList.add("upi-setup--ready");
+      } else {
+        placeButton.disabled = true;
+        placeButton.textContent = "UPI QR not ready";
+        qrSetup.textContent = "The store has not added its UPI QR yet. Checkout will be available once assets/upi-qr.png is added.";
+        qrSetup.classList.remove("upi-setup--ready");
+      }
+    }
+    qrProbe.addEventListener("load", function () { setQrReady(true); });
+    qrProbe.addEventListener("error", function () { setQrReady(false); });
+    if (qrProbe.complete) setQrReady(qrProbe.naturalWidth > 0);
 
     $("#placeOrder").addEventListener("click", function () {
+      if (placeButton.disabled) return;
       if (!A.session().address) { A.toast("Add a delivery address first.", false); window.scrollTo(0, 0); return; }
-      var m = A.session().paymentMethod || "upi";
-      if (m === "upi") {
-        var upi = $("#upiId") ? $("#upiId").value.trim() : "";
-        if (upi.indexOf("@") === -1) { A.toast("Enter a valid UPI ID (name@bank).", false); return; }
-        A.setSession({ upiId: upi });
-      }
-      if (m === "card") {
-        var num = ($("#cardNum").value || "").replace(/\D/g, "");
-        var exp = $("#cardExp").value.trim();
-        var cvv = ($("#cardCvv").value || "").replace(/\D/g, "");
-        if (num.length !== 16) { A.toast("Card number must be 16 digits.", false); return; }
-        if (!/^\d{2}\/\d{2}$/.test(exp)) { A.toast("Expiry must be MM/YY.", false); return; }
-        if (cvv.length !== 3) { A.toast("CVV must be 3 digits.", false); return; }
-        /* never store the PAN, expiry or name — only the payment method is remembered */
-        A.setSession({ cardNum: null, cardExp: null, cardName: null });
-      }
-      if (m === "netbanking") A.setSession({ bank: $("#bankSel").value });
-      if (m === "wallet") A.setSession({ wallet: $("#walletSel").value });
-
-      Promise.resolve(A.placeOrder(m)).then(function (order) {
+      Promise.resolve(A.placeOrder("UPI")).then(function (order) {
         if (order) A.navigateTo("#/pay/" + order.id);
       });
     });
@@ -858,31 +794,58 @@
   function paymentPage(orderId) {
     var order = A.state.orders.filter(function (o) { return o.id === orderId; })[0];
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
-
-    if (order.processed) { successHtml(order); return; }
+    if (order.status === "Cancelled") { view.innerHTML = emptyState("↩️", "Order cancelled", "This order is cancelled. Contact the store if you already transferred payment.", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
 
     var isCod = String(order.payment).toLowerCase() === "cod";
-    view.innerHTML = '<div class="paywait card"><div class="paywait__spinner"></div>' +
-      '<h2>' + (isCod ? "Confirming your order…" : "Processing payment…") + '</h2>' +
-      '<p class="paywait__steps" id="payStep">Contacting your bank…</p>' +
-      '<p class="safe-note">Do not press back (this is a demo — but stay anyway 🙂)</p></div>';
+    if (order._srv && isCod) { successHtml(order); return; }
+    if (!order._srv) {
+      view.innerHTML = emptyState("🔒", "Payment needs server verification", "This order cannot be marked successful from browser-only data. Please return to checkout and use the store's UPI payment flow.", '<a class="btn btn--primary" href="#/checkout">Return to checkout</a>');
+      return;
+    }
 
-    var steps = isCod
-      ? ["Reserving your items…", "Confirming with the store…", "Placing your order…"]
-      : ["Contacting your bank…", "Verifying " + (order.payment === "upi" ? "UPI" : order.payment === "card" ? "card" : "details") + "…", "Payment approved ✓"];
-    var i = 0;
-    var iv = setInterval(function () {
-      i++;
-      var el = document.getElementById("payStep");
-      if (!el) { clearInterval(iv); return; }
-      if (i < steps.length) { el.textContent = steps[i]; return; }
-      clearInterval(iv);
-      order.processed = true;
-      order.paidAt = new Date().toISOString();
-      A.save();
-      simulateShipping(order);
-      successHtml(order);
-    }, 900);
+    view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
+      '<p>Scan this PhonePe Business QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+      '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+      '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
+      '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
+      '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
+      '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
+
+    var qr = $("#upiPaymentQr");
+    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    function checkPaymentStatus() {
+      var statusEl = $("#upiPaymentStatus");
+      if (!statusEl) { clearInterval(paymentTimer); return; }
+      fetch("/api/orders/" + encodeURIComponent(order.id), { cache: "no-store", credentials: "same-origin" })
+        .then(function (res) { if (!res.ok) throw new Error("Could not refresh payment status."); return res.json(); })
+        .then(function (data) {
+          var serverOrder = data && data.order;
+          if (!serverOrder) return;
+          if (serverOrder.payment_status === "PAID") {
+            order.paymentConfirmed = true;
+            order.paymentStatus = "Paid ✓";
+            order.processed = true;
+            A.save();
+            clearInterval(paymentTimer);
+            successHtml(order);
+            return;
+          }
+          if (serverOrder.status === "CANCELLED") {
+            order.status = "Cancelled";
+            A.save();
+            statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
+            statusEl.classList.add("upi-wait__status--error");
+            clearInterval(paymentTimer);
+            return;
+          }
+          order.paymentStatus = "Awaiting payment verification";
+          statusEl.textContent = "Payment awaiting verification. The order is not confirmed yet.";
+          A.save();
+        })
+        .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
+    }
+    var paymentTimer = setInterval(checkPaymentStatus, 5000);
+    checkPaymentStatus();
   }
 
   function successHtml(order) {
@@ -924,6 +887,13 @@
         pending.forEach(function (o) {
           var s = map[o.id];
           if (!s) return;
+          var confirmed = s.payment_status === "PAID";
+          var paymentLabel = confirmed ? "Paid ✓" : (String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery");
+          if (o.paymentConfirmed !== confirmed || o.paymentStatus !== paymentLabel) {
+            o.paymentConfirmed = confirmed;
+            o.paymentStatus = paymentLabel;
+            changed = true;
+          }
           if (s.status === "CANCELLED") {
             if (o.status !== "Cancelled") { o.status = "Cancelled"; changed = true; }
             return;
@@ -964,7 +934,7 @@
         }).join("") + (o.items.length > 4 ? '<span class="othumb othumb--more">+' + (o.items.length - 4) + '</span>' : "");
         return '<article class="ocard card">' +
           '<header><div><p class="ocard__id">Order ' + o.id + ' · ' + A.fmtDate(o.placedAt) + '</p>' +
-          '<p class="ocard__total">' + money(o.totals.total) + ' · ' + esc(String(o.payment).toUpperCase()) + '</p></div>' + statusPill(o.status) + '</header>' +
+          '<p class="ocard__total">' + money(o.totals.total) + ' · ' + esc(String(o.payment).toUpperCase()) + '</p>' + (o.payment === "upi" && !o.paymentConfirmed ? '<small class="payment-pending">' + esc(o.paymentStatus || "Awaiting payment verification") + '</small>' : "") + '</div>' + statusPill(o.status) + '</header>' +
           '<div class="ocard__mid"><div class="othumbs">' + thumbs + '</div>' +
           (o.status === "Delivered" ? '<p class="ocard__eta ocard__eta--ok">Delivered ' + A.fmtDate(o.eta) + '</p>'
             : o.status === "Cancelled" ? '<p class="ocard__eta ocard__eta--no">Cancelled · refund in 3–5 days</p>'
@@ -1019,9 +989,8 @@
       esc(o.address.line) + ', ' + esc(o.address.city) + ' — ' + esc(o.address.pin) + '</p></section>' +
       '<section class="card odetail__box"><h2>payment summary</h2>' +
       '<div class="prow"><span>Items total</span><b>' + money(o.totals.subtotal) + '</b></div>' +
-      (o.totals.discount ? '<div class="prow prow--green"><span>Coupon ' + esc(o.coupon || "") + '</span><b>− ' + money(o.totals.discount) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>' + (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) + '</b></div>' +
-      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : "paid") + '</span><b>' + money(o.totals.total) + '</b></div>' +
+      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : "(payment awaiting verification)") + '</span><b>' + money(o.totals.total) + '</b></div>' +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
   }
@@ -1171,25 +1140,6 @@
 
     var cc = t.closest("[data-clearcart]");
     if (cc) { e.preventDefault(); A.state.cart.slice().forEach(function (l) { A.setQty(l.id, 0); }); A.toast("Cart cleared", true); rerenderSoft(); return; }
-
-    var cpn = t.closest("[data-coupon]");
-    if (cpn) {
-      e.preventDefault();
-      var code = cpn.getAttribute("data-coupon");
-      var c = D.COUPONS.filter(function (x) { return x.code === code; })[0];
-      var tot = A.computeTotals();
-      if (c && tot.subtotal >= c.min) {
-        A.setSession({ coupon: code });
-        A.toast("Coupon " + code + " applied!", true);
-        rerender();
-      } else {
-        A.toast("Add " + money(c.min - tot.subtotal) + " more to use " + code + ".", false);
-      }
-      return;
-    }
-
-    var uc = t.closest("[data-uncoupon]");
-    if (uc) { e.preventDefault(); A.setSession({ coupon: null }); A.toast("Coupon removed", true); rerender(); return; }
 
     var cf = t.closest("[data-clearfilters]");
     if (cf) { e.preventDefault(); A.navigateTo(currentBase()); return; }

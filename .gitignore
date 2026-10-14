@@ -3,3 +3,11 @@ server/data/
 server/node_modules/
 node_modules/
 .vercel/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+server/.npm-cache/

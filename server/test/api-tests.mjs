@@ -121,21 +121,15 @@ async function req(method, path, { body, jar: which, raw } = {}) {
   ok("variant stock decremented by 3", v4 && beforeV4 != null && v4.stock === beforeV4 - 3,
     `before=${beforeV4} now=${v4 && v4.stock}`);
 
-  console.log("— coupon validated + applied server-side —");
+  console.log("— retired coupon codes do not change order totals —");
   const addr = { line: "1 Test Lane", city: "Kolkata", pin: "700001", name: "T", phone: "9876543210" };
-  r = await req("POST", "/api/orders", {
-    body: { items: [{ productId: "dotted-journal", quantity: 1 }], paymentMethod: "COD", coupon: "NOPE", address: addr },
-    jar: "customer",
-  });
-  ok("bogus coupon rejected", r.status === 400, JSON.stringify(r.data));
-
   r = await req("POST", "/api/orders", {
     body: { items: [{ productId: "dotted-journal", quantity: 2 }], paymentMethod: "COD", coupon: "PAPER10", address: addr },
     jar: "customer",
   });
-  /* dotted-journal is ₹311 here → ₹622 subtotal → PAPER10 = −₹62.20, free shipping → ₹559.80 */
-  ok("PAPER10 totals correct", r.status === 201 && r.data.order.discount === 62.2
-    && r.data.order.shipping === 0 && r.data.order.total_amount === 559.8, JSON.stringify(r.data && r.data.order));
+  /* dotted-journal is ₹311 here → ₹622 subtotal → free shipping; the retired code has no effect */
+  ok("PAPER10 ignored; no coupon discount applied", r.status === 201 && r.data.order.discount === 0
+    && r.data.order.coupon == null && r.data.order.shipping === 0 && r.data.order.total_amount === 622, JSON.stringify(r.data && r.data.order));
   if (r.status === 201) {
     const cid = r.data.order.id;
     const cx = await req("POST", `/api/orders/${cid}/cancel`, { jar: "customer" });

@@ -1071,7 +1071,7 @@
         return '<option value="' + s[0] + '"' + (state.orderFilter === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
       }).join("") + "</select></div></div>" +
       '<section class="panel"><div class="table-wrap"><table class="tbl" style="min-width:820px"><thead><tr>' +
-      "<th>Order</th><th>Customer</th><th>Items</th><th class=\"num\">Total</th><th>Status</th><th style=\"text-align:right\">Items</th>" +
+      "<th>Order</th><th>Customer</th><th>Items</th><th class=\"num\">Total</th><th>Status</th><th style=\"text-align:right\">Invoice</th>" +
       '</tr></thead><tbody id="ordRows">' +
       (state.orders.length ? state.orders.map(orderRowHtml).join("") : '<tr><td colspan="6" class="empty"><b>No orders yet</b>Orders placed on the storefront appear here instantly.</td></tr>') +
       "</tbody></table></div></section>";
@@ -1083,31 +1083,91 @@
   };
   function orderRowHtml(o) {
     const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
-    const addr = o.address_json ? JSON.parse(o.address_json) : {};
+    const addr = orderAddress(o);
+    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID";
     return '<tr data-orow="' + esc(o.id) + '">' +
-      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + "</small></td>" +
+      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + (awaitingUpi ? " · Payment pending" : "") + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
       '<td class="num"><b>' + money(o.total_amount) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
       '<td><select class="ostat" data-oid="' + esc(o.id) + '">' +
       ORDER_STATUSES.map(function (s) {
-        return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
+        const blockedUntilPaid = awaitingUpi && !["PLACED", "CANCELLED"].includes(s[0]);
+        return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
       }).join("") + "</select></td>" +
-      '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-items="' + esc(o.id) + '">View</button></td></tr>' +
-      '<tr class="oi-row" id="oi-' + esc(o.id) + '" hidden><td colspan="6" style="background:#fafbfa">' +
-      o.items.map(function (i) {
-        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:14px">' +
-          "<span>" + esc(i.product_name) + (i.variant_label ? " — " + esc(i.variant_label) : "") + " <small>×" + i.quantity + "</small></span>" +
-          "<b>" + money(i.price_at_purchase * i.quantity) + "</b></div>";
-      }).join("") +
-      (addr.line ? '<div style="margin-top:8px;color:var(--muted);font-size:13px">📍 ' + esc(addr.line) + ", " + esc(addr.city) + " — " + esc(addr.pin) + "</div>" : "") +
-      "</td></tr>";
+      '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
+  }
+  function orderAddress(order) {
+    if (!order || !order.address_json) return {};
+    if (typeof order.address_json === "object") return order.address_json || {};
+    try { return JSON.parse(order.address_json) || {}; } catch (_e) { return {}; }
+  }
+  function orderInvoiceHtml(order) {
+    const address = orderAddress(order);
+    const items = Array.isArray(order.items) ? order.items : [];
+    const subtotal = items.reduce(function (sum, item) {
+      return sum + (Number(item.price_at_purchase) || 0) * (Number(item.quantity) || 0);
+    }, 0);
+    const discount = Math.max(0, Number(order.discount) || 0);
+    const savedShipping = order.shipping == null ? null : Number(order.shipping);
+    const savedTotal = order.total_amount == null ? NaN : Number(order.total_amount);
+    const total = Number.isFinite(savedTotal) ? savedTotal : subtotal + (savedShipping || 0) - discount;
+    const shipping = savedShipping == null || !Number.isFinite(savedShipping)
+      ? Math.max(0, total - subtotal + discount)
+      : Math.max(0, savedShipping);
+    const itemCount = items.reduce(function (sum, item) { return sum + (Number(item.quantity) || 0); }, 0);
+    const addressLines = [address.line, [address.city, address.pin].filter(Boolean).join(" — ")].filter(Boolean);
+    const buyerName = address.name || "Customer";
+    const phone = address.phone || order.mobile_number || "—";
+    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
+    return '<article class="invoice" id="invoicePrint">' +
+      '<div class="invoice__top"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID logo" width="54" height="54"><div><strong>UVID</strong><span>ART AND CRAFT</span></div></div>' +
+      '<div class="invoice__heading"><h2>INVOICE</h2><span>Order ' + esc(order.id) + '</span></div></div>' +
+      '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
+      '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
+      '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div></div>' +
+      '<div class="invoice__parties"><section><h3>Bill to</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span></section>' +
+      '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
+      '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th>Item</th><th class="invoice__qty">Qty</th><th class="invoice__num">Unit price</th><th class="invoice__num">Amount</th></tr></thead><tbody>' +
+      (items.length ? items.map(function (item) {
+        const quantity = Number(item.quantity) || 0;
+        const price = Number(item.price_at_purchase) || 0;
+        return '<tr><td><b>' + esc(item.product_name || "Product") + '</b>' + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
+          '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__num">' + money(price * quantity) + '</td></tr>';
+      }).join("") : '<tr><td colspan="4">No item details are available.</td></tr>') +
+      '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
+      '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
+      (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
+      '<div><span>Delivery</span><b>' + (shipping ? money(shipping) : "Free") + '</b></div>' +
+      '<div class="invoice__grand"><span>Total payable</span><b>' + money(total) + '</b></div></div></div>' +
+      '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
+  }
+  function openOrderInvoice(order) {
+    const awaitingUpi = String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" && order.status !== "CANCELLED";
+    const back = openModal(
+      '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
+      '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (awaitingUpi ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      "modal--wide"
+    );
+    const printButton = back.querySelector("[data-print-invoice]");
+    if (printButton) printButton.addEventListener("click", function () { window.print(); });
+    const confirmButton = back.querySelector("[data-confirm-upi]");
+    if (confirmButton) confirmButton.addEventListener("click", async function () {
+      const verified = await confirmDialog("Check this order's exact amount in the PhonePe Business account before confirming. The customer sees success only after this action.", { yes: "I verified it — confirm payment", danger: false });
+      if (!verified) return;
+      try {
+        await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
+        toast("UPI payment confirmed", true);
+        await repaint(VIEWS.orders);
+      } catch (ex) { toast(ex.message, false); }
+    });
   }
   content.addEventListener("click", function (e) {
-    const t = e.target.closest("[data-items]");
+    const t = e.target.closest("[data-invoice]");
     if (!t) return;
-    const row = document.getElementById("oi-" + t.dataset.items);
-    if (row) { row.hidden = !row.hidden; t.textContent = row.hidden ? "View" : "Hide"; }
+    const order = state.orders.find(function (item) { return String(item.id) === t.dataset.invoice; });
+    if (order) openOrderInvoice(order);
   });
   content.addEventListener("change", async function (e) {
     const sel = e.target.closest(".ostat");

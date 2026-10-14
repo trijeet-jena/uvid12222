@@ -1,7 +1,7 @@
 /* ============================================================
    UVID — app engine
    hash router · persisted state (cart/wishlist/orders/user)
-   payment simulation · auth modal · toast · utils
+   UPI payment verification · auth modal · toast · utils
    ============================================================ */
 
 (function () {
@@ -77,7 +77,7 @@
     save();
   }
 
-  /* session-scoped (payment method + applied coupon survive reloads but not sign-out) */
+  /* session-scoped payment method survives reloads but not sign-out */
   function session() {
     try { return JSON.parse(sessionStorage.getItem(SKEY) || "{}"); }
     catch (e) { return {}; }
@@ -105,22 +105,9 @@
       mrpTotal += p.mrp * state.cart[i].qty;
       count += state.cart[i].qty;
     }
-    var s = session();
-    var coupon = null, discount = 0, shipFree = false;
-    if (s.coupon) {
-      for (j = 0; j < window.PT.COUPONS.length; j++) {
-        if (window.PT.COUPONS[j].code === s.coupon) { coupon = window.PT.COUPONS[j]; break; }
-      }
-      if (coupon && subtotal < coupon.min) { coupon = null; setSession({ coupon: null }); }
-    }
-    if (coupon) {
-      if (coupon.type === "percent") discount = Math.min(subtotal * coupon.value / 100, coupon.cap || Infinity);
-      else if (coupon.type === "flat") discount = coupon.value;
-      else if (coupon.type === "ship") shipFree = true;
-    }
-    var shipping = count === 0 ? 0 : (shipFree || subtotal >= FREE_SHIP_MIN ? 0 : SHIP_FEE);
-    var total = Math.max(0, subtotal - discount) + shipping;
-    return { subtotal: subtotal, mrpTotal: mrpTotal, count: count, discount: discount, shipping: shipping, total: total, coupon: coupon };
+    var shipping = count === 0 ? 0 : (subtotal >= FREE_SHIP_MIN ? 0 : SHIP_FEE);
+    var total = subtotal + shipping;
+    return { subtotal: subtotal, mrpTotal: mrpTotal, count: count, shipping: shipping, total: total };
   }
 
   /* ---------------- auth ---------------- */
@@ -142,7 +129,7 @@
 
   function signOut() {
     state.user = null;
-    setSession({ paymentMethod: null, coupon: null, cardNum: null, cardExp: null, cardName: null });
+    setSession({ paymentMethod: null, cardNum: null, cardExp: null, cardName: null });
     try { fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (_e) { /* offline */ }
     save();
     toast("Signed out. Come back soon!");
@@ -301,7 +288,7 @@
     return d.toISOString();
   }
 
-  /* Places the order on the SERVER: price, stock, coupon, address and
+  /* Places the order on the SERVER: price, stock, address and
      permissions are all validated there — browser values are never trusted.
      Returns a Promise<order|null>. */
   function placeOrder(method) {
@@ -313,9 +300,8 @@
 
     var payload = {
       items: state.cart.map(function (l) { return { productId: l.id, quantity: l.qty }; }),
-      paymentMethod: String(method || "COD").toUpperCase(),
-      address: address,
-      coupon: session().coupon || undefined
+      paymentMethod: String(method || "UPI").toUpperCase(),
+      address: address
     };
 
     return fetch("/api/orders", {
@@ -335,7 +321,6 @@
       var order = buildServerOrder(r.data, method, address);
       state.orders.unshift(order);
       state.cart = [];
-      setSession({ coupon: null });
       save(); renderChrome();
       return order;
     }).catch(function () {
@@ -378,9 +363,9 @@
         shipping: Number(srv.shipping) || 0,
         total: Number(srv.total_amount) || 0
       },
-      coupon: srv.coupon || null,
-      payment: String(method || srv.payment_method || "COD").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : "Pay on delivery",
+      payment: String(method || srv.payment_method || "UPI").toLowerCase(),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"),
+      paymentConfirmed: srv.payment_status === "PAID",
       status: cancelled ? "Cancelled" : STATUS_STAGES[si],
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : si,

@@ -273,7 +273,7 @@ async function stats(env) {
     inactive: await q("SELECT COUNT(*) n FROM products WHERE status='ARCHIVED'"),
     orders: await q("SELECT COUNT(*) n FROM orders"),
     openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
-    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED'").first())?.n || 0),
+    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
 async function orderList(env, customerId = null, status = null) {
@@ -307,18 +307,13 @@ async function placeOrder(env, user, body) {
     if (p.status === "OUT_OF_STOCK" || p.stock_quantity < qty) throw Object.assign(new Error(`${p.product_name} does not have enough stock.`), { status: 409 });
     subtotal += p.price * qty; lines.push({ p, qty });
   }
-  const coupon = clean(body.coupon, 30).toUpperCase() || null;
-  let discount = 0; let freeShip = false;
-  if (coupon === "PAPER10") discount = Math.min(subtotal * .1, 150);
-  else if (coupon === "FIRST50" && subtotal >= 199) discount = 50;
-  else if (coupon === "DESK200" && subtotal >= 999) discount = 200;
-  else if (coupon === "FREESHIP") freeShip = true;
-  else if (coupon) throw Object.assign(new Error("Coupon is invalid or the minimum order is not reached."), { status: 400 });
-  const shipping = freeShip || subtotal >= 499 ? 0 : 49;
+  const discount = 0;
+  const shipping = subtotal >= 499 ? 0 : 49;
   const id = "UV" + Date.now().toString(36).toUpperCase() + Math.floor(100 + Math.random() * 900);
-  const method = ["COD", "UPI", "CARD", "NETBANKING", "WALLET"].includes(String(body.paymentMethod || "COD").toUpperCase()) ? String(body.paymentMethod || "COD").toUpperCase() : "COD";
+  const method = String(body.paymentMethod || "UPI").toUpperCase();
+  if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
   const batches = [env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) VALUES (?,?,?,'PLACED',?,?,?,?,?,?,?)")
-    .bind(id,user.id,Math.round((subtotal-discount+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),coupon,discount,shipping)];
+    .bind(id,user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)];
   for (const line of lines) {
     batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) VALUES (?,?,?,?,?,?)").bind(id,line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
     batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
@@ -451,11 +446,34 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
   if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"))});
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment$/);
+  if (match && method === "PUT") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+    if (!order) return error("Order not found.",404);
+    if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
+    if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
+    await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
+    await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
+    return json({ok:true,order:(await orderList(env,null)).find((item)=>item.id===id)});
+  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
   if(match && method === "PUT"){
     if(adminOnly) return adminOnly; const b=await readBody(),status=clean(b.status,30).toUpperCase();
     if(!["PLACED","PACKED","SHIPPED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"].includes(status)) return error("Invalid order status.");
-    await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,now(),decodeURIComponent(match[1])).run(); return json({ok:true});
+    const orderId = decodeURIComponent(match[1]);
+    const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
+    if (!current) return error("Order not found.",404);
+    if (current.payment_method === "UPI" && current.payment_status !== "PAID" && !["PLACED","CANCELLED"].includes(status)) return error("Confirm the UPI payment before packing or shipping this order.",409);
+    if (status === "CANCELLED" && current.status !== "CANCELLED") {
+      const items = (await env.DB.prepare("SELECT product_id,quantity FROM order_items WHERE order_id=?").bind(orderId).all()).results || [];
+      const batches = [env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),orderId)];
+      for (const item of items) batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?,status=CASE WHEN status='OUT_OF_STOCK' AND stock_quantity+?>0 THEN 'ACTIVE' ELSE status END,updated_at=? WHERE id=?").bind(item.quantity,item.quantity,now(),item.product_id));
+      await env.DB.batch(batches);
+      return json({ok:true});
+    }
+    await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,now(),orderId); return json({ok:true});
   }
   if(path==="/api/admin/customers" && method==="GET") return adminOnly || json({customers:(await env.DB.prepare("SELECT id,name,email,mobile_number,created_at FROM users WHERE role='CUSTOMER' ORDER BY created_at DESC LIMIT 500").all()).results||[]});
   if(path==="/api/admin/audit" && method==="GET") return adminOnly || json({entries:(await env.DB.prepare("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?").bind(Math.min(100,Math.max(1,Number(url.searchParams.get("limit"))||25))).all()).results||[]});

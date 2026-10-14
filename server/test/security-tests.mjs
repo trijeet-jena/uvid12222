@@ -175,7 +175,8 @@ const PNG_1x1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfF
     body: { items: [{ productId: target.id, quantity: 1 }], coupon: "TOTALLY-FAKE", paymentMethod: "COD",
       address: { name: "X", phone: "9000000001", line: "42 Test Lane", city: "Mumbai", pin: "400001" } },
   });
-  ok("bogus coupon rejected (400)", badCoupon.status === 400, String(badCoupon.status));
+  ok("retired coupon cannot discount an order", badCoupon.status === 201 && badCoupon.data.order.discount === 0
+    && badCoupon.data.order.coupon == null, String(badCoupon.status) + " " + JSON.stringify(badCoupon.data.order));
   const noAddr = await req("POST", "/api/orders", { jar: "a", body: { items: [{ productId: target.id, quantity: 1 }], paymentMethod: "COD" } });
   ok("missing/incomplete address rejected (400)", noAddr.status === 400, String(noAddr.status));
   const noAuth = await req("POST", "/api/orders", { body: { items: [{ productId: target.id, quantity: 1 }] } });
