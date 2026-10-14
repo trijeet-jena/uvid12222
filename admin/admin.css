@@ -276,10 +276,15 @@ table.tbl { width: 100%; border-collapse: collapse; min-width: 640px; }
 .vrow input { border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font: 500 13.5px "Outfit", sans-serif; min-width: 0; background: #fff; }
 .vrow .v-file {
   border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer;
-  font-size: 15px; padding: 8px 10px; text-align: center; color: var(--muted);
+  min-width: 54px; min-height: 54px; padding: 4px 6px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; text-align: center; color: var(--muted);
 }
 .vrow .v-file:hover { border-color: var(--brand); color: var(--brand); }
 .vrow .v-file input { display: none; }
+.v-file__preview { width: 36px; height: 34px; display: grid; place-items: center; overflow: hidden; }
+.v-file__preview img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: 6px; }
+.v-file__preview svg { width: 20px; height: 20px; }
+.v-file__caption { font-size: 10px; line-height: 1; }
 .vrow .iconbtn { width: 36px; height: 36px; color: var(--red); }
 .var-add { margin-top: 4px; }
 

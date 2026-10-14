@@ -569,7 +569,25 @@
       try { const c = await api("GET", "/api/admin/categories"); state.categories = c.categories; } catch (_e) { /* handled by form */ }
     }
     const editing = !!p;
-    const children = editing ? state.products.filter(function (c) { return c.parent === p.id; }) : [];
+    const childRows = editing ? state.products.filter(function (c) { return c.parent === p.id; }) : [];
+    const children = childRows.length
+      ? childRows.map(function (c) {
+        const productName = String(c.productName || "");
+        const splitAt = productName.indexOf(" — ");
+        return Object.assign({}, c, {
+          label: c.variantLabel || (splitAt >= 0 ? productName.slice(splitAt + 3) : productName),
+          imageUrl: c.imageUrl || (c.images && c.images[0] && c.images[0].url) || "",
+        });
+      })
+      : (editing && Array.isArray(p.variants) ? p.variants.map(function (v) {
+        return {
+          label: v.label || v.size || "",
+          price: v.price,
+          stockQuantity: v.stock,
+          sku: v.sku || "",
+          imageUrl: v.imageUrl || v.img || "",
+        };
+      }) : []);
     const base = editing ? (p.mrp != null && p.mrp >= p.price ? p.mrp : p.price) : "";
     const disc = editing && p.mrp != null && p.mrp > p.price ? p.price : "";
     const inactive = editing && p.status === "ARCHIVED";
@@ -604,8 +622,8 @@
       '<label class="fld"><span>Stock quantity <i>*</i></span><input name="stock" type="number" min="0" step="1" required value="' + (editing ? p.stockQuantity : "") + '"></label>' +
       '<label class="fld"><span>Emoji (art fallback)</span><input name="emoji" maxlength="4" placeholder="📦" value="' + esc(editing && p.emoji ? p.emoji : "") + '"></label>' +
       "</div>" +
-      '<div class="fld"><span>Size variants (optional)</span><div class="varbox">' +
-      '<p class="varbox__hint">Variants (e.g. 3 mm / 4 mm / 5 mm) are stocked and priced independently — customers pick them with thumbnails on the product page.</p>' +
+      '<div class="fld"><span>Colours / variants (optional)</span><div class="varbox">' +
+      '<p class="varbox__hint">Add one row for each colour or option. Give each its own name, price, stock and photo. For example: Red, Green and Yellow.</p>' +
       '<div id="varList">' + children.map(varRowHtml).join("") + "</div>" +
       '<button type="button" class="btn btn--ghost btn--sm var-add" id="varAdd">' + ICONS.plus + " Add variant</button>" +
       "</div></div>" +
@@ -754,11 +772,9 @@
     });
     $("#varList", back).addEventListener("click", function (e) {
       const rm = e.target.closest("[data-vremove]");
-      if (rm) rm.closest(".vrow").remove();
-      const pick = e.target.closest(".v-file");
-      if (pick && e.target.tagName !== "INPUT") {
-        const inp = pick.querySelector("input");
-        if (inp) inp.click();
+      if (rm) {
+        rm.closest(".vrow").remove();
+        renderGalTabs();
       }
     });
     $("#varList", back).addEventListener("change", function (e) {
@@ -766,6 +782,13 @@
         const label = e.target.closest(".v-file");
         if (label && e.target.files && e.target.files[0]) {
           label.dataset.name = e.target.files[0].name;
+          label.title = "Selected: " + e.target.files[0].name + " — uploads when you save";
+          const preview = $(".v-file__preview", label);
+          if (preview) {
+            if (label.dataset.previewUrl) URL.revokeObjectURL(label.dataset.previewUrl);
+            label.dataset.previewUrl = URL.createObjectURL(e.target.files[0]);
+            preview.innerHTML = '<img src="' + label.dataset.previewUrl + '" alt="">';
+          }
           label.style.color = "var(--brand)";
           label.style.borderColor = "var(--brand)";
         }
@@ -808,10 +831,16 @@
         const file = $(".v-file input", row).files && $(".v-file input", row).files[0];
         const any = label || vPrice !== "" || vStock !== "" || vSku || vImg || file;
         if (!any) continue;
-        if (!label) return fail("Every variant needs a size label (e.g. “4 mm × 20 cm”).");
+        if (!label) return fail("Give each variant a name, such as Red, Green or Yellow.");
         if (vPrice === "" || !Number.isFinite(Number(vPrice)) || Number(vPrice) < 0) return fail('Variant "' + label + '": enter a valid price.');
         if (vStock === "" || !Number.isInteger(Number(vStock)) || Number(vStock) < 0) return fail('Variant "' + label + '": stock must be a whole number ≥ 0.');
         variants.push({ row: row, cid: row.dataset.cid || null, label: label, price: Number(vPrice), stock: Number(vStock), sku: vSku, img: vImg || null, file: file });
+      }
+      const seenVariantNames = new Set();
+      for (const v of variants) {
+        const key = v.label.toLocaleLowerCase();
+        if (seenVariantNames.has(key)) return fail('The variant name "' + v.label + '" is repeated. Use a different name for each colour or option.');
+        seenVariantNames.add(key);
       }
 
       const undo = busy($("#pSave", back), editing ? "Saving…" : "Adding…");
@@ -834,6 +863,9 @@
           imageUrl: imageUrl || null,
           emoji: String(fd.get("emoji") || "").trim() || null,
         };
+        /* Older products stored variants in variants_json. Convert those to
+           child rows so each option can own its photo, price and stock. */
+        if (editing && Array.isArray(p.variants)) payload.variants = null;
         if (status !== (p ? p.status : "ACTIVE")) payload.status = status;
         if (!editing && String(fd.get("sku") || "").trim()) payload.sku = String(fd.get("sku")).trim();
 
@@ -902,13 +934,17 @@
 
   function varRowHtml(v) {
     v = v || {};
+    const name = v.label || v.variantLabel || v.size || "";
+    const imageUrl = v.imageUrl || v.img || "";
     return '<div class="vrow"' + (v.id ? ' data-cid="' + esc(v.id) + '"' : "") + ">" +
-      '<input class="v-label" placeholder="Size / label *" value="' + esc(v.label || "") + '">' +
+      '<input class="v-label" aria-label="Colour or variant name" placeholder="Colour / option name *" value="' + esc(name) + '">' +
       '<input class="v-price" type="number" min="0" step="0.01" placeholder="Price ₹ *" value="' + (v.price != null ? v.price : "") + '">' +
       '<input class="v-stock" type="number" min="0" step="1" placeholder="Stock *" value="' + (v.stockQuantity != null ? v.stockQuantity : "") + '">' +
-      '<input class="v-sku" placeholder="SKU (auto)" value="' + esc(v.id || "") + '"' + (v.id ? " disabled" : "") + ">" +
-      '<input class="v-img" placeholder="Image URL" value="' + (v.imageUrl && !String(v.imageUrl).startsWith("data:") ? esc(v.imageUrl) : "") + '">' +
-      '<label class="v-file" title="Upload variant image">' + ICONS.img + '<input type="file" accept="image/*"></label>' +
+      '<input class="v-sku" placeholder="SKU (auto)" value="' + esc(v.id || v.sku || "") + '"' + (v.id ? " disabled" : "") + ">" +
+      '<input class="v-img" placeholder="Image URL" value="' + (imageUrl && !String(imageUrl).startsWith("data:") ? esc(imageUrl) : "") + '">' +
+      '<label class="v-file" title="Upload or replace this variant photo"><span class="v-file__preview">' +
+      (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="">' : ICONS.img) +
+      '</span><span class="v-file__caption">Photo</span><input type="file" accept="image/*"></label>' +
       '<button type="button" class="iconbtn" data-vremove title="Remove variant">' + ICONS.trash + "</button>" +
       "</div>";
   }

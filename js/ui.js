@@ -106,9 +106,11 @@
       '<a class="pcard__name" href="#/p/' + p.id + '">' + esc(p.name) + '</a>' +
       (p.rating ? '<div class="rate"><span class="rate__badge">' + p.rating.toFixed(1) + ' <i>★</i></span><span class="rate__count">(' + p.ratingCount.toLocaleString("en-IN") + ')</span></div>' : '<div class="rate rate--new">New</div>') +
       '<div class="pcard__price"><b>' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
-      (inCart > 0
-        ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
-        : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
+      (p.variants && p.variants.length
+        ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">Choose a colour</a>'
+        : inCart > 0
+          ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
+          : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
       '</div></article>';
   }
 
@@ -195,7 +197,9 @@
       '<h3>' + esc(deal.name) + '</h3>' +
       '<div class="pcard__price"><b>' + money(deal.price) + '</b><s>' + money(deal.mrp) + '</s><em>' + deal.discount + '% off</em></div>' +
       '<div class="dealstrip__timer">Ends in <b id="dealTimer">--:--:--</b></div>' +
-      '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button></div>' +
+      (deal.variants && deal.variants.length
+        ? '<a class="btn btn--primary" href="#/p/' + deal.id + '">Choose a colour</a>'
+        : '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button>') + '</div>' +
       '<img class="dealstrip__img" src="' + deal.img + '" alt="" /></section>' : "") +
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
@@ -421,12 +425,12 @@
     if (!p) { view.innerHTML = emptyState("🤷", "Product not found", "It may have been removed.", '<a class="btn btn--primary" href="#/">Back to home</a>'); return; }
     if (p.tags.indexOf("vc-hidden") > -1) { mainId = p.parent; p = D.findProduct(p.parent) || p; }
     var mainP = p;
-    if (mainP.variants) {
-      /* resolve the displayed record to the selected size (default 3 mm) */
-      var vSel = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v; })[0] : null) || mainP.variants[0];
-      p = D.findProduct(vSel.id) || p;
+    var selectedVariant = null;
+    if (mainP.variants && mainP.variants.length) {
+      selectedVariant = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v || v.label === query.v; })[0] : null) || mainP.variants[0];
+      p = D.findProduct(selectedVariant.id) || p;
     }
-    var hasVariants = !!mainP.variants;
+    var hasVariants = !!(mainP.variants && mainP.variants.length);
     A.pushRecent && A.pushRecent(mainId);
     var reviews = D.reviewsFor(id);
     var wished = A.inWishlist(mainId);
@@ -438,13 +442,11 @@
       .slice(0, 6);
     var inCart = 0;
     A.state.cart.forEach(function (l) { if (l.id === p.id) inCart = l.qty; });
-    var specRows = Object.keys(p.specs).map(function (k) {
-      var cell = (k === "Thickness" && hasVariants)
-        ? '<td id="pdpSpecThk">' + esc(p.specs[k] + " × 20 cm") + '</td>'
-        : '<td>' + esc(p.specs[k]) + '</td>';
-      return '<tr><th>' + esc(k) + '</th>' + cell + '</tr>';
+    var specSource = hasVariants ? mainP.specs : p.specs;
+    var specRows = Object.keys(specSource).map(function (k) {
+      return '<tr><th>' + esc(k) + '</th><td>' + esc(specSource[k]) + '</td></tr>';
     }).join("");
-    var variantLabel = hasVariants ? mainP.name + " — " + p.specs["Thickness"] + " × 20 cm" : p.name;
+    var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
 
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }, { label: variantLabel }]) +
@@ -524,6 +526,9 @@
           if (vid === pdpState.id) return;
           var rec = D.findProduct(vid);
           if (!rec) return;
+          var option = mainP.variants.filter(function (v) { return v.id === vid; })[0];
+          var optionLabel = option ? option.label : rec.name.split(" — ").slice(1).join(" — ");
+          var optionTitle = mainP.name + " — " + (optionLabel || rec.name);
           pdpState.id = rec.id;
           $$(".pdp__swatch").forEach(function (x) { x.classList.remove("pdp__swatch--on"); x.setAttribute("aria-pressed", "false"); });
           b.classList.add("pdp__swatch--on");
@@ -531,10 +536,10 @@
           var img = $("#pdpImg"); if (img) { img.src = rec.img; img.alt = rec.name; }
           /* show this colour's own photos from the image database */
           if (thumbs) { thumbs.innerHTML = thumbHtml(rec, 0); }
-          var pb = $("#pdpPrice"); if (pb) pb.textContent = money(rec.price);
-          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = mainP.name + " — " + rec.specs["Thickness"] + " × 20 cm";
-          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = mainP.name + " — " + rec.specs["Thickness"] + " × 20 cm";
-          var st = $("#pdpSpecThk"); if (st) st.textContent = rec.specs["Thickness"] + " × 20 cm";
+          var price = $(".pdp__price");
+          if (price) price.innerHTML = '<b id="pdpPrice">' + money(rec.price) + '</b>' + (rec.discount > 0 ? '<s>' + money(rec.mrp) + '</s><em class="off">' + rec.discount + '% off</em>' : '');
+          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = optionTitle;
+          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = optionTitle;
           $$('#view [data-root="' + mainId + '"]').forEach(function (btn) {
             if (btn.hasAttribute("data-add")) btn.setAttribute("data-add", rec.id);
             if (btn.hasAttribute("data-buy")) btn.setAttribute("data-buy", rec.id);

@@ -109,7 +109,7 @@
       }
     }
 
-    /* link size-variant children (meta.parent) to their parent product */
+    /* link colour/option children (meta.parent) to their parent product */
     var kids = {};
     for (i = 0; i < list.length; i++) {
       if (list[i].parent) (kids[list[i].parent] = kids[list[i].parent] || []).push(list[i]);
@@ -121,11 +121,10 @@
       main.variants = mine.map(function (c) {
         var label = c.variantLabel ||
           (c.name.indexOf(" — ") > -1 ? c.name.split(" — ").slice(1).join(" — ") : c.name);
-        var size = label.split(" × ")[0] || label;
-        /* the PDP size UI reads specs.Thickness — inject for admin-created sizes */
-        if (c.specs.Thickness == null) c.specs.Thickness = size;
-        return { id: c.id, size: size, label: label, price: c.price, mrp: c.mrp, img: c.img, images: c.images || [] };
+        return { id: c.id, size: label, label: label, price: c.price, mrp: c.mrp, stock: c.stock, img: c.img, images: c.images || [] };
       });
+      /* Parent stock is the total available across its selectable options. */
+      main.stock = main.variants.reduce(function (total, v) { return total + (Number(v.stock) || 0); }, 0);
     }
 
     /* "newest" ordering — fall back to list order when createdAt missing */
