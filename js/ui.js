@@ -187,11 +187,6 @@
       '<img class="hero__c hero__c--3" src="' + heroImg("gel-trio", 2) + '" alt="" />' +
       '</div></section>' +
 
-      '<section class="cat-rail reveal" aria-label="Categories">' +
-      D.CATEGORIES.map(function (c) {
-        return '<a class="cat-rail__item" href="#/c/' + c.slug + '"><span class="cat-rail__emoji">' + c.emoji + '</span><span>' + esc(c.label) + '</span></a>';
-      }).join("") + '</section>' +
-
       (deal ? '<section class="dealstrip card reveal">' +
       '<div class="dealstrip__info"><p class="kicker">Deal of the day</p>' +
       '<h3>' + esc(deal.name) + '</h3>' +
@@ -360,7 +355,7 @@
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
       if (!cat) { home(); return; }
-      title = cat.emoji + " " + cat.label;
+      title = cat.label;
       crumbTrail = [{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }];
     } else {
       title = q.q ? 'Results for “' + q.q + '”' : "All products";
@@ -1248,8 +1243,7 @@
     var html = (D.CATEGORIES || []).map(function (category) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      var emoji = esc(String(category.emoji || "🗂️"));
-      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '"><span class="category-menu__emoji">' + emoji + '</span><span class="category-menu__label">' + label + '</span><span class="category-menu__arrow" aria-hidden="true">›</span></a>';
+      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
     }).join("");
     ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
       var container = document.getElementById(id);
@@ -1387,7 +1381,7 @@
       var cats = D.CATEGORIES.filter(function (c) { return c.label.toLowerCase().indexOf(term) !== -1; }).slice(0, 2);
       var html = "";
       cats.forEach(function (c) {
-        html += '<a class="sd sd--cat" href="#/c/' + c.slug + '"><span>' + c.emoji + '</span> ' + esc(c.label) + '<i>category</i></a>';
+        html += '<a class="sd sd--cat" href="#/c/' + c.slug + '"><span>' + esc(c.label) + '</span></a>';
       });
       html += hits.map(function (p) {
         return '<a class="sd" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /><span>' + esc(p.name) + '</span><b>' + money(p.price) + '</b></a>';

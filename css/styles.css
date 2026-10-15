@@ -143,8 +143,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .hactions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
 .category-menu { position: relative; }
 .category-menu__toggle { white-space: nowrap; }
-.category-menu__chevron { transition: transform .16s ease; }
-.category-menu__toggle[aria-expanded="true"] .category-menu__chevron { transform: rotate(180deg); }
 .category-menu__panel {
   position: absolute; top: calc(100% + 9px); right: 0; z-index: 75;
   width: 286px; max-width: calc(100vw - 24px); max-height: min(72vh, 440px); overflow: auto;
@@ -152,11 +150,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   box-shadow: var(--shadow-lg);
 }
 .category-menu__title { margin: 3px 9px 8px; color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.category-menu__item { display: flex; align-items: center; gap: 11px; min-height: 43px; padding: 9px 10px; border-radius: var(--rad-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.category-menu__item { display: block; min-height: 43px; padding: 10px; border-radius: var(--rad-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
 .category-menu__item:hover, .category-menu__item:focus-visible { outline: 0; background: var(--green-t); color: var(--green-d); }
-.category-menu__emoji { width: 24px; flex: 0 0 24px; text-align: center; font-size: 17px; }
-.category-menu__label { flex: 1; }
-.category-menu__arrow { color: var(--ink-3); font-size: 17px; font-weight: 400; }
 .hicon {
   position: relative; display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 14px; border-radius: 999px; border: 0; background: transparent;
@@ -230,17 +225,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   0%, 100% { transform: rotate(var(--rot)) translate3d(0, 0, 0); }
   50% { transform: rotate(var(--rot)) translate3d(0, -5px, 0); }
 }
-
-/* ---------------- category rail ---------------- */
-.cat-rail { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin: 24px 0 8px; }
-.cat-rail__item {
-  display: flex; flex-direction: column; align-items: center; gap: 9px;
-  background: #fff; border: 1px solid var(--line); border-radius: var(--rad);
-  padding: 17px 8px 13px; text-align: center; font-size: 12.8px; font-weight: 600; color: var(--ink-2);
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-}
-.cat-rail__item:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--green); color: var(--green-d); }
-.cat-rail__emoji { font-size: 27px; line-height: 1; }
 
 /* ---------------- deal strip ---------------- */
 .dealstrip { display: flex; align-items: center; gap: 26px; padding: 22px 30px; margin: 18px 0 30px; background: linear-gradient(120deg, #fff 55%, var(--tang-t)); }
@@ -733,7 +717,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 @media (max-width: 1023px) {
   .hero { grid-template-columns: 1fr; padding: 30px 26px; }
   .hero__cards { min-height: 240px; }
-  .cat-rail { grid-template-columns: repeat(4, 1fr); }
   .listing { grid-template-columns: 1fr; }
   .filters { position: fixed; top: 0; bottom: 0; left: 0; z-index: 80; width: min(320px, 86vw); border-radius: 0 18px 18px 0; max-height: none; transform: translateX(-105%); transition: transform .25s ease; }
   .filters--open { transform: translateX(0); }
@@ -761,8 +744,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hactions > .category-menu { display: block; }
   .category-menu__toggle { gap: 4px; padding: 8px 7px; font-size: 11px; }
   .category-menu__toggle .lbl { display: inline; }
-  .category-menu__toggle svg:first-child { width: 17px; height: 17px; }
-  .category-menu__chevron { display: none; }
   .category-menu__panel { right: -42px; }
   .chip { padding: 4px; }
   .search__box { padding: 9px 13px; }
@@ -780,8 +761,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hero__points { gap: 10px 16px; font-size: 12.8px; }
   .hero__cards { min-height: 210px; }
   .hero__c--1 { width: 138px; } .hero__c--2 { width: 118px; top: 84px; left: 10px; } .hero__c--3 { width: 104px; right: 30px; }
-  .cat-rail { grid-template-columns: repeat(3, 1fr); gap: 9px; }
-  .cat-rail__item { font-size: 11.4px; padding: 13px 6px 11px; }
   .dealstrip { flex-direction: column; text-align: center; padding: 20px 16px; gap: 18px; }
   .dealstrip__img { width: min(170px, 52vw); }
   .dealstrip .btn { width: 100%; }
