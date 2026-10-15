@@ -1244,6 +1244,26 @@
     if (b) b.classList.remove("backdrop--show");
   }
 
+  function renderHeaderCategories() {
+    var html = (D.CATEGORIES || []).map(function (category) {
+      var slug = esc(String(category.slug || ""));
+      var label = esc(String(category.label || category.name || category.slug || "Category"));
+      var emoji = esc(String(category.emoji || "🗂️"));
+      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '"><span class="category-menu__emoji">' + emoji + '</span><span class="category-menu__label">' + label + '</span><span class="category-menu__arrow" aria-hidden="true">›</span></a>';
+    }).join("");
+    ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
+      var container = document.getElementById(id);
+      if (container) container.innerHTML = html;
+    });
+  }
+
+  function closeHeaderCategories() {
+    var panel = $("#headerCategoryMenu");
+    var toggle = $("#headerCategoryToggle");
+    if (panel) panel.hidden = true;
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+  }
+
   /* bottom nav active state + cleanup on navigation */
   document.addEventListener("pt:route", renderBadges);
   window.addEventListener("hashchange", function () {
@@ -1273,6 +1293,29 @@
   /* ================= header chrome wiring ================= */
 
   document.addEventListener("DOMContentLoaded", function () {
+    var categoryToggle = $("#headerCategoryToggle");
+    var categoryPanel = $("#headerCategoryMenu");
+    renderHeaderCategories();
+    document.addEventListener("pt:catalog", renderHeaderCategories);
+    if (categoryToggle && categoryPanel) {
+      categoryToggle.addEventListener("click", function () {
+        var open = categoryPanel.hidden;
+        renderHeaderCategories();
+        categoryPanel.hidden = !open;
+        categoryToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      document.addEventListener("click", function (event) {
+        if (!event.target.closest(".category-menu")) closeHeaderCategories();
+      });
+      categoryPanel.addEventListener("click", function (event) {
+        if (event.target.closest("a")) closeHeaderCategories();
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeHeaderCategories();
+      });
+      window.addEventListener("hashchange", closeHeaderCategories);
+    }
+
     /* mobile drawer */
     var burger = $("#burger");
     if (burger) burger.addEventListener("click", function () {

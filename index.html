@@ -154,6 +154,22 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .sd--all { justify-content: center; color: var(--green-d); font-weight: 600; font-size: 13.5px; border-top: 1px dashed var(--line); border-radius: 0; margin-top: 4px; }
 
 .hactions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.category-menu { position: relative; }
+.category-menu__toggle { white-space: nowrap; }
+.category-menu__chevron { transition: transform .16s ease; }
+.category-menu__toggle[aria-expanded="true"] .category-menu__chevron { transform: rotate(180deg); }
+.category-menu__panel {
+  position: absolute; top: calc(100% + 9px); right: 0; z-index: 75;
+  width: 286px; max-width: calc(100vw - 24px); max-height: min(72vh, 440px); overflow: auto;
+  padding: 10px; background: #fff; border: 1px solid var(--line); border-radius: var(--rad);
+  box-shadow: var(--shadow-lg);
+}
+.category-menu__title { margin: 3px 9px 8px; color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.category-menu__item { display: flex; align-items: center; gap: 11px; min-height: 43px; padding: 9px 10px; border-radius: var(--rad-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.category-menu__item:hover, .category-menu__item:focus-visible { outline: 0; background: var(--green-t); color: var(--green-d); }
+.category-menu__emoji { width: 24px; flex: 0 0 24px; text-align: center; font-size: 17px; }
+.category-menu__label { flex: 1; }
+.category-menu__arrow { color: var(--ink-3); font-size: 17px; font-weight: 400; }
 .hicon {
   position: relative; display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 14px; border-radius: 999px; border: 0; background: transparent;
@@ -366,19 +382,18 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .pdp__thumb--vc.pdp__thumb--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); }
 .pdp__thumb--vc.pdp__thumb--on span { color: var(--green); }
 
-/* image tiles for colour/size variants */
-.pdp__variantTiles { margin-top: 14px; }
-.pdp__variantTilesLabel { display: block; margin-bottom: 8px; font: 700 12px "Outfit", sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.pdp__variantTileList { display: flex; flex-wrap: wrap; gap: 9px; }
-.pdp__variantTile {
-  width: 70px; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px;
-  border: 1.5px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); cursor: pointer;
-  transition: border-color .15s ease, box-shadow .15s ease;
+/* colour swatches (one product, several colours) */
+.pdp__colours { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.pdp__colourslabel { font: 700 12px "Outfit", sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.pdp__swatch {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 2px solid var(--line); background: #fff; border-radius: 999px;
+  padding: 5px 12px 5px 5px; cursor: pointer;
+  font: 600 13px "Outfit", sans-serif; color: var(--ink);
 }
-.pdp__variantTile img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: var(--paper-2); }
-.pdp__variantTileName { width: 100%; min-height: 26px; display: grid; place-items: center; overflow-wrap: anywhere; text-align: center; font: 600 10.5px/1.2 "Outfit", sans-serif; }
-.pdp__variantTile:hover { border-color: var(--line-2); box-shadow: 0 2px 8px rgba(34,28,21,.08); }
-.pdp__variantTile--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); color: var(--green-d); }
+.pdp__swatch img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.pdp__swatch:hover { border-color: var(--line-2); }
+.pdp__swatch--on { border-color: var(--green); box-shadow: 0 0 0 2px rgba(46,125,91,.15); color: var(--green-d); }
 #pdpThumbs { flex-wrap: wrap; }
 .pdp__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
 .pdp__brand { margin: 0 0 4px; }
@@ -756,6 +771,12 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   /* wishlist/orders/cart live in the bottom nav on phones —
      drop the duplicate header icons so search gets the space */
   .hactions > .hicon { display: none; }
+  .hactions > .category-menu { display: block; }
+  .category-menu__toggle { gap: 4px; padding: 8px 7px; font-size: 11px; }
+  .category-menu__toggle .lbl { display: inline; }
+  .category-menu__toggle svg:first-child { width: 17px; height: 17px; }
+  .category-menu__chevron { display: none; }
+  .category-menu__panel { right: -42px; }
   .chip { padding: 4px; }
   .search__box { padding: 9px 13px; }
   .search__box input { font-size: 14px; }
@@ -884,6 +905,20 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       </div>
 
       <div class="hactions">
+        <div class="category-menu">
+          <button class="hicon category-menu__toggle" id="headerCategoryToggle" type="button" aria-label="Browse categories" aria-haspopup="true" aria-expanded="false" aria-controls="headerCategoryMenu">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/>
+            </svg>
+            <span class="lbl">Categories</span>
+            <svg class="category-menu__chevron" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+          </button>
+          <div class="category-menu__panel" id="headerCategoryMenu" role="menu" aria-labelledby="headerCategoryToggle" hidden>
+            <p class="category-menu__title">Shop by category</p>
+            <div id="headerCategoryLinks"></div>
+          </div>
+        </div>
         <a class="hicon" href="#/wishlist" aria-label="Wishlist">
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
             <path d="M12 21s-7.5-4.7-10-9.3C.3 8 2.4 4.5 6 4.5c2.2 0 3.6 1.1 4.5 2.6l1.5 2.4 1.5-2.4c.9-1.5 2.3-2.6 4.5-2.6 3.6 0 5.7 3.5 4 7.2C19.5 16.3 12 21 12 21z"/>
@@ -956,13 +991,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     </div>
     <nav class="drawer__links" aria-label="Categories">
       <a href="#/">🏠 Home</a>
-      <a href="#/c/pens">🖊️ Pens & Writing</a>
-      <a href="#/c/notebooks">📒 Notebooks</a>
-      <a href="#/c/office">📎 Office Supplies</a>
-      <a href="#/c/art">🎨 Art & Craft</a>
-      <a href="#/c/desk">🗂️ Desk Accessories</a>
-      <a href="#/c/school">✏️ School Essentials</a>
-      <a href="#/c/planners">🗓️ Planners</a>
+      <div id="mobileCategoryLinks"></div>
       <hr />
       <a href="#/wishlist">♥ Wishlist</a>
       <a href="#/orders">📦 My orders</a>
@@ -1908,9 +1937,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<a class="pcard__name" href="#/p/' + p.id + '">' + esc(p.name) + '</a>' +
       (p.rating ? '<div class="rate"><span class="rate__badge">' + p.rating.toFixed(1) + ' <i>★</i></span><span class="rate__count">(' + p.ratingCount.toLocaleString("en-IN") + ')</span></div>' : '<div class="rate rate--new">New</div>') +
       '<div class="pcard__price"><b>' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
-      (inCart > 0
-        ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
-        : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
+      (p.variants && p.variants.length
+        ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">Choose a colour</a>'
+        : inCart > 0
+          ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
+          : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
       '</div></article>';
   }
 
@@ -1997,7 +2028,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<h3>' + esc(deal.name) + '</h3>' +
       '<div class="pcard__price"><b>' + money(deal.price) + '</b><s>' + money(deal.mrp) + '</s><em>' + deal.discount + '% off</em></div>' +
       '<div class="dealstrip__timer">Ends in <b id="dealTimer">--:--:--</b></div>' +
-      '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button></div>' +
+      (deal.variants && deal.variants.length
+        ? '<a class="btn btn--primary" href="#/p/' + deal.id + '">Choose a colour</a>'
+        : '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button>') + '</div>' +
       '<img class="dealstrip__img" src="' + deal.img + '" alt="" /></section>' : "") +
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
@@ -2205,11 +2238,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   /* gallery thumbnails for one colour (or the product itself) */
-  function thumbHtml(rec, active, omitMainImage) {
+  function thumbHtml(rec, active) {
     var imgs = (rec && rec.images && rec.images.length)
       ? rec.images
       : [{ id: null, url: rec ? rec.img : "", altText: rec ? rec.name : "" }];
-    if (omitMainImage && rec) imgs = imgs.filter(function (im) { return im.url !== rec.img; });
     return imgs.map(function (im, i) {
       return '<button type="button" class="pdp__thumb' + (i === (active || 0) ? " pdp__thumb--on" : "") +
         '" data-thumb="' + i + '" data-thumburl="' + esc(im.url) + '" aria-label="Photo ' + (i + 1) + '">' +
@@ -2225,12 +2257,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (p.tags.indexOf("vc-hidden") > -1) { mainId = p.parent; p = D.findProduct(p.parent) || p; }
     var mainP = p;
     var selectedVariant = null;
-    if (mainP.variants) {
-      /* resolve the displayed record to the selected size (default 3 mm) */
-      selectedVariant = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v; })[0] : null) || mainP.variants[0];
+    if (mainP.variants && mainP.variants.length) {
+      selectedVariant = (query && query.v ? mainP.variants.filter(function (v) { return v.size === query.v || v.label === query.v; })[0] : null) || mainP.variants[0];
       p = D.findProduct(selectedVariant.id) || p;
     }
-    var hasVariants = !!mainP.variants;
+    var hasVariants = !!(mainP.variants && mainP.variants.length);
     A.pushRecent && A.pushRecent(mainId);
     var reviews = D.reviewsFor(id);
     var wished = A.inWishlist(mainId);
@@ -2242,15 +2273,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       .slice(0, 6);
     var inCart = 0;
     A.state.cart.forEach(function (l) { if (l.id === p.id) inCart = l.qty; });
-    var specRows = Object.keys(p.specs).map(function (k) {
-      var cell = (k === "Thickness" && hasVariants)
-        ? '<td id="pdpSpecThk">' + esc(p.specs[k] + " × 20 cm") + '</td>'
-        : '<td>' + esc(p.specs[k]) + '</td>';
-      return '<tr><th>' + esc(k) + '</th>' + cell + '</tr>';
+    var specSource = hasVariants ? mainP.specs : p.specs;
+    var specRows = Object.keys(specSource).map(function (k) {
+      return '<tr><th>' + esc(k) + '</th><td>' + esc(specSource[k]) + '</td></tr>';
     }).join("");
-    var variantLabel = hasVariants
-      ? mainP.name + " — " + ((selectedVariant && selectedVariant.label) || p.variantLabel || p.name)
-      : p.name;
+    var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
 
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }, { label: variantLabel }]) +
@@ -2258,15 +2285,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
       (hasVariants
-        ? '<div class="pdp__variantTiles" role="group" aria-label="Choose a colour"><span class="pdp__variantTilesLabel">Colour</span><div class="pdp__variantTileList">' +
+        ? '<div class="pdp__colours" role="group" aria-label="Colour"><span class="pdp__colourslabel">Colour</span>' +
           mainP.variants.map(function (v) {
-            var label = v.label || v.size || "Option";
-            return '<button type="button" class="pdp__variantTile' + (p.id === v.id ? " pdp__variantTile--on" : "") + '" data-vcid="' + esc(v.id) + '" aria-label="Choose ' + esc(label) + '" aria-pressed="' + (p.id === v.id) + '">' +
-              '<img src="' + esc(v.img || BLANK_IMG) + '" alt="" />' +
-              '<span class="pdp__variantTileName">' + esc(label) + '</span></button>';
-          }).join("") + "</div></div>"
+            return '<button type="button" class="pdp__swatch' + (p.id === v.id ? " pdp__swatch--on" : "") + '" data-vcsize="' + esc(v.size) + '" data-vcid="' + v.id + '" aria-pressed="' + (p.id === v.id) + '">' +
+              '<img src="' + v.img + '" alt="" />' + esc(v.label) + "</button>";
+          }).join("") + "</div>"
         : "") +
-      '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0, hasVariants) + "</div>" +
+      '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0) + "</div>" +
       '<div class="pdp__actions">' +
       '<div class="pdp__actions">' +
       (inCart > 0 && !hasVariants
@@ -2326,26 +2351,26 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     if (hasVariants) {
       var pdpState = { id: p.id };
-      $$(".pdp__variantTile").forEach(function (b) {
+      $$(".pdp__swatch").forEach(function (b) {
         b.addEventListener("click", function () {
           var vid = b.getAttribute("data-vcid");
           if (vid === pdpState.id) return;
           var rec = D.findProduct(vid);
           if (!rec) return;
-          var chosenVariant = mainP.variants.filter(function (v) { return v.id === rec.id; })[0];
-          var chosenLabel = (chosenVariant && chosenVariant.label) || rec.variantLabel || rec.name;
-          var chosenTitle = mainP.name + " — " + chosenLabel;
+          var option = mainP.variants.filter(function (v) { return v.id === vid; })[0];
+          var optionLabel = option ? option.label : rec.name.split(" — ").slice(1).join(" — ");
+          var optionTitle = mainP.name + " — " + (optionLabel || rec.name);
           pdpState.id = rec.id;
-          $$(".pdp__variantTile").forEach(function (x) { x.classList.remove("pdp__variantTile--on"); x.setAttribute("aria-pressed", "false"); });
-          b.classList.add("pdp__variantTile--on");
+          $$(".pdp__swatch").forEach(function (x) { x.classList.remove("pdp__swatch--on"); x.setAttribute("aria-pressed", "false"); });
+          b.classList.add("pdp__swatch--on");
           b.setAttribute("aria-pressed", "true");
           var img = $("#pdpImg"); if (img) { img.src = rec.img; img.alt = rec.name; }
           /* show this colour's own photos from the image database */
-          if (thumbs) { thumbs.innerHTML = thumbHtml(rec, 0, true); }
-          var pb = $("#pdpPrice"); if (pb) pb.textContent = money(rec.price);
-          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = chosenTitle;
-          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = chosenTitle;
-          var st = $("#pdpSpecThk"); if (st) st.textContent = rec.specs["Thickness"] + " × 20 cm";
+          if (thumbs) { thumbs.innerHTML = thumbHtml(rec, 0); }
+          var price = $(".pdp__price");
+          if (price) price.innerHTML = '<b id="pdpPrice">' + money(rec.price) + '</b>' + (rec.discount > 0 ? '<s>' + money(rec.mrp) + '</s><em class="off">' + rec.discount + '% off</em>' : '');
+          var ttl = $("#pdpTitle"); if (ttl) ttl.textContent = optionTitle;
+          var cr = $(".crumbs span:last-child"); if (cr) cr.textContent = optionTitle;
           $$('#view [data-root="' + mainId + '"]').forEach(function (btn) {
             if (btn.hasAttribute("data-add")) btn.setAttribute("data-add", rec.id);
             if (btn.hasAttribute("data-buy")) btn.setAttribute("data-buy", rec.id);
@@ -3050,6 +3075,26 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (b) b.classList.remove("backdrop--show");
   }
 
+  function renderHeaderCategories() {
+    var html = (D.CATEGORIES || []).map(function (category) {
+      var slug = esc(String(category.slug || ""));
+      var label = esc(String(category.label || category.name || category.slug || "Category"));
+      var emoji = esc(String(category.emoji || "🗂️"));
+      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '"><span class="category-menu__emoji">' + emoji + '</span><span class="category-menu__label">' + label + '</span><span class="category-menu__arrow" aria-hidden="true">›</span></a>';
+    }).join("");
+    ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
+      var container = document.getElementById(id);
+      if (container) container.innerHTML = html;
+    });
+  }
+
+  function closeHeaderCategories() {
+    var panel = $("#headerCategoryMenu");
+    var toggle = $("#headerCategoryToggle");
+    if (panel) panel.hidden = true;
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+  }
+
   /* bottom nav active state + cleanup on navigation */
   document.addEventListener("pt:route", renderBadges);
   window.addEventListener("hashchange", function () {
@@ -3079,6 +3124,29 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   /* ================= header chrome wiring ================= */
 
   document.addEventListener("DOMContentLoaded", function () {
+    var categoryToggle = $("#headerCategoryToggle");
+    var categoryPanel = $("#headerCategoryMenu");
+    renderHeaderCategories();
+    document.addEventListener("pt:catalog", renderHeaderCategories);
+    if (categoryToggle && categoryPanel) {
+      categoryToggle.addEventListener("click", function () {
+        var open = categoryPanel.hidden;
+        renderHeaderCategories();
+        categoryPanel.hidden = !open;
+        categoryToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      document.addEventListener("click", function (event) {
+        if (!event.target.closest(".category-menu")) closeHeaderCategories();
+      });
+      categoryPanel.addEventListener("click", function (event) {
+        if (event.target.closest("a")) closeHeaderCategories();
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeHeaderCategories();
+      });
+      window.addEventListener("hashchange", closeHeaderCategories);
+    }
+
     /* mobile drawer */
     var burger = $("#burger");
     if (burger) burger.addEventListener("click", function () {
@@ -3290,7 +3358,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       }
     }
 
-    /* link variant child rows (meta.parent) to their parent product */
+    /* link colour/option children (meta.parent) to their parent product */
     var kids = {};
     for (i = 0; i < list.length; i++) {
       if (list[i].parent) (kids[list[i].parent] = kids[list[i].parent] || []).push(list[i]);
@@ -3302,12 +3370,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       main.variants = mine.map(function (c) {
         var label = c.variantLabel ||
           (c.name.indexOf(" — ") > -1 ? c.name.split(" — ").slice(1).join(" — ") : c.name);
-        var size = label.split(" × ")[0] || label;
-        /* Only size labels belong in Thickness. Colour labels such as "Maroon"
-           should remain variant names instead of appearing as fake specs. */
-        if (c.specs.Thickness == null && /^\d+(?:\.\d+)?\s*mm$/i.test(size)) c.specs.Thickness = size;
-        return { id: c.id, size: size, label: label, price: c.price, mrp: c.mrp, img: c.img, images: c.images || [] };
+        return { id: c.id, size: label, label: label, price: c.price, mrp: c.mrp, stock: c.stock, img: c.img, images: c.images || [] };
       });
+      /* Parent stock is the total available across its selectable options. */
+      main.stock = main.variants.reduce(function (total, v) { return total + (Number(v.stock) || 0); }, 0);
     }
 
     /* "newest" ordering — fall back to list order when createdAt missing */
@@ -3316,6 +3382,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     replace(PT.CATEGORIES, cats);
     replace(PT.PRODUCTS, list);
     replace(PT.visibleProducts, list.filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; }));
+    document.dispatchEvent(new Event("pt:catalog"));
   }
 
   /* ---------------- refresh cycle ---------------- */
@@ -3348,11 +3415,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(refresh, 200);
   }
-
-  /* Admin and storefront tabs share catalog changes immediately in this browser. */
-  window.addEventListener("storage", function (event) {
-    if (event.key === "uvid:catalog-updated") scheduleRefresh();
-  });
 
   /* ---------------- live updates from the admin panel ---------------- */
 

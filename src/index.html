@@ -40,6 +40,20 @@
       </div>
 
       <div class="hactions">
+        <div class="category-menu">
+          <button class="hicon category-menu__toggle" id="headerCategoryToggle" type="button" aria-label="Browse categories" aria-haspopup="true" aria-expanded="false" aria-controls="headerCategoryMenu">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/>
+            </svg>
+            <span class="lbl">Categories</span>
+            <svg class="category-menu__chevron" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 6 5 5 5-5"/></svg>
+          </button>
+          <div class="category-menu__panel" id="headerCategoryMenu" role="menu" aria-labelledby="headerCategoryToggle" hidden>
+            <p class="category-menu__title">Shop by category</p>
+            <div id="headerCategoryLinks"></div>
+          </div>
+        </div>
         <a class="hicon" href="#/wishlist" aria-label="Wishlist">
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
             <path d="M12 21s-7.5-4.7-10-9.3C.3 8 2.4 4.5 6 4.5c2.2 0 3.6 1.1 4.5 2.6l1.5 2.4 1.5-2.4c.9-1.5 2.3-2.6 4.5-2.6 3.6 0 5.7 3.5 4 7.2C19.5 16.3 12 21 12 21z"/>
@@ -112,13 +126,7 @@
     </div>
     <nav class="drawer__links" aria-label="Categories">
       <a href="#/">🏠 Home</a>
-      <a href="#/c/pens">🖊️ Pens & Writing</a>
-      <a href="#/c/notebooks">📒 Notebooks</a>
-      <a href="#/c/office">📎 Office Supplies</a>
-      <a href="#/c/art">🎨 Art & Craft</a>
-      <a href="#/c/desk">🗂️ Desk Accessories</a>
-      <a href="#/c/school">✏️ School Essentials</a>
-      <a href="#/c/planners">🗓️ Planners</a>
+      <div id="mobileCategoryLinks"></div>
       <hr />
       <a href="#/wishlist">♥ Wishlist</a>
       <a href="#/orders">📦 My orders</a>

@@ -133,6 +133,7 @@
     replace(PT.CATEGORIES, cats);
     replace(PT.PRODUCTS, list);
     replace(PT.visibleProducts, list.filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; }));
+    document.dispatchEvent(new Event("pt:catalog"));
   }
 
   /* ---------------- refresh cycle ---------------- */
