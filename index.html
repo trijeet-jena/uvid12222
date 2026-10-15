@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UVID — Stationery Store | Pens, Notebooks, Planners & Desk Finds</title>
-  <meta name="description" content="UVID Art and Craft — stationery, planners, art supplies and desk accessories. Pay securely with PhonePe checkout." />
+  <meta name="description" content="UVID Art and Craft — stationery, planners, art supplies and desk accessories. Pay with UPI QR; orders are confirmed after payment verification." />
   <meta name="theme-color" content="#2e7d5b" />
   <link rel="icon" type="image/jpeg" href="./assets/logo.jpeg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -943,7 +943,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         <a href="#/cart">Cart</a>
       </div>
     </div>
-    <p class="footer__note">© <span id="year"></span> UVID Art and Craft · Online payments are verified by PhonePe before order confirmation.</p>
+    <p class="footer__note">© <span id="year"></span> UVID Art and Craft · UPI payments are verified before order confirmation.</p>
   </footer>
 
   <!-- ================= CHROME ================= -->
@@ -1271,7 +1271,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 /* ============================================================
    UVID — app engine
    hash router · persisted state (cart/wishlist/orders/user)
-   PhonePe payment verification · auth modal · toast · utils
+   UPI payment verification · auth modal · toast · utils
    ============================================================ */
 
 (function () {
@@ -1634,9 +1634,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (String(srv.payment_method || method || "").toUpperCase() === "PHONEPE" ? "Awaiting PhonePe verification" : String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"),
       paymentConfirmed: srv.payment_status === "PAID",
-      paymentRedirectUrl: data.paymentRedirectUrl || null,
       status: cancelled ? "Cancelled" : STATUS_STAGES[si],
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : si,
@@ -1980,7 +1979,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<a class="btn btn--primary btn--lg" href="#/c/notebooks">Shop bestsellers</a>' +
       '<a class="btn btn--ghost btn--lg" href="#/search?sort=discount">Today’s deals</a>' +
       '</div>' +
-      '<ul class="hero__points"><li>✓ Secure PhonePe checkout</li><li>✓ 2–4 day delivery</li></ul>' +
+      '<ul class="hero__points"><li>✓ UPI QR payments</li><li>✓ 2–4 day delivery</li></ul>' +
       '</div>' +
       '<div class="hero__cards" aria-hidden="true">' +
       '<img class="hero__c hero__c--1" src="' + heroImg("planner-2026", 0) + '" alt="" />' +
@@ -2006,7 +2005,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       shelf("Just landed", "Fresh arrivals for your desk", newest, "#/search?sort=newest") +
       '<section class="perks reveal">' +
       '<div class="perk"><span>🚚</span><h4>Fast delivery</h4><p>2–4 days metro to metro, tracked end to end.</p></div>' +
-      '<div class="perk"><span>🔒</span><h4>PhonePe checkout</h4><p>Pay securely with the online payment methods enabled for the store. Orders are confirmed after PhonePe verifies payment.</p></div>' +
+      '<div class="perk"><span>🔒</span><h4>UPI QR payment</h4><p>Pay with PhonePe or another UPI app. Orders are confirmed after payment verification.</p></div>' +
       '<div class="perk"><span>🇮🇳</span><h4>Made for India</h4><p>Prices in ₹, GST invoice, support that replies.</p></div>' +
       '</section>' +
 
@@ -2290,7 +2289,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="pdp__delivery card-inset">' +
       '<p>🚚 Delivery by <b>' + etaStr + '</b> · Free above ' + money(A.FREE_SHIP_MIN) + '</p>' +
       '<p>' + (p.stock <= 20 ? "⚡ Hurry! Only " + p.stock + " left in stock" : "✅ In stock — ships in 24 hrs") + '</p>'.replace("<p>", "<p id='pdpStockBadge'>") +
-      '<p>🔒 Pay securely with PhonePe</p></div>' +
+      '<p>📱 Pay by UPI QR</p></div>' +
       '<div class="pdp__wishrow">' +
       '<button class="heartbtn' + (wished ? " heartbtn--on" : "") + '" data-wish="' + mainId + '">' + (wished ? "♥ Wishlisted" : "♡ Add to wishlist") + '</button>' +
       '</div>' +
@@ -2484,7 +2483,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       if (a0) A.setSession({ address: a0 });
     }
 
-    A.setSession({ paymentMethod: "PHONEPE", cardNum: null, cardExp: null, cardName: null });
+    A.setSession({ paymentMethod: "UPI", cardNum: null, cardExp: null, cardName: null });
 
     var addrBlock;
     if (addresses.length === 0) {
@@ -2517,9 +2516,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="cbox card"><h2><span class="cbox__num">2</span> Order summary</h2>' +
       '<div class="minis">' + orderItems + '</div>' +
       '<button class="linkbtn" id="backToCart">← Edit cart</button></div>' +
-      '<div class="cbox card"><h2><span class="cbox__num">3</span> Secure PhonePe checkout</h2>' +
+      '<div class="cbox card"><h2><span class="cbox__num">3</span> UPI QR payment</h2>' +
       '<div class="upi-checkout">' +
-      '<div class="payopt payopt--on"><span class="payopt__icon">🔒</span><span class="payopt__body"><b>Pay securely with PhonePe</b><span>Continue to PhonePe to pay using the methods enabled for this store’s merchant account. Your order is confirmed only after PhonePe verifies payment.</span></span></div>' +
+      '<div class="payopt payopt--on"><span class="payopt__icon">📱</span><span class="payopt__body"><b>Pay by UPI QR</b><span>Scan with PhonePe or another UPI app. Payment is checked before your order is confirmed.</span></span></div>' +
+      '<p class="upi-setup" id="upiQrSetup" role="status">Checking whether the store UPI QR has been added…</p>' +
+      '<img class="upi-preflight" id="upiQrPreflight" src="/assets/upi-qr.png" alt="" aria-hidden="true" />' +
       '</div></div>' +
       '</section>' +
       '<aside class="checkouts"><div class="pricedtl card"><h3>Price details</h3>' +
@@ -2527,8 +2528,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>' + (t.shipping === 0 ? '<span class="green">FREE</span>' : money(t.shipping)) + '</b></div>' +
       '<div class="prow prow--total"><span>Total payable</span><b>' + money(t.total) + '</b></div>' +
-      '<button class="btn btn--primary btn--block btn--lg" id="placeOrder">Continue to PhonePe · ' + money(t.total) + '</button>' +
-      '<p class="safe-note">Your order is confirmed only after PhonePe verifies the payment.</p>' +
+      '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
+      '<p class="safe-note">Your order is confirmed only after UPI payment is verified.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -2570,16 +2571,31 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       });
     });
 
+    var qrProbe = $("#upiQrPreflight");
     var placeButton = $("#placeOrder");
+    var qrSetup = $("#upiQrSetup");
+    function setQrReady(ready) {
+      if (ready) {
+        placeButton.disabled = false;
+        placeButton.textContent = "Continue to UPI payment · " + money(t.total);
+        qrSetup.textContent = "UPI QR is ready. You will see the QR and order number on the next screen.";
+        qrSetup.classList.add("upi-setup--ready");
+      } else {
+        placeButton.disabled = true;
+        placeButton.textContent = "UPI QR not ready";
+        qrSetup.textContent = "The store has not added its UPI QR yet. Checkout will be available once assets/upi-qr.png is added.";
+        qrSetup.classList.remove("upi-setup--ready");
+      }
+    }
+    qrProbe.addEventListener("load", function () { setQrReady(true); });
+    qrProbe.addEventListener("error", function () { setQrReady(false); });
+    if (qrProbe.complete) setQrReady(qrProbe.naturalWidth > 0);
+
     $("#placeOrder").addEventListener("click", function () {
       if (placeButton.disabled) return;
       if (!A.session().address) { A.toast("Add a delivery address first.", false); window.scrollTo(0, 0); return; }
-      placeButton.disabled = true;
-      placeButton.textContent = "Connecting to PhonePe…";
-      Promise.resolve(A.placeOrder("PHONEPE")).then(function (order) {
-        if (order && order.paymentRedirectUrl) window.location.assign(order.paymentRedirectUrl);
-        else if (order) { placeButton.disabled = false; placeButton.textContent = "PhonePe checkout unavailable"; A.toast("PhonePe did not return a secure checkout link. Contact the store before trying again.", false); }
-        else { placeButton.disabled = false; placeButton.textContent = "Continue to PhonePe · " + money(t.total); }
+      Promise.resolve(A.placeOrder("UPI")).then(function (order) {
+        if (order) A.navigateTo("#/pay/" + order.id);
       });
     });
   }
@@ -2594,26 +2610,24 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var isCod = String(order.payment).toLowerCase() === "cod";
     if (order._srv && isCod) { successHtml(order); return; }
     if (!order._srv) {
-      view.innerHTML = emptyState("🔒", "Payment needs server verification", "This order cannot be marked successful from browser-only data. Please return to checkout and use the store's PhonePe checkout.", '<a class="btn btn--primary" href="#/checkout">Return to checkout</a>');
+      view.innerHTML = emptyState("🔒", "Payment needs server verification", "This order cannot be marked successful from browser-only data. Please return to checkout and use the store's UPI payment flow.", '<a class="btn btn--primary" href="#/checkout">Return to checkout</a>');
       return;
     }
 
-    var isPhonePe = String(order.payment).toLowerCase() === "phonepe";
-    view.innerHTML = '<div class="paywait card upi-wait"><h1>' + (isPhonePe ? "Verifying PhonePe payment" : "Complete your UPI payment") + '</h1>' +
-      '<p>' + (isPhonePe ? "PhonePe has returned you to the store. We are checking the payment directly with PhonePe. Please keep this page open while it is pending." : "Scan this PhonePe Business QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.") + '</p>' +
-      (isPhonePe ? "" : '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>') +
+    view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
+      '<p>Scan this PhonePe Business QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+      '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
       '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
-      '<p class="upi-wait__status" id="upiPaymentStatus" role="status">' + (isPhonePe ? "Waiting for PhonePe to confirm your payment…" : "Payment awaiting verification. The order is not confirmed yet.") + '</p>' +
-      '<p class="safe-note">' + (isPhonePe ? "Your order is confirmed only after the PhonePe server reports a successful payment." : "After paying, keep this page open. UVID will show success after the payment is verified in PhonePe Business.") + '</p>' +
-      '<div class="success__cta" id="paymentActions"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a>' + (isPhonePe ? "" : '<button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button>') + '</div></div>';
+      '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
+      '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
+      '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
 
     var qr = $("#upiPaymentQr");
-    if (qr) qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
       if (!statusEl) { clearInterval(paymentTimer); return; }
-      var statusUrl = "/api/orders/" + encodeURIComponent(order.id) + (isPhonePe ? "/payment-status" : "");
-      fetch(statusUrl, { method: isPhonePe ? "POST" : "GET", headers: isPhonePe ? { "Content-Type": "application/json" } : {}, body: isPhonePe ? "{}" : undefined, cache: "no-store", credentials: "same-origin" })
+      fetch("/api/orders/" + encodeURIComponent(order.id), { cache: "no-store", credentials: "same-origin" })
         .then(function (res) { if (!res.ok) throw new Error("Could not refresh payment status."); return res.json(); })
         .then(function (data) {
           var serverOrder = data && data.order;
@@ -2635,26 +2649,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
             clearInterval(paymentTimer);
             return;
           }
-          var paymentState = String(data.paymentState || serverOrder.payment_status || "PENDING").toUpperCase();
-          if (isPhonePe && paymentState === "FAILED") {
-            order.paymentStatus = "Payment failed";
-            statusEl.textContent = "PhonePe reports that this payment failed. The order is not confirmed. You can cancel this unpaid order and place it again.";
-            statusEl.classList.add("upi-wait__status--error");
-            $("#paymentActions").innerHTML = '<a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button>';
-          } else if (isPhonePe && paymentState === "EXPIRED") {
-            order.paymentStatus = "Payment expired";
-            statusEl.textContent = "This PhonePe checkout has expired. The order is not confirmed. Cancel it and start checkout again.";
-            statusEl.classList.add("upi-wait__status--error");
-            $("#paymentActions").innerHTML = '<a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button>';
-          } else {
-            order.paymentStatus = isPhonePe ? "Awaiting PhonePe verification" : "Awaiting payment verification";
-            statusEl.textContent = isPhonePe ? "PhonePe is still processing the payment. The order is not confirmed yet." : "Payment awaiting verification. The order is not confirmed yet.";
-          }
+          order.paymentStatus = "Awaiting payment verification";
+          statusEl.textContent = "Payment awaiting verification. The order is not confirmed yet.";
           A.save();
         })
-        .catch(function () { statusEl.textContent = isPhonePe ? "Still waiting for a PhonePe status response. This page will check again." : "Still waiting for the store server. This page will check again."; });
+        .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
     }
-    var paymentTimer = setInterval(checkPaymentStatus, isPhonePe ? 12000 : 5000);
+    var paymentTimer = setInterval(checkPaymentStatus, 5000);
     checkPaymentStatus();
   }
 
@@ -2698,7 +2699,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           var s = map[o.id];
           if (!s) return;
           var confirmed = s.payment_status === "PAID";
-          var paymentLabel = confirmed ? "Paid ✓" : (String(s.payment_method).toUpperCase() === "PHONEPE" ? (s.payment_status === "FAILED" ? "Payment failed" : s.payment_status === "EXPIRED" ? "Payment expired" : "Awaiting PhonePe verification") : String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery");
+          var paymentLabel = confirmed ? "Paid ✓" : (String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery");
           if (o.paymentConfirmed !== confirmed || o.paymentStatus !== paymentLabel) {
             o.paymentConfirmed = confirmed;
             o.paymentStatus = paymentLabel;
@@ -2737,7 +2738,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       crumbs([{ label: "Home", href: "#/" }, { label: "My orders" }]) +
       '<div class="orderspage"><h1>My orders</h1>' +
       orders.map(function (o) {
-        var canCancel = o.status !== "Delivered" && o.status !== "Cancelled" && (String(o.payment).toLowerCase() !== "phonepe" || ["Payment failed", "Payment expired"].includes(o.paymentStatus));
         var thumbs = o.items.slice(0, 4).map(function (it) {
           var p = D.findProduct(it.id);
           var img = p ? p.img : "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><text x="40" y="52" font-size="36" text-anchor="middle">' + (it.emoji || "📦") + '</text></svg>');
@@ -2745,14 +2745,14 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         }).join("") + (o.items.length > 4 ? '<span class="othumb othumb--more">+' + (o.items.length - 4) + '</span>' : "");
         return '<article class="ocard card">' +
           '<header><div><p class="ocard__id">Order ' + o.id + ' · ' + A.fmtDate(o.placedAt) + '</p>' +
-          '<p class="ocard__total">' + money(o.totals.total) + ' · ' + esc(String(o.payment).toUpperCase()) + '</p>' + (["upi", "phonepe"].includes(String(o.payment).toLowerCase()) && !o.paymentConfirmed ? '<small class="payment-pending">' + esc(o.paymentStatus || "Awaiting payment verification") + '</small>' : "") + '</div>' + statusPill(o.status) + '</header>' +
+          '<p class="ocard__total">' + money(o.totals.total) + ' · ' + esc(String(o.payment).toUpperCase()) + '</p>' + (o.payment === "upi" && !o.paymentConfirmed ? '<small class="payment-pending">' + esc(o.paymentStatus || "Awaiting payment verification") + '</small>' : "") + '</div>' + statusPill(o.status) + '</header>' +
           '<div class="ocard__mid"><div class="othumbs">' + thumbs + '</div>' +
           (o.status === "Delivered" ? '<p class="ocard__eta ocard__eta--ok">Delivered ' + A.fmtDate(o.eta) + '</p>'
-            : o.status === "Cancelled" ? '<p class="ocard__eta ocard__eta--no">' + (o.paymentConfirmed ? "Cancelled · contact the store about your refund" : "Cancelled · no payment was captured") + '</p>'
+            : o.status === "Cancelled" ? '<p class="ocard__eta ocard__eta--no">Cancelled · refund in 3–5 days</p>'
             : '<p class="ocard__eta">Arriving by <b>' + A.fmtDate(o.eta) + '</b></p>') + '</div>' +
           '<footer>' +
           '<a class="btn btn--soft btn--sm" href="#/orders/' + o.id + '">View details</a>' +
-          (canCancel ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel</button>' : "") +
+          (o.status !== "Delivered" && o.status !== "Cancelled" ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel</button>' : "") +
           '<button class="btn btn--ghost btn--sm" data-reorder="' + o.id + '">↻ Reorder</button>' +
           '</footer></article>';
       }).join("") + '</div>';
@@ -2764,9 +2764,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (!o) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
 
     var cancelled = o.status === "Cancelled";
-    var canCancel = o.status !== "Delivered" && !cancelled && (String(o.payment).toLowerCase() !== "phonepe" || ["Payment failed", "Payment expired"].includes(o.paymentStatus));
     var timeline = cancelled
-      ? '<div class="tl tl--cancelled"><p>❌ This order was cancelled.' + (o.paymentConfirmed ? " Contact the store about your refund." : " No payment was captured.") + '</p></div>'
+      ? '<div class="tl tl--cancelled"><p>❌ This order was cancelled. Any payment will be refunded to source in 3–5 working days.</p></div>'
       : '<div class="tl">' + A.STATUS_STAGES.map(function (s, i) {
           var done = i <= o.stageIndex;
           var cur = i === o.stageIndex;
@@ -2792,7 +2791,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
       '<section class="card odetail__box"><h2>items (' + o.qty + ')</h2><div class="minis">' + items + '</div>' +
       '<div class="odetail__ops">' +
-      (canCancel ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
+      (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
       '<button class="btn btn--soft btn--sm" data-reorder="' + o.id + '">↻ Reorder</button>' +
       '<button class="btn btn--ghost btn--sm" data-invoice="' + o.id + '">🧾 Invoice</button>' +
       '</div></section>' +

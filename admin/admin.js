@@ -1120,17 +1120,15 @@
   function orderRowHtml(o) {
     const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
     const addr = orderAddress(o);
-    const paymentMethod = String(o.payment_method).toUpperCase();
-    const awaitingOnline = ["UPI", "PHONEPE"].includes(paymentMethod) && o.payment_status !== "PAID";
-    const awaitingUpi = paymentMethod === "UPI" && o.payment_status !== "PAID";
+    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID";
     return '<tr data-orow="' + esc(o.id) + '">' +
-      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + (awaitingOnline ? " · Payment pending" : "") + "</small></td>" +
+      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + (awaitingUpi ? " · Payment pending" : "") + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
       '<td class="num"><b>' + money(o.total_amount) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
       '<td><select class="ostat" data-oid="' + esc(o.id) + '">' +
       ORDER_STATUSES.map(function (s) {
-        const blockedUntilPaid = awaitingOnline && !["PLACED", "CANCELLED"].includes(s[0]);
+        const blockedUntilPaid = awaitingUpi && !["PLACED", "CANCELLED"].includes(s[0]);
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
       }).join("") + "</select></td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
@@ -1157,7 +1155,7 @@
     const addressLines = [address.line, [address.city, address.pin].filter(Boolean).join(" — ")].filter(Boolean);
     const buyerName = address.name || "Customer";
     const phone = address.phone || order.mobile_number || "—";
-    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_method).toUpperCase() === "PHONEPE" && order.payment_status === "PENDING" ? "Awaiting PhonePe verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
+    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID logo" width="54" height="54"><div><strong>UVID</strong><span>ART AND CRAFT</span></div></div>' +
       '<div class="invoice__heading"><h2>INVOICE</h2><span>Order ' + esc(order.id) + '</span></div></div>' +
@@ -1182,11 +1180,10 @@
   }
   function openOrderInvoice(order) {
     const awaitingUpi = String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" && order.status !== "CANCELLED";
-    const awaitingPhonePe = String(order.payment_method).toUpperCase() === "PHONEPE" && order.payment_status !== "PAID" && order.status !== "CANCELLED";
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (awaitingUpi ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (awaitingPhonePe ? '<button class="btn btn--soft" type="button" data-refresh-phonepe>Refresh PhonePe status</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (awaitingUpi ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const printButton = back.querySelector("[data-print-invoice]");
@@ -1200,15 +1197,6 @@
         toast("UPI payment confirmed", true);
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
-    });
-    const refreshPhonePeButton = back.querySelector("[data-refresh-phonepe]");
-    if (refreshPhonePeButton) refreshPhonePeButton.addEventListener("click", async function () {
-      refreshPhonePeButton.disabled = true;
-      try {
-        const result = await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment-status", {});
-        toast(result.paymentState === "PAID" ? "PhonePe confirmed this order as paid" : "PhonePe status: " + result.paymentState.toLowerCase(), result.paymentState === "PAID");
-        await repaint(VIEWS.orders);
-      } catch (ex) { refreshPhonePeButton.disabled = false; toast(ex.message, false); }
     });
   }
   content.addEventListener("click", function (e) {

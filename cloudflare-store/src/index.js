@@ -7,112 +7,6 @@ const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 1_400_000; // stay below D1's 2 MB row limit with metadata
 const COOKIE = "uvid_session";
 const encoder = new TextEncoder();
-const ONLINE_PAYMENT_METHODS = ["UPI", "PHONEPE"];
-let phonePeTokenCache = { environment: "", clientId: "", token: "", expiresAt: 0 };
-
-function phonePeApiBase(env) {
-  return String(env.PHONEPE_ENV || "SANDBOX").toUpperCase() === "PRODUCTION"
-    ? "https://api.phonepe.com/apis/pg"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox";
-}
-function phonePeAuthUrl(env) {
-  return String(env.PHONEPE_ENV || "SANDBOX").toUpperCase() === "PRODUCTION"
-    ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
-    : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token";
-}
-async function phonePeAccessToken(env) {
-  const clientId = String(env.PHONEPE_CLIENT_ID || "").trim();
-  const clientSecret = String(env.PHONEPE_CLIENT_SECRET || "");
-  const clientVersion = String(env.PHONEPE_CLIENT_VERSION || "").trim();
-  const environment = String(env.PHONEPE_ENV || "SANDBOX").toUpperCase();
-  if (!clientId || !clientSecret || !clientVersion) {
-    throw Object.assign(new Error("PhonePe payments are not configured on the store server yet."), { status: 503 });
-  }
-  if (phonePeTokenCache.environment === environment && phonePeTokenCache.clientId === clientId && phonePeTokenCache.token && phonePeTokenCache.expiresAt > Date.now() + 60_000) {
-    return phonePeTokenCache.token;
-  }
-  const form = new URLSearchParams({ client_id: clientId, client_version: clientVersion, client_secret: clientSecret, grant_type: "client_credentials" });
-  let response;
-  try {
-    response = await fetch(phonePeAuthUrl(env), { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form });
-  } catch {
-    throw Object.assign(new Error("PhonePe could not be reached. Please try again."), { status: 502 });
-  }
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.access_token || !Number(result.expires_at)) {
-    throw Object.assign(new Error("PhonePe could not authorize the payment. Check the merchant credentials and environment in Cloudflare."), { status: 502 });
-  }
-  let expiresAt = Number(result.expires_at);
-  if (expiresAt < 1_000_000_000_000) expiresAt *= 1000;
-  phonePeTokenCache = { environment, clientId, token: String(result.access_token), expiresAt };
-  return phonePeTokenCache.token;
-}
-async function phonePeApi(env, path, init = {}) {
-  const token = await phonePeAccessToken(env);
-  let response;
-  try {
-    response = await fetch(phonePeApiBase(env) + path, {
-      ...init,
-      headers: { "Authorization": "O-Bearer " + token, "Accept": "application/json", ...(init.headers || {}) },
-    });
-  } catch {
-    throw Object.assign(new Error("PhonePe could not be reached. Please try again."), { status: 502 });
-  }
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error("PhonePe could not process this payment request. Please try again."), { status: 502 });
-  return result;
-}
-async function createPhonePeCheckout(env, orderId, amountPaise) {
-  const redirectOrigin = String(env.PHONEPE_REDIRECT_ORIGIN || "").trim();
-  let origin;
-  try { origin = new URL(redirectOrigin).origin; } catch { origin = ""; }
-  const allowedOrigins = String(env.PUBLIC_ORIGIN || "").split(",").map((value) => value.trim()).filter(Boolean);
-  if (!origin || !allowedOrigins.includes(origin)) {
-    throw Object.assign(new Error("Set PHONEPE_REDIRECT_ORIGIN to the store website domain in Cloudflare."), { status: 503 });
-  }
-  if (!Number.isInteger(amountPaise) || amountPaise < 100) {
-    throw Object.assign(new Error("PhonePe checkout requires an order total of at least ₹1."), { status: 400 });
-  }
-  const redirectUrl = origin + "/?phonepe=return#/pay/" + encodeURIComponent(orderId);
-  const result = await phonePeApi(env, "/checkout/v2/pay", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      merchantOrderId: orderId,
-      amount: amountPaise,
-      expireAfter: 1800,
-      paymentFlow: { type: "PG_CHECKOUT", merchantUrls: { redirectUrl } },
-    }),
-  });
-  let checkoutUrl;
-  try { checkoutUrl = new URL(result.redirectUrl); } catch { checkoutUrl = null; }
-  if (!checkoutUrl || checkoutUrl.protocol !== "https:" || !/(^|\.)phonepe\.com$/i.test(checkoutUrl.hostname)) {
-    throw Object.assign(new Error("PhonePe did not return a valid secure checkout link."), { status: 502 });
-  }
-  return checkoutUrl.toString();
-}
-async function refreshPhonePeOrder(env, order) {
-  const result = await phonePeApi(env, "/checkout/v2/order/" + encodeURIComponent(order.id) + "/status?details=false", { method: "GET" });
-  const expectedPaise = Math.round(Number(order.total_amount) * 100);
-  if (!Number.isFinite(expectedPaise) || Number(result.amount) !== expectedPaise) {
-    throw Object.assign(new Error("The PhonePe order amount does not match the store order. Payment was not marked as paid."), { status: 409 });
-  }
-  let paymentStatus = String(result.state || "").toUpperCase();
-  if (paymentStatus === "COMPLETED") paymentStatus = "PAID";
-  else if (paymentStatus === "FAILED") paymentStatus = "FAILED";
-  else if (paymentStatus === "PENDING") {
-    const expiry = Number(result.expireAt || 0);
-    const expiryMs = expiry > 0 && expiry < 1_000_000_000_000 ? expiry * 1000 : expiry;
-    paymentStatus = expiryMs > 0 && expiryMs <= Date.now() ? "EXPIRED" : "PENDING";
-  } else {
-    throw Object.assign(new Error("PhonePe returned an unrecognized payment state."), { status: 502 });
-  }
-  if (order.payment_status !== "PAID") {
-    await env.DB.prepare("UPDATE orders SET payment_status=?,updated_at=? WHERE id=? AND payment_status!='PAID'")
-      .bind(paymentStatus, now(), order.id).run();
-  }
-  return { state: paymentStatus, order: (await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(order.id).first()) };
-}
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
   status,
@@ -379,7 +273,7 @@ async function stats(env) {
     inactive: await q("SELECT COUNT(*) n FROM products WHERE status='ARCHIVED'"),
     orders: await q("SELECT COUNT(*) n FROM orders"),
     openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
-    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method NOT IN ('UPI','PHONEPE') OR payment_status='PAID')").first())?.n || 0),
+    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
 async function orderList(env, customerId = null, status = null) {
@@ -416,18 +310,16 @@ async function placeOrder(env, user, body) {
   const discount = 0;
   const shipping = subtotal >= 499 ? 0 : 49;
   const id = "UV" + Date.now().toString(36).toUpperCase() + Math.floor(100 + Math.random() * 900);
-  const method = String(body.paymentMethod || "PHONEPE").toUpperCase();
-  if (!ONLINE_PAYMENT_METHODS.includes(method)) throw Object.assign(new Error("Choose PhonePe checkout to pay online."), { status: 400 });
-  const totalAmount = Math.round((subtotal + shipping) * 100) / 100;
-  const paymentRedirectUrl = method === "PHONEPE" ? await createPhonePeCheckout(env, id, Math.round(totalAmount * 100)) : null;
+  const method = String(body.paymentMethod || "UPI").toUpperCase();
+  if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
   const batches = [env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) VALUES (?,?,?,'PLACED',?,?,?,?,?,?,?)")
-    .bind(id,user.id,totalAmount,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)];
+    .bind(id,user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)];
   for (const line of lines) {
     batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) VALUES (?,?,?,?,?,?)").bind(id,line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
     batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
   await env.DB.batch(batches);
-  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })), paymentRedirectUrl };
+  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })) };
 }
 
 async function handleApi(request, env, user, url) {
@@ -554,24 +446,13 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
   if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"))});
-  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment-status$/);
-  if (match && method === "POST") {
-    if (adminOnly) return adminOnly;
-    const id = decodeURIComponent(match[1]);
-    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
-    if (!order) return error("Order not found.",404);
-    if (order.payment_method !== "PHONEPE") return error("This order does not use PhonePe checkout.",409);
-    const result = await refreshPhonePeOrder(env,order);
-    if (result.state === "PAID" && order.payment_status !== "PAID") await audit(env,request,user,"order.phonepe_payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
-    return json({ok:true,paymentState:result.state,order:(await orderList(env,null)).find((item)=>item.id===id)});
-  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly;
     const id = decodeURIComponent(match[1]);
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!order) return error("Order not found.",404);
-    if (order.payment_method !== "UPI") return error("Manual confirmation is only available for legacy UPI QR orders.",409);
+    if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
     await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
     await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
@@ -584,13 +465,7 @@ async function handleApi(request, env, user, url) {
     const orderId = decodeURIComponent(match[1]);
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
     if (!current) return error("Order not found.",404);
-    if (ONLINE_PAYMENT_METHODS.includes(current.payment_method) && current.payment_status !== "PAID" && !["PLACED","CANCELLED"].includes(status)) return error("Confirm the online payment before packing or shipping this order.",409);
-    if (status === "CANCELLED" && current.payment_method === "PHONEPE") {
-      if (current.payment_status === "PAID") return error("This PhonePe payment is already complete. Contact the store to arrange a refund before cancelling.",409);
-      const checked = await refreshPhonePeOrder(env,current);
-      if (checked.state === "PAID") return error("This PhonePe payment is already complete. Contact the store to arrange a refund before cancelling.",409);
-      if (checked.state === "PENDING") return error("PhonePe still reports this payment as pending. Wait for it to finish before cancelling.",409);
-    }
+    if (current.payment_method === "UPI" && current.payment_status !== "PAID" && !["PLACED","CANCELLED"].includes(status)) return error("Confirm the UPI payment before packing or shipping this order.",409);
     if (status === "CANCELLED" && current.status !== "CANCELLED") {
       const items = (await env.DB.prepare("SELECT product_id,quantity FROM order_items WHERE order_id=?").bind(orderId).all()).results || [];
       const batches = [env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),orderId)];
@@ -614,28 +489,11 @@ async function handleApi(request, env, user, url) {
     if(customerOnly) return customerOnly; const out=await placeOrder(env,user,await readBody()); return json({ok:true,...out},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
-  match=path.match(/^\/api\/orders\/([^/]+)\/payment-status$/);
-  if(match && method==="POST"){
-    if(customerOnly) return customerOnly;
-    const id=decodeURIComponent(match[1]);
-    const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
-    if(!order) return error("Order not found.",404);
-    if(order.payment_method!=="PHONEPE") return error("This order does not use PhonePe checkout.",409);
-    const result=await refreshPhonePeOrder(env,order);
-    if(result.state==="PAID" && order.payment_status!=="PAID") await audit(env,request,user,"order.phonepe_payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
-    return json({ok:true,paymentState:result.state,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
-  }
   match=path.match(/^\/api\/orders\/([^/]+)(?:\/cancel)?$/);
   if(match && method==="POST" && path.endsWith("/cancel")){
     if(customerOnly) return customerOnly; const id=decodeURIComponent(match[1]);
     const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
     if(!order) return error("Order not found.",404); if(order.status!=="PLACED") return error("This order can no longer be cancelled.",409);
-    if(order.payment_method==="PHONEPE"){
-      if(order.payment_status==="PAID") return error("This PhonePe payment is already complete. Contact the store to arrange a refund before cancelling.",409);
-      const checked=await refreshPhonePeOrder(env,order);
-      if(checked.state==="PAID") return error("This PhonePe payment is already complete. Contact the store to arrange a refund before cancelling.",409);
-      if(checked.state==="PENDING") return error("PhonePe still reports this payment as pending. Wait for it to finish before cancelling.",409);
-    }
     const items=(await env.DB.prepare("SELECT * FROM order_items WHERE order_id=?").bind(id).all()).results||[];
     const batch=[env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),id),...items.map(i=>env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?,status='ACTIVE',updated_at=? WHERE id=?").bind(i.quantity,now(),i.product_id))];
     await env.DB.batch(batch); return json({ok:true,order:(await orderList(env,user.id)).find(o=>o.id===id)});
