@@ -22,17 +22,15 @@ npx wrangler d1 execute uvid-store --remote --file=seed-catalog.sql
 `wrangler login` opens a Cloudflare page. Approve it with the same account
 where you created `uvid-store`.
 
-In Supabase, create a bucket named `product-images` and set it to **Public** so
-customers can view product photos. Restrict its allowed content types to JPEG,
-PNG, WebP, and GIF, and set its per-file limit to 5,500,000 bytes. Public access
-allows reading product photos; uploads and deletes still go through the
-admin-only Cloudflare Worker.
+The Supabase project already has a bucket named `product-image`. Keep it
+**Public** so customers can view product photos. Restrict its allowed content
+types to JPEG, PNG, WebP, and GIF, and set its per-file limit to 5,500,000
+bytes. Public access allows reading product photos; uploads and deletes still
+go through the admin-only Cloudflare Worker.
 
-To create the bucket, open the Supabase project, choose **Storage → New
-Bucket**, enter `product-images`, enable **Public bucket**, set the file size
-limit to `5,500,000` bytes, and allow only `image/jpeg`, `image/png`,
-`image/webp`, and `image/gif`. Copy the project's URL and secret key from
-**Project Settings → API Keys** for the Wrangler prompts below.
+The existing bucket is already configured with those settings. The project's
+public URL is preconfigured in `wrangler.toml`; only its secret API key must be
+entered into Cloudflare.
 
 Now add the admin credentials as encrypted Cloudflare secrets. Run each command
 and enter the value when Wrangler prompts:
@@ -41,15 +39,15 @@ and enter the value when Wrangler prompts:
 npx wrangler secret put ADMIN_EMAIL
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET
-npx wrangler secret put SUPABASE_URL
 npx wrangler secret put SUPABASE_SECRET_KEY
 ```
 
 Use your admin Gmail for `ADMIN_EMAIL`, choose a strong admin password, and set
 `SESSION_SECRET` to a different random value at least 32 characters long. Keep
-all secret values private. Copy `SUPABASE_URL` and the new `sb_secret_...` key
-from your Supabase project's API keys settings when Wrangler prompts. Do not
-paste the secret key into the website files, GitHub, or chat. Customer sign-in
+all secret values private. Copy a new `sb_secret_...` key from your Supabase
+project's **Project Settings → API Keys**. When Wrangler prompts for
+`SUPABASE_SECRET_KEY`, enter the key directly in the terminal. Do not paste
+the secret key into the website files, GitHub, or chat. Customer sign-in
 remains Gmail-only with no password or OTP, as requested.
 
 Deploy the backend:
@@ -86,7 +84,7 @@ https://uvid-store-api.your-account.workers.dev
 ## Image storage
 
 Product and variant uploads are limited to 5.5 MB and stored as files in the
-Supabase `product-images` bucket. D1 keeps product/variant links and small
+Supabase `product-image` bucket. D1 keeps product/variant links and small
 image metadata. Legacy image files already stored in D1 remain readable; they
 are not copied to Supabase automatically. Supabase's free storage allowance is
 limited, so monitor usage in its dashboard.

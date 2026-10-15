@@ -85,7 +85,7 @@ async function audit(env, request, user, action, target = null, detail = {}) {
 }
 
 function parseMeta(row) { return parseJson(row.meta_json, {}) || {}; }
-function supabaseBucket(env) { return clean(env.SUPABASE_BUCKET || "product-images", 100) || "product-images"; }
+function supabaseBucket(env) { return clean(env.SUPABASE_BUCKET || "product-image", 100) || "product-image"; }
 function supabaseConfig(env) {
   const baseUrl = String(env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
   const apiKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
