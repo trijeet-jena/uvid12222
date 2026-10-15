@@ -1,9 +1,10 @@
-# Connect UVID to Cloudflare's free backend
+# Connect UVID to Cloudflare and Supabase Storage
 
-This Worker uses the D1 database `uvid-store` whose ID is already in
-`wrangler.toml`. It keeps the existing Netlify customer and admin pages and
-connects both to the same product and image database. No R2 subscription is
-used.
+This Worker uses Cloudflare D1 for products, orders, and image metadata, and
+Supabase Storage for uploaded image files. The same image URL is saved with the
+product in D1, so the admin and customer pages show the same photo. Existing
+images stored in D1 continue to work; new uploads go to Supabase after it is
+connected.
 
 ## One-time setup in VS Code
 
@@ -21,6 +22,18 @@ npx wrangler d1 execute uvid-store --remote --file=seed-catalog.sql
 `wrangler login` opens a Cloudflare page. Approve it with the same account
 where you created `uvid-store`.
 
+In Supabase, create a bucket named `product-images` and set it to **Public** so
+customers can view product photos. Restrict its allowed content types to JPEG,
+PNG, WebP, and GIF, and set its per-file limit to 5,500,000 bytes. Public access
+allows reading product photos; uploads and deletes still go through the
+admin-only Cloudflare Worker.
+
+To create the bucket, open the Supabase project, choose **Storage → New
+Bucket**, enter `product-images`, enable **Public bucket**, set the file size
+limit to `5,500,000` bytes, and allow only `image/jpeg`, `image/png`,
+`image/webp`, and `image/gif`. Copy the project's URL and secret key from
+**Project Settings → API Keys** for the Wrangler prompts below.
+
 Now add the admin credentials as encrypted Cloudflare secrets. Run each command
 and enter the value when Wrangler prompts:
 
@@ -28,12 +41,16 @@ and enter the value when Wrangler prompts:
 npx wrangler secret put ADMIN_EMAIL
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put SESSION_SECRET
+npx wrangler secret put SUPABASE_URL
+npx wrangler secret put SUPABASE_SECRET_KEY
 ```
 
 Use your admin Gmail for `ADMIN_EMAIL`, choose a strong admin password, and set
 `SESSION_SECRET` to a different random value at least 32 characters long. Keep
-these values private. Customer sign-in remains Gmail-only with no password or
-OTP, as requested.
+all secret values private. Copy `SUPABASE_URL` and the new `sb_secret_...` key
+from your Supabase project's API keys settings when Wrangler prompts. Do not
+paste the secret key into the website files, GitHub, or chat. Customer sign-in
+remains Gmail-only with no password or OTP, as requested.
 
 Deploy the backend:
 
@@ -62,18 +79,17 @@ https://uvid-store-api.your-account.workers.dev
    site and choose **Deploys → Trigger deploy**.
 5. Open `https://uvid09art12and48craft54.netlify.app/admin/`, sign in with the admin Gmail and
    password you set above, add a test product and a compressed photo, then
-   refresh the storefront. The product and photo are saved to the shared D1
-   database, so the customer page can load them too.
+   refresh the storefront. Product details and image links are saved in D1;
+   the uploaded photo file is saved in Supabase Storage and can be viewed on
+   the customer page.
 
-## Important image size limit on the free database
+## Image storage
 
-Cloudflare D1 Free currently allows 500 MB per database, 5 GB total storage
-across the account, and a maximum 2 MB row. This package caps a compressed
-image at 1.4 MB so it fits safely under that row limit. If an upload is too
-large, choose a smaller image or reduce its dimensions/quality in the admin
-image editor. The included starting catalog has its product descriptions and
-existing local photos copied into the site's `assets/cf-store/` folder; new
-photos uploaded in Admin are stored in D1 and served from the same site.
+Product and variant uploads are limited to 5.5 MB and stored as files in the
+Supabase `product-images` bucket. D1 keeps product/variant links and small
+image metadata. Legacy image files already stored in D1 remain readable; they
+are not copied to Supabase automatically. Supabase's free storage allowance is
+limited, so monitor usage in its dashboard.
 
 If the free account reaches its D1 daily read/write allowance, requests stop
 until the allowance resets; do not upgrade or add a paid subscription unless
@@ -89,17 +105,15 @@ npx wrangler d1 execute uvid-store --remote --file=schema.sql
 npx wrangler deploy
 ```
 
-The schema adds a persistent order-number counter. New orders receive IDs such
-as `UVID001`, `UVID002`, and so on. Existing orders keep their current IDs; if
-there are already numbered `UVID` orders, the counter continues after the
-highest one. Cancelled orders keep their number, so IDs are never reused.
+The schema adds the metadata tables used to link images to Supabase objects and
+a persistent order-number counter. New orders receive IDs such as `UVID001`,
+`UVID002`, and so on. Existing orders keep their current IDs; if there are
+already numbered `UVID` orders, the counter continues after the highest one.
+Cancelled orders keep their number, so IDs are never reused.
 
 The schema command is safe to rerun: it creates any new tables without deleting
 existing products, images, users, or orders. Run it when backend changes add a
 table (the saved-address feature adds `customer_addresses`). Netlify needs
 redeploying only when the website files or `netlify.toml` change.
 
-Product photos uploaded by Admin are stored as binary data in D1. The Worker
-converts D1's returned byte array back to image bytes before responding, so the
-browser receives a real JPEG/PNG/WebP instead of text. Customer delivery
-addresses are saved under the signed-in Gmail account in the same database.
+Customer delivery addresses are saved under the signed-in Gmail account in D1.

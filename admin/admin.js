@@ -655,7 +655,7 @@
       '<button type="button" class="btn btn--ghost btn--sm var-add" id="varAdd">' + ICONS.plus + " Add variant</button>" +
       "</div></div>" +
       '<div class="fld span2"><span>Photos</span><div class="varbox">' +
-      '<p class="varbox__hint">Every photo is stored in the image database. The first one is the main photo. Choose a colour to add photos for that colour only.</p>' +
+      '<p class="varbox__hint">Photos are saved in cloud storage. The first one is the main photo. Choose a colour to add photos for that colour only.</p>' +
       '<div class="gal__tabs" id="galTabs"></div>' +
       '<div class="gal" id="galGrid"></div>' +
       '<input type="file" id="galFile" accept="image/*" multiple>' +
@@ -684,7 +684,7 @@
       } catch (ex) { toast(ex.message, false); }
     });
 
-    /* ---- photo gallery (stored in the image database) ----
+    /* ---- photo gallery (stored in cloud storage) ----
        scope "" = the product itself, otherwise a colour variant id.
        Images are written immediately, so work is never lost by navigating
        away before the product form itself is saved. */
@@ -710,7 +710,7 @@
     function renderGal() {
       const grid = $("#galGrid", back);
       if (!editing) {
-        grid.innerHTML = '<p class="gal__empty">Save the product first, then add photos here — each one is stored in the image database.</p>';
+        grid.innerHTML = '<p class="gal__empty">Save the product first, then add photos here — each one is stored in cloud storage.</p>';
         return;
       }
       const imgs = (p.images || []).filter(function (im) { return (im.variantKey || "") === galScope; });
@@ -756,7 +756,7 @@
           p.images = out.images;
           added++;
         }
-        toast(added + (added === 1 ? " photo stored in the image database" : " photos stored in the image database"), true);
+        toast(added + (added === 1 ? " photo saved to cloud storage" : " photos saved to cloud storage"), true);
       } catch (ex) { toast(ex.message || "Could not store the photo.", false); }
       galBusy = false;
       await loadGal();

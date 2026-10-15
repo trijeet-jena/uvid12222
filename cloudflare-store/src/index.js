@@ -1,10 +1,10 @@
 /* UVID Store API on Cloudflare Workers + D1.
- * Customers, products, orders, categories and compressed product images share
- * the same D1 database, so edits made in /admin are visible in the storefront.
+ * Catalog data stays in D1; product image files are stored in Supabase Storage.
  */
 
 const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
-const IMAGE_LIMIT = 1_400_000; // stay below D1's 2 MB row limit with metadata
+const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
+const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row limit
 const COOKIE = "uvid_session";
 const encoder = new TextEncoder();
 
@@ -66,7 +66,7 @@ function checkOrigin(request, env) {
     return new URL(origin).origin === new URL(request.url).origin;
   } catch { return false; }
 }
-async function bodyJson(request, max = 2_600_000) {
+async function bodyJson(request, max = 7_600_000) {
   const len = Number(request.headers.get("Content-Length") || 0);
   if (len > max) throw Object.assign(new Error("Request is too large."), { status: 413 });
   try { return await request.json(); } catch { throw Object.assign(new Error("Invalid JSON request."), { status: 400 }); }
@@ -85,24 +85,72 @@ async function audit(env, request, user, action, target = null, detail = {}) {
 }
 
 function parseMeta(row) { return parseJson(row.meta_json, {}) || {}; }
+function supabaseBucket(env) { return clean(env.SUPABASE_BUCKET || "product-images", 100) || "product-images"; }
+function supabaseConfig(env) {
+  const baseUrl = String(env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const apiKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!baseUrl && !apiKey) return null;
+  if (!baseUrl || !apiKey) throw Object.assign(new Error("Supabase Storage is only partly configured. Set both SUPABASE_URL and SUPABASE_SECRET_KEY in Worker secrets."), { status: 503 });
+  let parsed;
+  try { parsed = new URL(baseUrl); } catch { throw Object.assign(new Error("SUPABASE_URL is invalid."), { status: 503 }); }
+  if (parsed.protocol !== "https:") throw Object.assign(new Error("SUPABASE_URL must use HTTPS."), { status: 503 });
+  return { baseUrl, apiKey, bucket: supabaseBucket(env) };
+}
+function supabaseHeaders(config, extra = {}) {
+  const headers = { apikey: config.apiKey, ...extra };
+  // Legacy service_role keys are JWTs; current sb_secret keys belong only in apikey.
+  if (/^eyJ/.test(config.apiKey)) headers.Authorization = `Bearer ${config.apiKey}`;
+  return headers;
+}
+function encodeStoragePath(path) { return String(path).split("/").map(encodeURIComponent).join("/"); }
+function supabaseObjectUrl(env, path) {
+  const baseUrl = String(env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  if (!baseUrl) return null;
+  return `${baseUrl}/storage/v1/object/public/${encodeURIComponent(supabaseBucket(env))}/${encodeStoragePath(path)}`;
+}
+async function uploadSupabaseObject(env, path, bytes, mime) {
+  const config = supabaseConfig(env);
+  if (!config) throw Object.assign(new Error("Connect Supabase Storage first. Set SUPABASE_URL and SUPABASE_SECRET_KEY in Cloudflare Worker secrets."), { status: 503 });
+  const response = await fetch(`${config.baseUrl}/storage/v1/object/${encodeURIComponent(config.bucket)}/${encodeStoragePath(path)}`, {
+    method: "POST",
+    headers: supabaseHeaders(config, { "Content-Type": mime, "cache-control": "31536000" }),
+    body: bytes,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw Object.assign(new Error(`Supabase image upload failed (${response.status}). ${detail.slice(0, 180)}`), { status: 502 });
+  }
+  return supabaseObjectUrl(env, path);
+}
+async function deleteSupabaseObject(env, path) {
+  const config = supabaseConfig(env);
+  if (!config) throw Object.assign(new Error("Connect Supabase Storage first."), { status: 503 });
+  const response = await fetch(`${config.baseUrl}/storage/v1/object/${encodeURIComponent(config.bucket)}/${encodeStoragePath(path)}`, {
+    method: "DELETE", headers: supabaseHeaders(config),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw Object.assign(new Error(`Supabase image deletion failed (${response.status}). ${detail.slice(0, 180)}`), { status: 502 });
+  }
+}
 function versionedImageUrl(value) {
   const url = String(value || "");
   if (/^\/uploads\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url)) return `${url.split("?")[0]}?v=2`;
   return value;
 }
-function imageView(row) {
+function imageView(row, env) {
   return { id: row.id, productId: row.product_id, variantKey: row.variant_key || null,
-    url: `/api/images/${row.id}?v=2`, mime: row.mime, byteSize: row.byte_size,
+    url: row.storage_path ? supabaseObjectUrl(env, row.storage_path) : `/api/images/${row.id}?v=2`, mime: row.mime, byteSize: row.byte_size,
     width: row.width || null, height: row.height || null, altText: row.alt_text || null, sortOrder: row.sort_order };
 }
-function productView(row, images = []) {
+function productView(row, images = [], env) {
   const meta = parseMeta(row);
   const variants = parseJson(row.variants_json, null);
   const variantStock = Array.isArray(variants) ? variants.reduce((n, v) => n + (Number(v.stock) || 0), 0) : null;
   return {
     id: row.id, productName: row.product_name, category: row.category, description: row.description,
     price: row.price, mrp: row.mrp, stockQuantity: row.stock_quantity,
-    imageUrl: versionedImageUrl(row.image_url), images: images.map(imageView), emoji: row.emoji || null,
+    imageUrl: versionedImageUrl(row.image_url), images: images.map((image) => imageView(image, env)), emoji: row.emoji || null,
     variantLabel: row.variant_label || null, variants: Array.isArray(variants) ? variants : undefined,
     status: row.status, inStock: row.status !== "OUT_OF_STOCK" && (variantStock === null ? row.stock_quantity > 0 : variantStock > 0),
     createdAt: row.created_at, updatedAt: row.updated_at,
@@ -118,13 +166,13 @@ async function productRows(env, admin = false) {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const placeholders = ids.map(() => "?").join(",");
-  const imageRows = (await env.DB.prepare(`SELECT * FROM product_images WHERE product_id IN (${placeholders}) ORDER BY sort_order,id`).bind(...ids).all()).results || [];
+  const imageRows = (await env.DB.prepare(`SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id IN (${placeholders}) ORDER BY i.sort_order,i.id`).bind(...ids).all()).results || [];
   const byProduct = new Map();
   for (const im of imageRows) {
     const arr = byProduct.get(im.product_id) || [];
     arr.push(im); byProduct.set(im.product_id, arr);
   }
-  return rows.map((r) => productView(r, byProduct.get(r.id) || []));
+  return rows.map((r) => productView(r, byProduct.get(r.id) || [], env));
 }
 async function categories(env) {
   const rows = (await env.DB.prepare(
@@ -185,8 +233,8 @@ function productInput(body, partial = false) {
 async function getProduct(env, id) {
   const row = await env.DB.prepare("SELECT * FROM products WHERE id=?").bind(id).first();
   if (!row || row.status === "ARCHIVED") return null;
-  const images = (await env.DB.prepare("SELECT * FROM product_images WHERE product_id=? ORDER BY sort_order,id").bind(id).all()).results || [];
-  return productView(row, images);
+  const images = (await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? ORDER BY i.sort_order,i.id").bind(id).all()).results || [];
+  return productView(row, images, env);
 }
 async function createProduct(env, body) {
   const values = productInput(body);
@@ -222,7 +270,7 @@ function decodeImage(dataUri) {
   try { binary = atob(match[2].replace(/\s/g, "")); } catch { throw Object.assign(new Error("The image data is invalid."), { status: 400 }); }
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   if (!bytes.length) throw Object.assign(new Error("The image is empty."), { status: 400 });
-  if (bytes.length > IMAGE_LIMIT) throw Object.assign(new Error("Compressed image is too large for free D1 storage. Choose a smaller photo (under 1.4 MB)."), { status: 413 });
+  if (bytes.length > IMAGE_LIMIT) throw Object.assign(new Error("Image is too large. Choose a compressed photo under 5.5 MB."), { status: 413 });
   const jpg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   const png = bytes.length > 8 && [137,80,78,71,13,10,26,10].every((n, i) => bytes[i] === n);
   const webp = bytes.length > 12 && String.fromCharCode(...bytes.slice(0,4)) === "RIFF" && String.fromCharCode(...bytes.slice(8,12)) === "WEBP";
@@ -242,25 +290,42 @@ async function addProductImage(env, productId, body) {
   if (!(await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(productId).first())) throw Object.assign(new Error("Product not found."), { status: 404 });
   const variant = clean(body.variantKey || body.variant || "", 100) || null;
   const { bytes, mime } = decodeImage(body.image || body.dataUri);
+  const storage = supabaseConfig(env);
+  if (!storage && bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Connect Supabase Storage to upload photos larger than 1.4 MB."), { status: 413 });
   const sha = await hashBytes(bytes);
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM product_images WHERE product_id=?").bind(productId).first();
   if (Number(count?.n || 0) >= 24) throw Object.assign(new Error("This product already has 24 images."), { status: 409 });
-  const dupe = await env.DB.prepare("SELECT * FROM product_images WHERE product_id=? AND COALESCE(variant_key,'')=COALESCE(?,'') AND sha256=?").bind(productId, variant, sha).first();
-  if (dupe) return imageView(dupe);
+  const dupe = await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? AND COALESCE(i.variant_key,'')=COALESCE(?,'') AND i.sha256=?").bind(productId, variant, sha).first();
+  if (dupe) return imageView(dupe, env);
   const order = await env.DB.prepare("SELECT COALESCE(MAX(sort_order),-1)+1 AS n FROM product_images WHERE product_id=?").bind(productId).first();
-  await env.DB.prepare("INSERT OR IGNORE INTO image_blobs (sha256,mime,byte_size,data) VALUES (?,?,?,?)").bind(sha, mime, bytes.length, bytes).run();
-  const info = await env.DB.prepare("INSERT INTO product_images (product_id,variant_key,sha256,mime,byte_size,alt_text,sort_order) VALUES (?,?,?,?,?,?,?)")
-    .bind(productId, variant, sha, mime, bytes.length, clean(body.altText, 160) || null, Number(order?.n || 0)).run();
-  const imageId = info.meta?.last_row_id;
-  if (Number(order?.n || 0) === 0) await env.DB.prepare("UPDATE products SET image_url=?,updated_at=? WHERE id=?").bind(`/api/images/${imageId}`, now(), productId).run();
-  return imageView(await env.DB.prepare("SELECT * FROM product_images WHERE id=?").bind(imageId).first());
+  const storagePath = storage ? `products/${crypto.randomUUID()}.${mimeExtension(mime)}` : null;
+  const imageUrl = storage ? await uploadSupabaseObject(env, storagePath, bytes, mime) : null;
+  try {
+    await env.DB.prepare("INSERT OR IGNORE INTO image_blobs (sha256,mime,byte_size,data) VALUES (?,?,?,?)")
+      .bind(sha, mime, storage ? 0 : bytes.length, storage ? new Uint8Array(0) : bytes).run();
+    const info = await env.DB.prepare("INSERT INTO product_images (product_id,variant_key,sha256,mime,byte_size,alt_text,sort_order) VALUES (?,?,?,?,?,?,?)")
+      .bind(productId, variant, sha, mime, bytes.length, clean(body.altText, 160) || null, Number(order?.n || 0)).run();
+    const imageId = info.meta?.last_row_id;
+    if (storage) await env.DB.prepare("INSERT INTO product_image_objects (image_id,storage_path) VALUES (?,?)").bind(imageId, storagePath).run();
+    if (Number(order?.n || 0) === 0) await env.DB.prepare("UPDATE products SET image_url=?,updated_at=? WHERE id=?").bind(imageUrl || `/api/images/${imageId}`, now(), productId).run();
+    const saved = await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.id=?").bind(imageId).first();
+    return imageView(saved, env);
+  } catch (cause) {
+    if (storagePath) await deleteSupabaseObject(env, storagePath).catch(() => {});
+    throw cause;
+  }
 }
-async function productImages(env, id) { return (await env.DB.prepare("SELECT * FROM product_images WHERE product_id=? ORDER BY sort_order,id").bind(id).all()).results || []; }
+async function productImages(env, id) { return (await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? ORDER BY i.sort_order,i.id").bind(id).all()).results || []; }
 async function updatePrimary(env, id) {
-  const first = await env.DB.prepare("SELECT id FROM product_images WHERE product_id=? ORDER BY sort_order,id LIMIT 1").bind(id).first();
+  const first = await env.DB.prepare("SELECT i.id,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? ORDER BY i.sort_order,i.id LIMIT 1").bind(id).first();
   const row = await env.DB.prepare("SELECT image_url FROM products WHERE id=?").bind(id).first();
-  if (first) await env.DB.prepare("UPDATE products SET image_url=?,updated_at=? WHERE id=?").bind(`/api/images/${first.id}`, now(), id).run();
-  else if (row?.image_url?.startsWith("/api/images/")) await env.DB.prepare("UPDATE products SET image_url=NULL,updated_at=? WHERE id=?").bind(now(), id).run();
+  if (first) await env.DB.prepare("UPDATE products SET image_url=?,updated_at=? WHERE id=?").bind(first.storage_path ? supabaseObjectUrl(env, first.storage_path) : `/api/images/${first.id}`, now(), id).run();
+  else {
+    const managedBase = supabaseObjectUrl(env, "");
+    if (row?.image_url?.startsWith("/api/images/") || (managedBase && row?.image_url?.startsWith(managedBase))) {
+      await env.DB.prepare("UPDATE products SET image_url=NULL,updated_at=? WHERE id=?").bind(now(), id).run();
+    }
+  }
 }
 async function stats(env) {
   const q = async (sql) => Number((await env.DB.prepare(sql).first())?.n || 0);
@@ -416,9 +481,15 @@ async function handleApi(request, env, user, url) {
   if (match && method === "DELETE" && !match[2]) {
     if (adminOnly) return adminOnly; const id=decodeURIComponent(match[1]);
     const sold=await env.DB.prepare("SELECT COUNT(*) AS n FROM order_items WHERE product_id=?").bind(id).first();
-    if (!(await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first())) return error("Product not found.",404);
+    const exists = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
+    if (!exists) return error("Product not found.",404);
     if (Number(sold?.n||0)>0) await env.DB.prepare("UPDATE products SET status='ARCHIVED',updated_at=? WHERE id=?").bind(now(),id).run();
-    else await env.DB.prepare("DELETE FROM products WHERE id=?").bind(id).run();
+    else {
+      const images = (await env.DB.prepare("SELECT i.sha256,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=?").bind(id).all()).results || [];
+      for (const image of images) if (image.storage_path) await deleteSupabaseObject(env,image.storage_path);
+      await env.DB.prepare("DELETE FROM products WHERE id=?").bind(id).run();
+      for (const image of images) await env.DB.prepare("DELETE FROM image_blobs WHERE sha256=? AND NOT EXISTS (SELECT 1 FROM product_images WHERE sha256=?)").bind(image.sha256,image.sha256).run();
+    }
     await audit(env,request,user,"product.delete",id,{}); return json({ok:true,archived:Number(sold?.n||0)>0});
   }
   if (path === "/api/admin/categories" && method === "GET") return adminOnly || json({categories:await categories(env)});
@@ -445,7 +516,22 @@ async function handleApi(request, env, user, url) {
     await env.DB.prepare("DELETE FROM categories WHERE slug=?").bind(slug).run(); return json({ok:true,moved:Number(used?.n||0)});
   }
   if (path === "/api/admin/upload" && method === "POST") {
-    if (adminOnly) return adminOnly; const b=await readBody(); const {bytes,mime}=decodeImage(b.image); const id=crypto.randomUUID();
+    if (adminOnly) return adminOnly;
+    const b = await readBody(); const { bytes, mime } = decodeImage(b.image); const id = crypto.randomUUID();
+    const storage = supabaseConfig(env);
+    if (storage) {
+      const storagePath = `uploads/${id}.${mimeExtension(mime)}`;
+      const imageUrl = await uploadSupabaseObject(env, storagePath, bytes, mime);
+      try {
+        await env.DB.prepare("INSERT INTO uploaded_image_objects (id,storage_path,mime,byte_size) VALUES (?,?,?,?)")
+          .bind(id, storagePath, mime, bytes.length).run();
+      } catch (cause) {
+        await deleteSupabaseObject(env, storagePath).catch(() => {});
+        throw cause;
+      }
+      return json({ ok: true, url: imageUrl }, 201);
+    }
+    if (bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Connect Supabase Storage to upload photos larger than 1.4 MB."), { status: 413 });
     await env.DB.prepare("INSERT INTO uploaded_images (id,mime,byte_size,data) VALUES (?,?,?,?)").bind(id,mime,bytes.length,bytes).run();
     return json({ok:true,url:`/uploads/${id}`},201);
   }
@@ -511,22 +597,32 @@ async function handleApi(request, env, user, url) {
   if(match && path.endsWith("/images") && method==="GET"){
     if(adminOnly) return adminOnly; const rows=await productImages(env,decodeURIComponent(match[1]));
     const n=await env.DB.prepare("SELECT COUNT(*) AS imageCount,COALESCE(SUM(byte_size),0) AS storedBytes FROM product_images").first();
-    return json({images:rows.map(imageView),stats:{imageCount:n.imageCount,storedBytes:n.storedBytes}});
+    return json({images:rows.map((image)=>imageView(image,env)),stats:{imageCount:n.imageCount,storedBytes:n.storedBytes}});
   }
   if(match && path.endsWith("/images") && method==="POST"){
     if(adminOnly) return adminOnly; const id=decodeURIComponent(match[1]), img=await addProductImage(env,id,await readBody()); await audit(env,request,user,"product.image.add",id,{imageId:img.id,byteSize:img.byteSize});
-    return json({ok:true,image:img,images:(await productImages(env,id)).map(imageView)},201);
+    return json({ok:true,image:img,images:(await productImages(env,id)).map((image)=>imageView(image,env))},201);
   }
   if(match && path.endsWith("/images/order") && method==="PUT"){
     if(adminOnly) return adminOnly; const id=decodeURIComponent(match[1]), b=await readBody(), current=await productImages(env,id);
     if(!Array.isArray(b.order)||b.order.length!==current.length||new Set(b.order).size!==current.length||b.order.some((n)=>!current.some((i)=>i.id===n))) return error("Invalid image order.");
     await env.DB.batch(b.order.map((imageId,index)=>env.DB.prepare("UPDATE product_images SET sort_order=? WHERE id=? AND product_id=?").bind(index,imageId,id)));
-    await updatePrimary(env,id); return json({ok:true,images:(await productImages(env,id)).map(imageView)});
+    await updatePrimary(env,id); return json({ok:true,images:(await productImages(env,id)).map((image)=>imageView(image,env))});
   }
   match=path.match(/^\/api\/admin\/images\/([^/]+)$/);
   if(match && method==="DELETE"){
-    if(adminOnly) return adminOnly; const id=Number(match[1]); const img=await env.DB.prepare("SELECT product_id FROM product_images WHERE id=?").bind(id).first();
-    if(!img) return error("Image not found.",404); await env.DB.prepare("DELETE FROM product_images WHERE id=?").bind(id).run(); await updatePrimary(env,img.product_id); return json({ok:true,id});
+    if(adminOnly) return adminOnly;
+    const id=Number(match[1]);
+    const img=await env.DB.prepare("SELECT i.product_id,i.sha256,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.id=?").bind(id).first();
+    if(!img) return error("Image not found.",404);
+    if(img.storage_path) await deleteSupabaseObject(env,img.storage_path);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM product_image_objects WHERE image_id=?").bind(id),
+      env.DB.prepare("DELETE FROM product_images WHERE id=?").bind(id),
+      env.DB.prepare("DELETE FROM image_blobs WHERE sha256=? AND NOT EXISTS (SELECT 1 FROM product_images WHERE sha256=?)").bind(img.sha256,img.sha256),
+    ]);
+    await updatePrimary(env,img.product_id); await audit(env,request,user,"product.image.delete",img.product_id,{imageId:id});
+    return json({ok:true,id});
   }
   return error("Not found.",404);
 }
@@ -534,12 +630,22 @@ async function handleApi(request, env, user, url) {
 async function serveImage(request, env, path) {
   const imageMatch = path.match(/^\/api\/images\/(\d+)$/);
   if (imageMatch && request.method === "GET") {
+    const external = await env.DB.prepare("SELECT o.storage_path FROM product_image_objects o WHERE o.image_id=?").bind(Number(imageMatch[1])).first();
+    if (external?.storage_path) {
+      const url = supabaseObjectUrl(env, external.storage_path);
+      return url ? Response.redirect(url, 302) : error("Image storage is not configured.",503);
+    }
     const row = await env.DB.prepare("SELECT b.mime,b.data FROM product_images i JOIN image_blobs b ON b.sha256=i.sha256 WHERE i.id=?").bind(Number(imageMatch[1])).first();
     if (!row) return error("Image not found.",404);
     return new Response(imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=300","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});
   }
   const upload = path.match(/^\/uploads\/([0-9a-f-]{36})$/i);
   if (upload && request.method === "GET") {
+    const external = await env.DB.prepare("SELECT storage_path FROM uploaded_image_objects WHERE id=?").bind(upload[1]).first();
+    if (external?.storage_path) {
+      const url = supabaseObjectUrl(env, external.storage_path);
+      return url ? Response.redirect(url, 302) : error("Image storage is not configured.",503);
+    }
     const row = await env.DB.prepare("SELECT mime,data FROM uploaded_images WHERE id=?").bind(upload[1]).first();
     if (!row) return error("Image not found.",404);
     return new Response(imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=300","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});

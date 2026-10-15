@@ -76,11 +76,25 @@ CREATE TABLE IF NOT EXISTS product_images (
 );
 CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id, sort_order);
 
+CREATE TABLE IF NOT EXISTS product_image_objects (
+  image_id INTEGER PRIMARY KEY REFERENCES product_images(id) ON DELETE CASCADE,
+  storage_path TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS uploaded_images (
   id TEXT PRIMARY KEY,
   mime TEXT NOT NULL,
   byte_size INTEGER NOT NULL,
   data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS uploaded_image_objects (
+  id TEXT PRIMARY KEY,
+  storage_path TEXT NOT NULL UNIQUE,
+  mime TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
