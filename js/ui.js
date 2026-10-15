@@ -152,41 +152,14 @@
       '<div class="hgrid">' + list.map(productCard).join("") + '</div></section>';
   }
 
-  var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEALAAAAAABAAEAAAIBRAA7";
-  /* hero art survives products being archived/renamed in the admin panel */
-  function heroImg(id, i) {
-    var p = D.findProduct(id) || D.visibleProducts[i] || D.visibleProducts[0] || null;
-    return p ? p.img : BLANK_IMG;
-  }
-
   function home() {
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 6);
-    var hour = new Date().getHours();
-    var greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-    var user = A.state.user ? A.findUser(A.state.user) : null;
     var recent = A.state.recent.filter(function (id) { return id.charAt(0) !== "_" && D.findProduct(id); }).slice(0, 6).map(D.findProduct).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
     var deal = D.visibleProducts.filter(function (p) { return p.discount >= 33; }).sort(function (a, b) { return b.discount - a.discount; })[0] || D.visibleProducts[0];
 
     view.innerHTML =
-      '<section class="hero card">' +
-      '<div class="hero__copy">' +
-      '<p class="hero__hi">' + greet + (user ? ', <b>' + esc(user.name) + '</b>' : '') + ' 👋</p>' +
-      '<h1>Supplies that make <em>paper feel premium.</em></h1>' +
-      '<p class="hero__sub">Pens, notebooks, planners & desk finds — free delivery over ' + money(A.FREE_SHIP_MIN) + ' and prices that actually make sense.</p>' +
-      '<div class="hero__cta">' +
-      '<a class="btn btn--primary btn--lg" href="#/c/notebooks">Shop bestsellers</a>' +
-      '<a class="btn btn--ghost btn--lg" href="#/search?sort=discount">Today’s deals</a>' +
-      '</div>' +
-      '<ul class="hero__points"><li>✓ UPI QR payments</li><li>✓ 2–4 day delivery</li></ul>' +
-      '</div>' +
-      '<div class="hero__cards" aria-hidden="true">' +
-      '<img class="hero__c hero__c--1" src="' + heroImg("planner-2026", 0) + '" alt="" />' +
-      '<img class="hero__c hero__c--2" src="' + heroImg("dotted-journal", 1) + '" alt="" />' +
-      '<img class="hero__c hero__c--3" src="' + heroImg("gel-trio", 2) + '" alt="" />' +
-      '</div></section>' +
-
       (deal ? '<section class="dealstrip card reveal">' +
       '<div class="dealstrip__info"><p class="kicker">Deal of the day</p>' +
       '<h3>' + esc(deal.name) + '</h3>' +
