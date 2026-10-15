@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 
+CREATE TABLE IF NOT EXISTS order_id_counter (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  last_value INTEGER NOT NULL CHECK (last_value >= 0)
+);
+INSERT OR IGNORE INTO order_id_counter (id, last_value)
+  SELECT 1, COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0)
+  FROM orders
+  WHERE id LIKE 'UVID%' AND SUBSTR(id, 5) <> '' AND SUBSTR(id, 5) NOT GLOB '*[^0-9]*';
+
 CREATE TABLE IF NOT EXISTS order_items (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id        TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,

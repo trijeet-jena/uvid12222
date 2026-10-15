@@ -5,7 +5,6 @@
    ============================================================ */
 "use strict";
 
-const crypto = require("crypto");
 const { db, touch, now } = require("../db");
 const bus = require("../events");
 
@@ -14,10 +13,6 @@ const PAYMENT_METHODS = ["UPI"];
 /* shipping rules — enforced server-side */
 const SHIP_FEE = 49;
 const FREE_SHIP_MIN = 499;
-
-function genOrderId() {
-  return "UV" + Date.now().toString(36).toUpperCase() + crypto.randomInt(100, 1000);
-}
 
 function placeOrder(user, payload) {
   const items = Array.isArray(payload && payload.items) ? payload.items : [];
@@ -85,7 +80,13 @@ function placeOrder(user, payload) {
     const shipping = total >= FREE_SHIP_MIN ? 0 : SHIP_FEE;
     const grand = Math.round((total + shipping) * 100) / 100;
 
-    const orderId = genOrderId();
+    const sequence = db.prepare(
+      "UPDATE order_id_counter SET last_value = last_value + 1 WHERE id = 1 RETURNING last_value"
+    ).get();
+    if (!sequence || !Number.isSafeInteger(sequence.last_value)) {
+      const e = new Error("Could not allocate an order number."); e.status = 500; throw e;
+    }
+    const orderId = "UVID" + String(sequence.last_value).padStart(3, "0");
     db.prepare(
       `INSERT INTO orders (id, customer_id, total_amount, status, payment_method, payment_status, address_json, eta, coupon, discount, shipping)
        VALUES (?, ?, ?, 'PLACED', ?, ?, ?, ?, ?, ?, ?)`

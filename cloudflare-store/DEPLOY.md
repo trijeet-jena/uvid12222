@@ -89,6 +89,11 @@ npx wrangler d1 execute uvid-store --remote --file=schema.sql
 npx wrangler deploy
 ```
 
+The schema adds a persistent order-number counter. New orders receive IDs such
+as `UVID001`, `UVID002`, and so on. Existing orders keep their current IDs; if
+there are already numbered `UVID` orders, the counter continues after the
+highest one. Cancelled orders keep their number, so IDs are never reused.
+
 The schema command is safe to rerun: it creates any new tables without deleting
 existing products, images, users, or orders. Run it when backend changes add a
 table (the saved-address feature adds `customer_addresses`). Netlify needs

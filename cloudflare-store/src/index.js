@@ -309,16 +309,21 @@ async function placeOrder(env, user, body) {
   }
   const discount = 0;
   const shipping = subtotal >= 499 ? 0 : 49;
-  const id = "UV" + Date.now().toString(36).toUpperCase() + Math.floor(100 + Math.random() * 900);
   const method = String(body.paymentMethod || "UPI").toUpperCase();
   if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
-  const batches = [env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) VALUES (?,?,?,'PLACED',?,?,?,?,?,?,?)")
-    .bind(id,user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)];
+  const batches = [
+    env.DB.prepare("INSERT INTO order_id_counter (id,last_value) VALUES (1,1) ON CONFLICT(id) DO UPDATE SET last_value=last_value+1 RETURNING last_value"),
+    env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) SELECT 'UVID'||printf('%03d',last_value),?,?, 'PLACED',?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
+      .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)
+  ];
   for (const line of lines) {
-    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) VALUES (?,?,?,?,?,?)").bind(id,line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
+    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
     batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
-  await env.DB.batch(batches);
+  const batchResults = await env.DB.batch(batches);
+  const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);
+  if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) throw new Error("Could not allocate an order number.");
+  const id = "UVID" + String(orderNumber).padStart(3, "0");
   return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })) };
 }
 
