@@ -102,6 +102,9 @@
       err.status = res.status;
       throw err;
     }
+    if (/^(POST|PUT|DELETE)$/i.test(method) && /^\/api\/admin\/(products|categories)(\/|$)/.test(path)) {
+      try { localStorage.setItem("uvid:catalog-updated", Date.now() + ":" + Math.random()); } catch (_e) { /* sync is best-effort */ }
+    }
     return data;
   }
 
@@ -153,7 +156,9 @@
         '<button class="btn ' + (opts.danger === false ? "btn--primary" : "btn--danger") + '" data-yes>' + esc(opts.yes || "Confirm") + "</button>" +
         "</div>");
       back.querySelector("[data-yes]").addEventListener("click", function () {
-        pendingResolve = null; modalRoot.innerHTML = ""; resolve(true);
+        pendingResolve = null;
+        closeModal();
+        resolve(true);
       });
     });
   }
@@ -303,6 +308,7 @@
   async function repaint(viewFn) {
     const ae = document.activeElement;
     const fid = ae && ae.id && content.contains(ae) ? ae.id : null;
+    const scrollX = window.scrollX, scrollY = window.scrollY;
     let sel = null;
     try { sel = ae && ae.selectionStart; } catch (_e) { /* number input */ }
     try { await viewFn(); } catch (e) { content.innerHTML = errorCard(e); renderIcons(content); }
@@ -313,6 +319,7 @@
         try { if (sel != null) el.setSelectionRange(sel, sel); } catch (_e) {}
       }
     }
+    window.scrollTo(scrollX, scrollY);
   }
 
   /* ---------------- drawer ---------------- */
@@ -343,12 +350,24 @@
       if (modalRoot.childElementCount > 0) return;
       const ae = document.activeElement;
       if (ae && content.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+      const route = state.route;
+      if (!["dashboard", "products", "categories", "orders"].includes(route)) return;
       try {
-        await loadState(state.route);
-        await repaint(function () { return VIEWS[state.route](); });
+        const before = liveSnapshot(route);
+        await loadState(route);
+        if (state.route !== route) return;
+        if (before !== liveSnapshot(route)) await repaint(function () { return VIEWS[route](true); });
         setLive(true);
       } catch (_e) { setLive(false); }
     }, 30000);
+  }
+
+  function liveSnapshot(route) {
+    if (route === "products") return JSON.stringify(state.products);
+    if (route === "categories") return JSON.stringify(state.categories);
+    if (route === "orders") return JSON.stringify(state.orders);
+    if (route === "dashboard") return JSON.stringify(state.stats);
+    return "";
   }
 
   async function loadState(route) {
@@ -395,9 +414,11 @@
   const VIEWS = {};
 
   /* ---------------- dashboard ---------------- */
-  VIEWS.dashboard = async function () {
-    content.innerHTML = loadingCard();
-    await loadState("dashboard");
+  VIEWS.dashboard = async function (stateReady) {
+    if (!stateReady) {
+      content.innerHTML = loadingCard();
+      await loadState("dashboard");
+    }
     const s = state.stats;
     content.innerHTML =
       '<div class="page-head"><div><h3>Store overview</h3><p>Live numbers from the database · ' + esc(fmtDateTime(new Date().toISOString())) + "</p></div>" +
@@ -435,9 +456,11 @@
   }
 
   /* ---------------- products ---------------- */
-  VIEWS.products = async function () {
-    content.innerHTML = loadingCard();
-    await loadState("products");
+  VIEWS.products = async function (stateReady) {
+    if (!stateReady) {
+      content.innerHTML = loadingCard();
+      await loadState("products");
+    }
     content.innerHTML =
       '<div class="page-head"><div><h3>Products</h3><p>' + state.products.filter(function (p) { return !p.parent; }).length +
       ' products · changes appear on the storefront instantly</p></div>' +
@@ -988,9 +1011,11 @@
   }
 
   /* ---------------- categories ---------------- */
-  VIEWS.categories = async function () {
-    content.innerHTML = loadingCard();
-    await loadState("categories");
+  VIEWS.categories = async function (stateReady) {
+    if (!stateReady) {
+      content.innerHTML = loadingCard();
+      await loadState("categories");
+    }
     const counts = {};
     state.products.forEach(function (p) { if (!p.parent && p.status !== "ARCHIVED") counts[p.category] = (counts[p.category] || 0) + 1; });
     content.innerHTML =
@@ -1054,7 +1079,9 @@
         '<button class="btn btn--primary" data-yes>Move &amp; delete</button></div>');
       back.querySelector("[data-yes]").addEventListener("click", function () {
         const v = $("#reassignSel", back).value;
-        pendingResolve = null; modalRoot.innerHTML = ""; resolve(v);
+        pendingResolve = null;
+        closeModal();
+        resolve(v);
       });
     });
   }
@@ -1097,9 +1124,11 @@
   }
 
   /* ---------------- orders ---------------- */
-  VIEWS.orders = async function () {
-    content.innerHTML = loadingCard();
-    await loadState("orders");
+  VIEWS.orders = async function (stateReady) {
+    if (!stateReady) {
+      content.innerHTML = loadingCard();
+      await loadState("orders");
+    }
     content.innerHTML =
       '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · every order from the storefront, in real time</p></div>" +
       '<div class="filters"><select id="ordFilter" aria-label="Filter by status"><option value="">All statuses</option>' +

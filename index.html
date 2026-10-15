@@ -3349,6 +3349,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     refreshTimer = setTimeout(refresh, 200);
   }
 
+  /* Admin and storefront tabs share catalog changes immediately in this browser. */
+  window.addEventListener("storage", function (event) {
+    if (event.key === "uvid:catalog-updated") scheduleRefresh();
+  });
+
   /* ---------------- live updates from the admin panel ---------------- */
 
   function connectEvents() {
