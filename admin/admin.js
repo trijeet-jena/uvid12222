@@ -178,7 +178,7 @@
     stats: null,
     orders: [],
     customers: [],
-    filters: { q: "", cat: "", status: "" },
+    filters: { q: "", cat: "", status: "live" },
     orderFilter: "",
   };
 
@@ -462,8 +462,8 @@
       await loadState("products");
     }
     content.innerHTML =
-      '<div class="page-head"><div><h3>Products</h3><p>' + state.products.filter(function (p) { return !p.parent; }).length +
-      ' products · changes appear on the storefront instantly</p></div>' +
+      '<div class="page-head"><div><h3>Products</h3><p><span id="prodResultCount">' + filteredProducts().length +
+      '</span> products shown · changes appear on the storefront instantly</p></div>' +
       '<button class="btn btn--primary" id="addProdBtn">' + ICONS.plus + " Add product</button></div>" +
       '<section class="panel"><div class="panel__head"><div class="filters">' +
       '<input id="prodSearch" type="search" placeholder="Search products…" value="' + esc(state.filters.q) + '" aria-label="Search products">' +
@@ -472,8 +472,8 @@
         return '<option value="' + esc(c.slug) + '"' + (state.filters.cat === c.slug ? " selected" : "") + ">" + esc(c.name) + "</option>";
       }).join("") + "</select>" +
       '<select id="prodStatus" aria-label="Status"><option value="">Any status</option>' +
-      ["active", "out", "inactive"].map(function (v) {
-        const lbl = { active: "Active", out: "Out of stock", inactive: "Inactive" }[v];
+      ["live", "active", "out", "inactive"].map(function (v) {
+        const lbl = { live: "Live & out of stock", active: "Active", out: "Out of stock", inactive: "Inactive" }[v];
         return '<option value="' + v + '"' + (state.filters.status === v ? " selected" : "") + ">" + lbl + "</option>";
       }).join("") + "</select>" +
       "</div></div>" +
@@ -495,6 +495,7 @@
       if (p.parent) return false; /* size variants are edited inside their parent */
       if (q && (p.productName + " " + p.id + " " + p.description).toLowerCase().indexOf(q) === -1) return false;
       if (f.cat && p.category !== f.cat) return false;
+      if (f.status === "live" && p.status === "ARCHIVED") return false;
       if (f.status === "active" && !(p.status !== "ARCHIVED" && effStock(p) > 0)) return false;
       if (f.status === "out" && (p.status === "ARCHIVED" || effStock(p) > 0)) return false;
       if (f.status === "inactive" && p.status !== "ARCHIVED") return false;
@@ -506,6 +507,8 @@
     const tbody = $("#prodRows");
     if (!tbody) return;
     const rows = filteredProducts();
+    const count = $("#prodResultCount");
+    if (count) count.textContent = String(rows.length);
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty"><b>No products found</b>Try a different search, or add a new product.</td></tr>';
       return;
@@ -547,14 +550,15 @@
         }
         await repaint(VIEWS.products);
       } else if (btn.dataset.act === "del") {
-        const ok = await confirmDialog('Delete "' + p.productName + '"? This cannot be undone.', { yes: "Delete product" });
+        const ok = await confirmDialog('Remove "' + p.productName + '" from the storefront? If past orders use it, it will stay under Inactive to preserve order history.', { yes: "Remove from store" });
         if (!ok) return;
         const k = kids(p);
         const out = await api("DELETE", "/api/admin/products/" + encodeURIComponent(p.id));
         for (const child of k) {
           try { await api("DELETE", "/api/admin/products/" + encodeURIComponent(child.id)); } catch (_e) { /* already archived */ }
         }
-        toast(out && out.archived ? "Product removed from sale (order history kept)" : "Product deleted", true);
+        if (out && out.archived) state.filters.status = "live";
+        toast(out && out.archived ? "Product removed from sale; order history kept under Inactive" : "Product deleted", true);
         await repaint(VIEWS.products);
       }
     } catch (ex) { toast(ex.message, false); }
