@@ -35,6 +35,35 @@ Use your admin Gmail for `ADMIN_EMAIL`, choose a strong admin password, and set
 these values private. Customer sign-in remains Gmail-only with no password or
 OTP, as requested.
 
+## PhonePe checkout setup
+
+The storefront now sends customers to PhonePe's hosted Standard Checkout and
+checks the final order status on the server. First activate a PhonePe Payment
+Gateway merchant account and get its Client ID, Client Secret, and Client
+Version from **PhonePe Business Dashboard → Developer Settings**. Do not put
+these credentials in the website files or GitHub. In the same terminal, add
+them as encrypted Worker secrets (Wrangler prompts for each value):
+
+```powershell
+npx wrangler secret put PHONEPE_CLIENT_ID
+npx wrangler secret put PHONEPE_CLIENT_SECRET
+npx wrangler secret put PHONEPE_CLIENT_VERSION
+```
+
+The included Worker setting uses `PHONEPE_ENV = "SANDBOX"` so the live store
+does not accidentally charge a customer while credentials and checkout are
+being set up. Ask PhonePe to enable production after completing its onboarding
+and UAT process. To go live, change that value to `"PRODUCTION"` in
+`wrangler.toml`, then deploy again. Use the production credentials PhonePe gives
+your merchant account. The redirect origin is already set to the store's `.com`
+domain and must remain one of the origins listed by `PUBLIC_ORIGIN`.
+
+PhonePe shows the payment methods enabled for the merchant account. UPI,
+cards, and net banking can appear when enabled for the account; the website
+does not claim that wallets, EMI, or Pay Later are available unless PhonePe
+enables them. PhonePe checkout remains unavailable until its credentials are
+added and the merchant account is active.
+
 Deploy the backend:
 
 ```powershell
@@ -85,14 +114,13 @@ uvid-store → Metrics**.
 From the `cloudflare-store` folder run:
 
 ```powershell
-npx wrangler d1 execute uvid-store --remote --file=schema.sql
 npx wrangler deploy
 ```
 
-The schema command is safe to rerun: it creates any new tables without deleting
-existing products, images, users, or orders. Run it when backend changes add a
-table (the saved-address feature adds `customer_addresses`). Netlify needs
-redeploying only when the website files or `netlify.toml` change.
+Run the D1 schema command from the first section only when a backend change
+adds a database table or column. PhonePe checkout uses the existing order
+table and does not need a database migration. Netlify needs redeploying when
+the website files or `netlify.toml` change.
 
 Product photos uploaded by Admin are stored as binary data in D1. The Worker
 converts D1's returned byte array back to image bytes before responding, so the
