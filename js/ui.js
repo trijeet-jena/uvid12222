@@ -430,7 +430,6 @@
         : "") +
       '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0) + "</div>" +
       '<div class="pdp__actions">' +
-      '<div class="pdp__actions">' +
       (inCart > 0 && !hasVariants
         ? '<a class="btn btn--ghost" href="#/cart">Go to cart →</a>'
         : '<button class="btn btn--ghost" data-add="' + p.id + '" data-root="' + mainId + '">🛒 Add to cart</button>') +
