@@ -125,6 +125,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .brand__mark--img { object-fit: contain; background: #fff; }
 .brand__name { color: #17365d; font-weight: 800; font-size: 19px; letter-spacing: -.02em; }
 .brand__tag { display: block; font-size: 9px; color: var(--ink-3); letter-spacing: .12em; text-transform: uppercase; }
+.header .brand__mark { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 0; }
+.header .brand__mark--img { object-fit: contain; object-position: center; background: #fff; }
+.header .brand__name { display: block; font-size: 23px; line-height: 1; }
+.header .brand__tag { margin-top: 3px; font-size: 11px; line-height: 1.15; letter-spacing: .07em; }
 
 .search { position: relative; flex: 1; max-width: 560px; min-width: 0; }
 .search__box {
@@ -748,9 +752,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   :root { --h-push: 14px; --b-push: 84px; }
   body { font-size: 14.5px; }
   .header__row { padding: 8px var(--h-push); gap: 8px; flex-wrap: nowrap; }
-  .brand__tag { display: block; font-size: 7px; line-height: 1.1; letter-spacing: .09em; }
-  .brand__name { font-size: 16.5px; }
-  .brand__mark { width: 34px; height: 34px; font-size: 16px; }
+  .header .brand { gap: 7px; }
+  .header .brand__tag { display: block; font-size: 8.5px; line-height: 1.1; letter-spacing: .055em; }
+  .header .brand__name { font-size: 20px; }
+  .header .brand__mark { width: 48px; height: 48px; flex-basis: 48px; font-size: 16px; }
   .hicon span.lbl, .chip__meta { display: none; }
   /* wishlist/orders/cart live in the bottom nav on phones —
      drop the duplicate header icons so search gets the space */
@@ -824,8 +829,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 }
 @media (max-width: 380px) {
   :root { --h-push: 11px; }
-  .brand__name { font-size: 15px; }
-  .brand__mark { width: 31px; height: 31px; font-size: 14px; }
+  .header .brand__name { font-size: 18px; }
+  .header .brand__tag { font-size: 7.5px; letter-spacing: .04em; }
+  .header .brand__mark { width: 42px; height: 42px; flex-basis: 42px; font-size: 14px; }
   .hicon { padding: 8px 9px; }
   .search__box { padding: 8px 11px; }
   .search__box input { font-size: 13.5px; }
@@ -867,7 +873,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       </button>
 
       <a class="brand" href="#/" aria-label="UVID home">
-        <img class="brand__mark brand__mark--img" src="./assets/logo.jpeg" alt="UVID logo" width="40" height="40" />
+        <img class="brand__mark brand__mark--img" src="./assets/logo.jpeg" alt="UVID logo" width="64" height="64" />
         <span>
           <span class="brand__name">UVID</span>
           <span class="brand__tag">Arts &amp; Craft</span>
