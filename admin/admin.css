@@ -392,6 +392,8 @@ body.modal-open { overflow: hidden; }
 .invoice__totals { width: min(300px, 65%); }
 .invoice__totals > div { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; }
 .invoice__totals > div span { color: #667169; }
+.invoice__delivery-input { width: 148px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: 600 13px "Outfit", Arial, sans-serif; }
+.invoice__delivery-input:focus { outline: 2px solid rgba(47, 128, 97, .22); border-color: var(--brand); }
 .invoice__totals .invoice__grand { margin-top: 8px; padding: 12px 0 0; border-top: 2px solid #2f8061; font-size: 17px; }
 .invoice__grand span, .invoice__grand b { color: #202b25 !important; font-weight: 800; }
 .invoice__thanks { margin: 28px 0 0; padding-top: 14px; border-top: 1px solid #e4e9e5; color: #667169; text-align: center; font-size: 12px; }

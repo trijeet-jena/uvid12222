@@ -1158,7 +1158,7 @@
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + (awaitingUpi ? " · Payment pending" : "") + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
-      '<td class="num"><b>' + money(o.total_amount) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
+      '<td class="num"><b>' + (Number(o.shipping_finalized) === 0 ? 'Delivery pending' : money(o.total_amount)) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
       '<td><select class="ostat" data-oid="' + esc(o.id) + '">' +
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && !["PLACED", "CANCELLED"].includes(s[0]);
@@ -1178,6 +1178,7 @@
       return sum + (Number(item.price_at_purchase) || 0) * (Number(item.quantity) || 0);
     }, 0);
     const discount = Math.max(0, Number(order.discount) || 0);
+    const shippingFinalized = Number(order.shipping_finalized) !== 0;
     const savedShipping = order.shipping == null ? null : Number(order.shipping);
     const savedTotal = order.total_amount == null ? NaN : Number(order.total_amount);
     const total = Number.isFinite(savedTotal) ? savedTotal : subtotal + (savedShipping || 0) - discount;
@@ -1207,18 +1208,42 @@
       '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
       '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
-      '<div><span>Delivery</span><b>' + (shipping ? money(shipping) : "Free") + '</b></div>' +
-      '<div class="invoice__grand"><span>Total payable</span><b>' + money(total) + '</b></div></div></div>' +
+      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="Enter charge" value="" aria-label="Delivery charge in rupees" data-delivery-fee>') + '</b></div>' +
+      '<div class="invoice__grand"><span>' + (shippingFinalized ? "Total payable" : "Final total") + '</span><b>' + (shippingFinalized ? money(total) : "After delivery charge is saved") + '</b></div></div></div>' +
       '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
   }
   function openOrderInvoice(order) {
     const awaitingUpi = String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" && order.status !== "CANCELLED";
+    const quotePending = Number(order.shipping_finalized) === 0;
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (awaitingUpi ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
       "modal--wide"
     );
+    const saveDeliveryButton = back.querySelector("[data-save-delivery]");
+    if (saveDeliveryButton) saveDeliveryButton.addEventListener("click", async function () {
+      const input = back.querySelector("[data-delivery-fee]");
+      if (!input || input.value.trim() === "" || !Number.isFinite(Number(input.value)) || Number(input.value) < 0) {
+        toast("Enter a delivery charge, or enter 0 for free delivery.", false);
+        if (input) input.focus();
+        return;
+      }
+      saveDeliveryButton.disabled = true;
+      try {
+        const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/delivery", { shipping: Number(input.value) });
+        const updated = result.order;
+        const index = state.orders.findIndex(function (item) { return String(item.id) === String(order.id); });
+        if (index >= 0) state.orders[index] = updated;
+        toast("Delivery charge saved. The customer can now pay the updated total.", true);
+        closeModal();
+        openOrderInvoice(updated);
+        await repaint(VIEWS.orders);
+      } catch (ex) {
+        toast(ex.message, false);
+        saveDeliveryButton.disabled = false;
+      }
+    });
     const printButton = back.querySelector("[data-print-invoice]");
     if (printButton) printButton.addEventListener("click", function () { window.print(); });
     const confirmButton = back.querySelector("[data-confirm-upi]");

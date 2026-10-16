@@ -342,7 +342,7 @@ async function stats(env) {
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
 async function orderList(env, customerId = null, status = null) {
-  let sql = "SELECT * FROM orders", args = [];
+  let sql = "SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id", args = [];
   if (customerId != null) { sql += " WHERE customer_id=?"; args.push(customerId); }
   else if (status) { sql += " WHERE status=?"; args.push(status); }
   sql += " ORDER BY created_at DESC LIMIT 200";
@@ -373,13 +373,14 @@ async function placeOrder(env, user, body) {
     subtotal += p.price * qty; lines.push({ p, qty });
   }
   const discount = 0;
-  const shipping = subtotal >= 499 ? 0 : 49;
+  const shipping = 0;
   const method = String(body.paymentMethod || "UPI").toUpperCase();
   if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
   const batches = [
     env.DB.prepare("INSERT INTO order_id_counter (id,last_value) VALUES (1,1) ON CONFLICT(id) DO UPDATE SET last_value=last_value+1 RETURNING last_value"),
     env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) SELECT 'UVID'||printf('%03d',last_value),?,?, 'PLACED',?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
-      .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping)
+      .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping),
+    env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized) SELECT 'UVID'||printf('%03d',last_value),0 FROM order_id_counter WHERE id=1")
   ];
   for (const line of lines) {
     batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
@@ -537,6 +538,29 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
   if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"))});
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/delivery$/);
+  if (match && method === "PUT") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const b = await readBody();
+    if (b.shipping === null || b.shipping === undefined || String(b.shipping).trim() === "") return error("Enter a delivery charge, or enter 0 for free delivery.");
+    const value = Number(b.shipping);
+    if (!Number.isFinite(value) || value < 0 || value > 10000000) return error("Delivery charge must be between ₹0 and ₹10,000,000.");
+    const shipping = Math.round(value * 100) / 100;
+    const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+    if (!current) return error("Order not found.",404);
+    if (current.status === "CANCELLED") return error("A cancelled order cannot be repriced.",409);
+    if (current.payment_status === "PAID") return error("This order is already paid, so its delivery charge cannot be changed.",409);
+    const amounts = await env.DB.prepare("SELECT COALESCE(SUM(price_at_purchase*quantity),0) AS subtotal FROM order_items WHERE order_id=?").bind(id).first();
+    const total = Math.round((Number(amounts?.subtotal || 0) - Number(current.discount || 0) + shipping) * 100) / 100;
+    const timestamp = now();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE orders SET shipping=?,total_amount=?,updated_at=? WHERE id=?").bind(shipping,total,timestamp,id),
+      env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized,updated_at) VALUES (?,1,?) ON CONFLICT(order_id) DO UPDATE SET finalized=1,updated_at=excluded.updated_at").bind(id,timestamp)
+    ]);
+    await audit(env,request,user,"order.delivery_quote_saved",id,{shipping,total});
+    return json({ok:true,order:(await orderList(env,null)).find((item)=>item.id===id)});
+  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly;
@@ -545,6 +569,8 @@ async function handleApi(request, env, user, url) {
     if (!order) return error("Order not found.",404);
     if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
+    const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
+    if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
     await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
     await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
     return json({ok:true,order:(await orderList(env,null)).find((item)=>item.id===id)});

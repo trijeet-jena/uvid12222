@@ -89,9 +89,6 @@
   }
 
   /* ---------------- totals engine ---------------- */
-  var SHIP_FEE = 49;
-  var FREE_SHIP_MIN = 499;
-
   function cartCount() {
     return state.cart.reduce(function (a, l) { return a + l.qty; }, 0);
   }
@@ -105,9 +102,10 @@
       mrpTotal += p.mrp * state.cart[i].qty;
       count += state.cart[i].qty;
     }
-    var shipping = count === 0 ? 0 : (subtotal >= FREE_SHIP_MIN ? 0 : SHIP_FEE);
+    /* Delivery is quoted by the store after it reviews the customer's address. */
+    var shipping = 0;
     var total = subtotal + shipping;
-    return { subtotal: subtotal, mrpTotal: mrpTotal, count: count, shipping: shipping, total: total };
+    return { subtotal: subtotal, mrpTotal: mrpTotal, count: count, shipping: shipping, total: total, shippingPending: count > 0 };
   }
 
   /* ---------------- auth ---------------- */
@@ -364,8 +362,9 @@
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
+      shippingFinalized: Number(srv.shipping_finalized) !== 0,
       status: cancelled ? "Cancelled" : STATUS_STAGES[si],
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : si,
@@ -508,7 +507,7 @@
     addToCart: addToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
     requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut,
     findUser: findUser, placeOrder: placeOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
-    navigateTo: navigateTo, renderChrome: renderChrome, SHIP_FEE: SHIP_FEE, FREE_SHIP_MIN: FREE_SHIP_MIN,
+    navigateTo: navigateTo, renderChrome: renderChrome,
     addSearch: addSearch, route: route, pushRecent: pushRecent
   };
 

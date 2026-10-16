@@ -115,6 +115,12 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 
+CREATE TABLE IF NOT EXISTS order_delivery_quotes (
+  order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+  finalized INTEGER NOT NULL DEFAULT 0 CHECK (finalized IN (0, 1)),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS order_id_counter (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   last_value INTEGER NOT NULL CHECK (last_value >= 0)

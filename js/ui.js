@@ -448,7 +448,7 @@
       '<div class="pdp__price"><b id="pdpPrice">' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em class="off">' + p.discount + '% off</em>' : '') + '</div>' +
       '<p class="pdp__tax">Inclusive of all taxes</p></div>' +
       '<div class="pdp__delivery card-inset">' +
-      '<p>🚚 Delivery by <b>' + etaStr + '</b> · Free above ' + money(A.FREE_SHIP_MIN) + '</p>' +
+      '<p>🚚 Delivery by <b>' + etaStr + '</b> · Delivery charge confirmed after address review</p>' +
       '<p>' + (p.stock <= 20 ? "⚡ Hurry! Only " + p.stock + " left in stock" : "✅ In stock — ships in 24 hrs") + '</p>'.replace("<p>", "<p id='pdpStockBadge'>") +
       '<p>📱 Pay by UPI QR</p></div>' +
       '<div class="pdp__wishrow">' +
@@ -572,8 +572,9 @@
       '<div class="pricedtl card"><h3>Price details</h3>' +
       '<div class="prow"><span>Price (' + t.count + ' item' + (t.count === 1 ? "" : "s") + ')</span><b>' + money(t.mrpTotal) + '</b></div>' +
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Product discount</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
-      '<div class="prow"><span>Delivery</span><b>' + (t.shipping === 0 ? '<span class="green">FREE</span>' : money(t.shipping)) + '</b></div>' +
-      '<div class="prow prow--total"><span>Total payable</span><b>' + money(t.total) + '</b></div>' +
+      '<div class="prow"><span>Delivery</span><b>Confirmed after address review</b></div>' +
+      '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
+      '<p class="safe-note">The store will add the delivery charge after reviewing your address. You will see the final total before paying.</p>' +
       (t.mrpTotal - t.subtotal > 0 ? '<p class="prow--save">You save <b>' + money(t.mrpTotal - t.subtotal) + '</b> on this order 🎉</p>' : "") +
       '<button class="btn btn--primary btn--block btn--lg" id="toCheckout">Place order →</button>' +
       '<p class="safe-note">🔒 Safe and secure payments</p>' +
@@ -687,8 +688,9 @@
       '<aside class="checkouts"><div class="pricedtl card"><h3>Price details</h3>' +
       '<div class="prow"><span>Amount (' + t.count + ' item' + (t.count === 1 ? "" : "s") + ')</span><b>' + money(t.mrpTotal) + '</b></div>' +
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
-      '<div class="prow"><span>Delivery</span><b>' + (t.shipping === 0 ? '<span class="green">FREE</span>' : money(t.shipping)) + '</b></div>' +
-      '<div class="prow prow--total"><span>Total payable</span><b>' + money(t.total) + '</b></div>' +
+      '<div class="prow"><span>Delivery</span><b>Confirmed after address review</b></div>' +
+      '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
+      '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
       '<p class="safe-note">Your order is confirmed only after UPI payment is verified.</p>' +
       '</div></aside></div></div>';
@@ -738,8 +740,8 @@
     function setQrReady(ready) {
       if (ready) {
         placeButton.disabled = false;
-        placeButton.textContent = "Continue to UPI payment · " + money(t.total);
-        qrSetup.textContent = "UPI QR is ready. You will see the QR and order number on the next screen.";
+        placeButton.textContent = "Place order · delivery confirmed next";
+        qrSetup.textContent = "UPI QR is ready. The store will confirm delivery before you pay.";
         qrSetup.classList.add("upi-setup--ready");
       } else {
         placeButton.disabled = true;
@@ -775,16 +777,22 @@
       return;
     }
 
-    view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
-      '<p>Scan this PhonePe Business QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
-      '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
-      '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
-      '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
-      '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
-      '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
-
-    var qr = $("#upiPaymentQr");
-    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    if (!order.shippingFinalized) {
+      view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
+        '<p>The store is checking your address and will add the delivery charge. This page will show the final amount and UPI QR when it is ready.</p>' +
+        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
+        '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
+    } else {
+      view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
+        '<p>Scan this UPI QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+        '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+        '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
+        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
+        '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
+        '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
+      var qr = $("#upiPaymentQr");
+      qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    }
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
       if (!statusEl) { clearInterval(paymentTimer); return; }
@@ -793,6 +801,16 @@
         .then(function (data) {
           var serverOrder = data && data.order;
           if (!serverOrder) return;
+          if (Number(serverOrder.shipping_finalized) !== 0 && !order.shippingFinalized) {
+            order.shippingFinalized = true;
+            order.totals.shipping = Number(serverOrder.shipping) || 0;
+            order.totals.total = Number(serverOrder.total_amount) || 0;
+            order.paymentStatus = "Awaiting payment verification";
+            A.save();
+            clearInterval(paymentTimer);
+            paymentPage(order.id);
+            return;
+          }
           if (serverOrder.payment_status === "PAID") {
             order.paymentConfirmed = true;
             order.paymentStatus = "Paid ✓";
@@ -810,8 +828,11 @@
             clearInterval(paymentTimer);
             return;
           }
-          order.paymentStatus = "Awaiting payment verification";
-          statusEl.textContent = "Payment awaiting verification. The order is not confirmed yet.";
+          order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
+          order.totals.shipping = Number(serverOrder.shipping) || 0;
+          order.totals.total = Number(serverOrder.total_amount) || 0;
+          order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+          statusEl.textContent = order.shippingFinalized ? "Payment awaiting verification. The order is not confirmed yet." : "Waiting for the store to confirm delivery.";
           A.save();
         })
         .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
@@ -845,7 +866,12 @@
   /* ================= ORDERS ================= */
 
   /* pull authoritative statuses for server-placed orders (fire & forget) */
+  var orderSyncTimer = null;
   function syncServerOrders() {
+    if (!orderSyncTimer) orderSyncTimer = setInterval(function () {
+      var path = (location.hash || "#").split("?")[0];
+      if (path === "#/orders" || path.indexOf("#/orders/") === 0) syncServerOrders();
+    }, 15000);
     var pending = A.state.orders.filter(function (o) { return o._srv; });
     if (!pending.length) return;
     fetch("/api/orders", { cache: "no-store", credentials: "same-origin" })
@@ -860,10 +886,16 @@
           var s = map[o.id];
           if (!s) return;
           var confirmed = s.payment_status === "PAID";
-          var paymentLabel = confirmed ? "Paid ✓" : (String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery");
-          if (o.paymentConfirmed !== confirmed || o.paymentStatus !== paymentLabel) {
+          var shippingFinalized = Number(s.shipping_finalized) !== 0;
+          var paymentLabel = confirmed ? "Paid ✓" : (!shippingFinalized ? "Delivery charge awaiting store quote" : (String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"));
+          var shipping = Number(s.shipping) || 0;
+          var total = Number(s.total_amount) || 0;
+          if (o.paymentConfirmed !== confirmed || o.paymentStatus !== paymentLabel || o.shippingFinalized !== shippingFinalized || o.totals.shipping !== shipping || o.totals.total !== total) {
             o.paymentConfirmed = confirmed;
             o.paymentStatus = paymentLabel;
+            o.shippingFinalized = shippingFinalized;
+            o.totals.shipping = shipping;
+            o.totals.total = total;
             changed = true;
           }
           if (s.status === "CANCELLED") {
@@ -906,7 +938,7 @@
         }).join("") + (o.items.length > 4 ? '<span class="othumb othumb--more">+' + (o.items.length - 4) + '</span>' : "");
         return '<article class="ocard card">' +
           '<header><div><p class="ocard__id">Order ' + o.id + ' · ' + A.fmtDate(o.placedAt) + '</p>' +
-          '<p class="ocard__total">' + money(o.totals.total) + ' · ' + esc(String(o.payment).toUpperCase()) + '</p>' + (o.payment === "upi" && !o.paymentConfirmed ? '<small class="payment-pending">' + esc(o.paymentStatus || "Awaiting payment verification") + '</small>' : "") + '</div>' + statusPill(o.status) + '</header>' +
+          '<p class="ocard__total">' + (o.shippingFinalized ? money(o.totals.total) : "Delivery charge pending") + ' · ' + esc(String(o.payment).toUpperCase()) + '</p>' + (o.payment === "upi" && !o.paymentConfirmed ? '<small class="payment-pending">' + esc(o.paymentStatus || "Awaiting payment verification") + '</small>' : "") + '</div>' + statusPill(o.status) + '</header>' +
           '<div class="ocard__mid"><div class="othumbs">' + thumbs + '</div>' +
           (o.status === "Delivered" ? '<p class="ocard__eta ocard__eta--ok">Delivered ' + A.fmtDate(o.eta) + '</p>'
             : o.status === "Cancelled" ? '<p class="ocard__eta ocard__eta--no">Cancelled · refund in 3–5 days</p>'
@@ -961,8 +993,9 @@
       esc(o.address.line) + ', ' + esc(o.address.city) + ' — ' + esc(o.address.pin) + '</p></section>' +
       '<section class="card odetail__box"><h2>payment summary</h2>' +
       '<div class="prow"><span>Items total</span><b>' + money(o.totals.subtotal) + '</b></div>' +
-      '<div class="prow"><span>Delivery</span><b>' + (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) + '</b></div>' +
-      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : "(payment awaiting verification)") + '</span><b>' + money(o.totals.total) + '</b></div>' +
+      '<div class="prow"><span>Delivery</span><b>' + (o.shippingFinalized ? (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) : "Awaiting store quote") + '</b></div>' +
+      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.shippingFinalized ? "(payment awaiting verification)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
+      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">Pay ' + money(o.totals.total) + ' by UPI</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. You can pay here when the final amount is ready.</p>' : "")) +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
   }
