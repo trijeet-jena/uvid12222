@@ -51,7 +51,7 @@
   var SKEY = "uvid:session";
 
   function blank() {
-    return { cart: [], wishlist: [], user: null, users: {}, orders: [], addresses: [], recent: [] };
+    return { cart: [], wishlist: [], user: null, users: {}, orders: [], addresses: [], recent: [], accountData: {} };
   }
 
   function load() {
@@ -67,7 +67,43 @@
 
   var state = load();
 
+  function accountEmail(email) {
+    return String(email || "").trim().toLowerCase();
+  }
+
+  function copyArray(value) {
+    return Array.isArray(value) ? value.slice() : [];
+  }
+
+  function saveAccountData(email) {
+    email = accountEmail(email);
+    if (!email) return;
+    if (!state.accountData || typeof state.accountData !== "object") state.accountData = {};
+    state.accountData[email] = {
+      cart: copyArray(state.cart),
+      wishlist: copyArray(state.wishlist),
+      orders: copyArray(state.orders),
+      addresses: copyArray(state.addresses),
+      recent: copyArray(state.recent)
+    };
+  }
+
+  function restoreAccountData(email) {
+    var data = state.accountData && state.accountData[accountEmail(email)];
+    state.cart = copyArray(data && data.cart);
+    state.wishlist = copyArray(data && data.wishlist);
+    state.orders = copyArray(data && data.orders);
+    state.addresses = copyArray(data && data.addresses);
+    state.recent = copyArray(data && data.recent);
+  }
+
+  /* Older builds kept customer data in one shared set of arrays. Associate
+     that cache with the signed-in email once, so future account switches are isolated. */
+  if (!state.accountData || typeof state.accountData !== "object") state.accountData = {};
+  if (accountEmail(state.user)) saveAccountData(state.user);
+
   function save() {
+    saveAccountData(state.user);
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
   }
 
@@ -112,6 +148,13 @@
   function findUser(email) { return state.users[email] || null; }
 
   function signIn(email, name) {
+    email = accountEmail(email);
+    var previousEmail = accountEmail(state.user);
+    if (previousEmail && previousEmail !== email) saveAccountData(previousEmail);
+    if (previousEmail !== email) {
+      restoreAccountData(email);
+      setSession({ addressId: null, address: null, paymentMethod: null, cardNum: null, cardExp: null, cardName: null });
+    }
     var user = findUser(email);
     if (user) {
       if (name && user.name !== name) user.name = name;
@@ -126,8 +169,14 @@
   }
 
   function signOut() {
+    saveAccountData(state.user);
     state.user = null;
-    setSession({ paymentMethod: null, cardNum: null, cardExp: null, cardName: null });
+    state.cart = [];
+    state.wishlist = [];
+    state.orders = [];
+    state.addresses = [];
+    state.recent = [];
+    setSession({ addressId: null, address: null, paymentMethod: null, cardNum: null, cardExp: null, cardName: null });
     try { fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (_e) { /* offline */ }
     save();
     toast("Signed out. Come back soon!");
@@ -506,7 +555,7 @@
     computeTotals: computeTotals, cartCount: cartCount,
     addToCart: addToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
     requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut,
-    findUser: findUser, placeOrder: placeOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
+    findUser: findUser, placeOrder: placeOrder, buildServerOrder: buildServerOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
     navigateTo: navigateTo, renderChrome: renderChrome,
     addSearch: addSearch, route: route, pushRecent: pushRecent
   };

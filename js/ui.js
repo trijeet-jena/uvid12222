@@ -867,59 +867,60 @@
 
   /* pull authoritative statuses for server-placed orders (fire & forget) */
   var orderSyncTimer = null;
+  var orderSyncPending = {};
+  var orderSyncLastAt = {};
+  var lastOrderSyncEmail = "";
+
+  function serverOrderToClient(serverOrder) {
+    var address = {};
+    try { address = JSON.parse(serverOrder.address_json || "{}"); } catch (_e) { address = {}; }
+    return A.buildServerOrder({
+      order: serverOrder,
+      items: (serverOrder.items || []).map(function (item) {
+        return {
+          productId: item.product_id,
+          name: item.product_name,
+          qty: item.quantity,
+          priceAtPurchase: item.price_at_purchase
+        };
+      })
+    }, serverOrder.payment_method, address);
+  }
+
   function syncServerOrders() {
     if (!orderSyncTimer) orderSyncTimer = setInterval(function () {
       var path = (location.hash || "#").split("?")[0];
       if (path === "#/orders" || path.indexOf("#/orders/") === 0) syncServerOrders();
     }, 15000);
-    var pending = A.state.orders.filter(function (o) { return o._srv; });
-    if (!pending.length) return;
+    var email = String(A.state.user || "").trim().toLowerCase();
+    if (!email) return;
+    if (lastOrderSyncEmail !== email) {
+      lastOrderSyncEmail = email;
+      orderSyncLastAt[email] = 0;
+    }
+    if (orderSyncPending[email] || Date.now() - (orderSyncLastAt[email] || 0) < 12000) return;
+    orderSyncPending[email] = true;
+    orderSyncLastAt[email] = Date.now();
     fetch("/api/orders", { cache: "no-store", credentials: "same-origin" })
       .then(function (r) { if (!r.ok) return null; return r.json(); })
       .then(function (data) {
-        if (!data || !data.orders) return;
-        var map = {};
-        data.orders.forEach(function (o) { map[o.id] = o; });
-        var stageMap = { PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4, CANCELLED: -1 };
-        var changed = false;
-        pending.forEach(function (o) {
-          var s = map[o.id];
-          if (!s) return;
-          var confirmed = s.payment_status === "PAID";
-          var shippingFinalized = Number(s.shipping_finalized) !== 0;
-          var paymentLabel = confirmed ? "Paid ✓" : (!shippingFinalized ? "Delivery charge awaiting store quote" : (String(s.payment_method).toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery"));
-          var shipping = Number(s.shipping) || 0;
-          var total = Number(s.total_amount) || 0;
-          if (o.paymentConfirmed !== confirmed || o.paymentStatus !== paymentLabel || o.shippingFinalized !== shippingFinalized || o.totals.shipping !== shipping || o.totals.total !== total) {
-            o.paymentConfirmed = confirmed;
-            o.paymentStatus = paymentLabel;
-            o.shippingFinalized = shippingFinalized;
-            o.totals.shipping = shipping;
-            o.totals.total = total;
-            changed = true;
-          }
-          if (s.status === "CANCELLED") {
-            if (o.status !== "Cancelled") { o.status = "Cancelled"; changed = true; }
-            return;
-          }
-          var si = stageMap[s.status];
-          if (si == null) return;
-          if (o.status !== A.STATUS_STAGES[si] || o.stageIndex !== si) {
-            o.status = A.STATUS_STAGES[si];
-            o.stageIndex = si;
-            changed = true;
-          }
-        });
-        if (changed) {
-          A.save();
-          var path = (location.hash || "#").split("?")[0];
-          if (path === "#/orders" || path.indexOf("#/orders/") === 0) rerender();
-        }
+        if (!data || !Array.isArray(data.orders) || String(A.state.user || "").trim().toLowerCase() !== email) return;
+        var serverOrders = data.orders.map(serverOrderToClient);
+        var localOrders = A.state.orders.filter(function (order) { return !order._srv; });
+        A.state.orders = serverOrders.concat(localOrders);
+        A.save();
+        var path = (location.hash || "#").split("?")[0];
+        if (path === "#/orders" || path.indexOf("#/orders/") === 0) rerender();
       })
-      .catch(function () { /* offline — keep last known status */ });
+      .catch(function () { /* offline — keep this account's last known orders */ })
+      .then(function () { delete orderSyncPending[email]; });
   }
 
   function ordersPage() {
+    if (!A.state.user) {
+      view.innerHTML = emptyState("👋", "Sign in to view your orders", "Your order history is saved to your customer account.", '<button class="btn btn--primary" data-openauth="login">Sign in with email</button>');
+      return;
+    }
     syncServerOrders();
     var orders = A.state.orders;
     if (orders.length === 0) {
@@ -952,6 +953,10 @@
   }
 
   function orderDetailPage(id) {
+    if (!A.state.user) {
+      view.innerHTML = emptyState("👋", "Sign in to view this order", "Order details are available in the customer account that placed the order.", '<button class="btn btn--primary" data-openauth="login">Sign in with email</button>');
+      return;
+    }
     syncServerOrders();
     var o = A.state.orders.filter(function (x) { return x.id === id; })[0];
     if (!o) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
