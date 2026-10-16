@@ -8,6 +8,6 @@ database_name = "uvid-store"
 database_id = "6c5c4429-85f7-4738-82cb-ddf2d828f26a"
 
 [vars]
-PUBLIC_ORIGIN = "https://uvid09art12and48craft54987.netlify.app,https://uvidartandcraftsupplies.com"
+PUBLIC_ORIGIN = "https://uvid09art12and48craft54987.netlify.app,https://uvidartandcraftsupplies.com,https://uvid-stationery-image-and-address-fix.uvid21-store.workers.dev"
 SUPABASE_BUCKET = "product-image"
 SUPABASE_URL = "https://npykircmrlooyliztfwg.supabase.co"

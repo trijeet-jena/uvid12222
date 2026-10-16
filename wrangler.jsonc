@@ -1,13 +1,22 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "uvid-stationery-image-and-address-fix",
+  "main": "cloudflare-storefront-worker.js",
   "compatibility_date": "2026-10-13",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/uploads/*"]
   },
+  "services": [
+    {
+      "binding": "STORE_API",
+      "service": "uvid-store-api"
+    }
+  ],
   "compatibility_flags": [
     "nodejs_compat"
   ]
