@@ -10,8 +10,6 @@
   var A = window.PT.App;
   var D = window.PT;
   var money = A.money, esc = A.escapeHtml, stars = A.starsHtml;
-  var UPI_PAYEE_ADDRESS = "Q138891922@ybl";
-  var UPI_PAYEE_NAME = "PhonePeMerchant";
 
   var view = $("#view");
   var addressLoadedKey = "";
@@ -786,67 +784,14 @@
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
-        '<p>Scan this QR to open the same PhonePe payee with the exact order amount and reference prefilled. Check the payee and amount in your UPI app before approving.</p>' +
-        '<div class="upi-wait__qr"><p id="upiPaymentQrLoading" role="status">Checking the final order total…</p><img id="upiPaymentQr" alt="UPI QR code with the order amount and reference" hidden /><p id="upiPaymentQrError" hidden>The amount QR could not be created. Use the original PhonePe QR below and enter the exact amount manually.</p><img id="upiStaticQr" src="/assets/upi-qr.png" alt="Original UVID PhonePe QR code" hidden /></div>' +
-        '<button class="linkbtn upi-static-toggle" id="upiStaticFallback" type="button" hidden>Use the original QR instead</button>' +
+        '<p>Scan this UPI QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+        '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
-        '<p class="safe-note">The order number is included as the payment reference. After you pay, UVID will show success only after the store verifies the payment in PhonePe Business.</p>' +
+        '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
       var qr = $("#upiPaymentQr");
-      var staticQr = $("#upiStaticQr");
-      var qrLoading = $("#upiPaymentQrLoading");
-      var qrError = $("#upiPaymentQrError");
-      var staticFallback = $("#upiStaticFallback");
-      var renderedQrAmount = null;
-      function renderAmountQr() {
-        var amount = Number(order.totals.total);
-        if (!Number.isFinite(amount) || amount <= 0 || !order.shippingFinalized) return;
-        if (renderedQrAmount === amount && qr.src) return;
-        try {
-          if (typeof window.qrcode !== "function") throw new Error("QR generator is not available.");
-          var reference = String(order.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 35);
-          if (!reference) throw new Error("Order reference is missing.");
-          var params = new URLSearchParams({
-            pa: UPI_PAYEE_ADDRESS,
-            pn: UPI_PAYEE_NAME,
-            tr: reference,
-            tn: "UVID order " + reference,
-            am: amount.toFixed(2),
-            cu: "INR"
-          });
-          var code = window.qrcode(0, "M");
-          code.addData("upi://pay?" + params.toString());
-          code.make();
-          qr.src = code.createDataURL(6, 4);
-          qr.alt = "UPI QR code for order " + reference + " and " + money(amount);
-          qr.hidden = false;
-          staticQr.hidden = true;
-          qrError.hidden = true;
-          qrLoading.hidden = true;
-          staticFallback.hidden = false;
-          renderedQrAmount = amount;
-        } catch (error) {
-          qr.hidden = true;
-          qrLoading.hidden = true;
-          qrError.hidden = false;
-          staticQr.hidden = false;
-          staticFallback.hidden = true;
-        }
-      }
-      qr.addEventListener("error", function () {
-        qr.hidden = true;
-        qrError.hidden = false;
-        staticQr.hidden = false;
-        staticFallback.hidden = true;
-      });
-      staticFallback.addEventListener("click", function () {
-        qr.hidden = true;
-        staticQr.hidden = false;
-        qrError.textContent = "Enter " + money(order.totals.total) + " manually and add " + order.id + " as the payment note.";
-        qrError.hidden = false;
-        staticFallback.hidden = true;
-      });
+      qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
     }
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
@@ -887,7 +832,6 @@
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
           order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
-          if (order.shippingFinalized) renderAmountQr();
           statusEl.textContent = order.shippingFinalized ? "Payment awaiting verification. The order is not confirmed yet." : "Waiting for the store to confirm delivery.";
           A.save();
         })

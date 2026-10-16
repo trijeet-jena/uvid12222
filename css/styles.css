@@ -535,9 +535,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait > p { color: var(--ink-2); }
 .upi-wait__qr { display: grid; place-items: center; min-height: 210px; margin: 18px auto; padding: 12px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fff; }
 .upi-wait__qr img { display: block; width: min(260px, 68vw); max-height: 280px; object-fit: contain; }
-.upi-wait__qr img[hidden] { display: none; }
 .upi-wait__qr p { color: var(--red); font-weight: 600; }
-.upi-static-toggle { margin: 0 auto 10px; display: block; }
 .upi-wait__amount { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 14px 0; padding: 14px 16px; border-radius: var(--rad-sm); background: var(--paper-2); text-align: left; }
 .upi-wait__amount span { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
 .upi-wait__amount b { font-size: 22px; white-space: nowrap; }
