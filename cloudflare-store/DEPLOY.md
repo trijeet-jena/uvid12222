@@ -98,9 +98,11 @@ uvid-store → Metrics**.
 
 The Worker sends a store SMS alert when an admin confirms a UPI payment. It
 uses MSG91's SMS Flow API and an approved template; no SMS is sent for an
-unverified payment. The template must include variables for the order number,
-customer name, and total amount, mapped to `VAR1`, `VAR2`, and `VAR3` in that
-order. MSG91 requires an approved DLT template for Indian SMS delivery.
+unverified payment. Create the MSG91 Flow template after mapping the approved
+DLT content template, then use the MSG91 Flow template ID here (not the raw DLT
+template ID). Its variables must map the order number, customer name, and
+total amount to `VAR1`, `VAR2`, and `VAR3`, in that order. MSG91 requires an
+approved DLT template for Indian SMS delivery.
 
 Add these as encrypted secrets for the `uvid-store-api` Worker in Cloudflare:
 
