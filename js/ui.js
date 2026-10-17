@@ -1082,6 +1082,35 @@
     if (editBtn) editBtn.addEventListener("click", function () { A.openAuth("profile"); });
   }
 
+  function aboutPage() {
+    view.innerHTML = crumbs([{ label: "Home", href: "#/" }, { label: "About Us" }]) +
+      '<div class="about-page">' +
+      '<header class="card about-page__hero">' +
+      '<p class="about-page__eyebrow">UVID ART AND CRAFT SUPPLIES</p>' +
+      '<h1>About Us</h1><p class="about-page__headline">Inspiring Creativity, One Art Project at a Time!</p>' +
+      '<p class="about-page__tagline">Pens, paper &amp; pretty desk things.<br>Made for people who still love to write.</p>' +
+      '</header>' +
+      '<section class="card about-page__section"><h2>Our Story</h2>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES</strong> was founded on <strong>1st December 2019</strong> by <strong>Umesh Vidhant and Ishwaraj Dandoti</strong> with a shared vision: to make high-quality art and craft materials accessible and affordable for every artist, creator, and craft enthusiast.</p>' +
+      '<p>We believe that creativity has no limits, and everyone deserves the right materials to bring their imagination to life. Our mission is to provide a wide range of quality art and craft supplies at competitive prices, helping artists, students, hobbyists, and creative professionals turn their ideas into beautiful creations.</p>' +
+      '<p>From painting and resin art to jewellery making, candle making, DIY crafts, and home décor, we aim to be your trusted destination for all your creative needs.</p></section>' +
+      '<div class="about-page__grid">' +
+      '<section class="card about-page__section"><h2>Our Mission</h2><p>To empower creativity by offering reliable, high-quality, and affordable art and craft materials that inspire people to explore their artistic potential.</p></section>' +
+      '<section class="card about-page__section"><h2>Our Vision</h2><p>To become one of India&#39;s most trusted art and craft supply brands, making creativity accessible to everyone and supporting the growing community of artists and creators.</p></section>' +
+      '</div>' +
+      '<section class="card about-page__section"><h2>Why Choose UVID?</h2><ul class="about-page__reasons">' +
+      '<li><strong>Quality You Can Trust:</strong> Carefully selected products to support your creative projects.</li>' +
+      '<li><strong>Affordable Prices:</strong> Quality art and craft materials at prices that suit different budgets.</li>' +
+      '<li><strong>Wide Product Range:</strong> Supplies for painting, resin art, jewellery making, candle making, DIY crafts, and more.</li>' +
+      '<li><strong>For Every Creator:</strong> Products for beginners, students, hobbyists, professional artists, and craft businesses.</li>' +
+      '<li><strong>Passion for Creativity:</strong> We are committed to helping every creator transform ideas into reality.</li>' +
+      '</ul></section>' +
+      '<section class="card about-page__section about-page__promise"><h2>Our Promise</h2>' +
+      '<p>At UVID ART AND CRAFT SUPPLIES, we are more than just a supplier of art materials. We are a part of your creative journey. Every product we offer reflects our commitment to quality, affordability, and the joy of creating.</p>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES – Your Creativity, Our Commitment!</strong></p></section>' +
+      '</div>';
+  }
+
   /* ================= routing ================= */
 
   function rerender() {
@@ -1101,6 +1130,7 @@
       A.route("orders", function () { ordersPage(); });
       A.route("orders/:id", function (params) { orderDetailPage(params.id); });
       A.route("account", function (params, query) { accountPage(query || {}); });
+      A.route("about", function () { aboutPage(); });
     },
     rerender: rerender
   };
