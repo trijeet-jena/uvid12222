@@ -1108,6 +1108,9 @@
       '<section class="card about-page__section about-page__promise"><h2>Our Promise</h2>' +
       '<p>At UVID ART AND CRAFT SUPPLIES, we are more than just a supplier of art materials. We are a part of your creative journey. Every product we offer reflects our commitment to quality, affordability, and the joy of creating.</p>' +
       '<p><strong>UVID ART AND CRAFT SUPPLIES – Your Creativity, Our Commitment!</strong></p></section>' +
+      '<section class="card about-page__section about-page__contact"><h2>Visit Us</h2>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES</strong><br>#114, Ravikirloskar Layout<br>Nagasandra Post<br>Bengaluru – 560073</p>' +
+      '<p><strong>Phone:</strong> <a href="tel:+919075012945">+91 90750 12945</a>, <a href="tel:+917406155738">+91 74061 55738</a></p></section>' +
       '</div>';
   }
 
