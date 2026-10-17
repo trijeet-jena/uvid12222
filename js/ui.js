@@ -779,7 +779,8 @@
 
     if (!order.shippingFinalized) {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. This page will show the final amount and UPI QR when it is ready.</p>' +
+        '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
+        '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
@@ -790,9 +791,9 @@
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
         '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
-      var qr = $("#upiPaymentQr");
-      qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
     }
+    var qr = $("#upiPaymentQr");
+    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
       if (!statusEl) { clearInterval(paymentTimer); return; }
