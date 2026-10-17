@@ -702,11 +702,31 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 }
 .footer__col a { display: block; padding: 4.5px 0; font-size: 13.6px; color: #b3a992; }
 .footer__col a:hover { color: #fff; text-decoration: underline; }
+.footer__contact { margin: 0 0 10px; color: #b3a992; font-size: 13.3px; line-height: 1.6; font-style: normal; }
+.footer__contact strong { color: #f3ecdc; }
+.footer__contact a { display: inline; padding: 0; font-size: inherit; color: inherit; }
+.footer__contact a:hover { color: #fff; text-decoration: underline; }
 .footer__note {
   text-align: center; color: #8b8169; font-size: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   margin: 0; padding: 17px var(--h-push) 22px;
 }
+
+/* ---------------- about us ---------------- */
+.about-page { display: grid; gap: 18px; margin-bottom: 46px; }
+.about-page__hero { text-align: center; background: linear-gradient(135deg, var(--green-t), var(--paper-2)); padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); }
+.about-page__eyebrow { color: var(--green); font-size: .76rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 10px; }
+.about-page__hero h1 { font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 8px; color: var(--ink); }
+.about-page__headline { color: var(--green-d); font-size: 1.2rem; font-weight: 700; margin: 0 0 12px; }
+.about-page__tagline { color: var(--ink-3); margin: 0; }
+.about-page__section { padding: clamp(20px, 4vw, 32px); }
+.about-page__section h2 { margin: 0 0 14px; color: var(--green-d); }
+.about-page__section p:last-child { margin-bottom: 0; }
+.about-page__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.about-page__reasons { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
+.about-page__reasons li::marker { color: var(--tang); }
+.about-page__promise { border-left: 4px solid var(--tang); }
+@media (max-width: 700px) { .about-page__grid { grid-template-columns: 1fr; } }
 
 /* ================= responsive ================= */
 
@@ -863,20 +883,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   html { scroll-behavior: auto; }
 }
 
-.about-page { display: grid; gap: 18px; margin-bottom: 46px; }
-.about-page__hero { text-align: center; background: linear-gradient(135deg, var(--green-t), var(--paper-2)); padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); }
-.about-page__eyebrow { color: var(--green); font-size: .76rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 10px; }
-.about-page__hero h1 { font-size: clamp(2rem, 4vw, 3rem); margin: 0 0 8px; color: var(--ink); }
-.about-page__headline { color: var(--green-d); font-size: 1.2rem; font-weight: 700; margin: 0 0 12px; }
-.about-page__tagline { color: var(--ink-3); margin: 0; }
-.about-page__section { padding: clamp(20px, 4vw, 32px); }
-.about-page__section h2 { margin: 0 0 14px; color: var(--green-d); }
-.about-page__section p:last-child { margin-bottom: 0; }
-.about-page__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.about-page__reasons { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
-.about-page__reasons li::marker { color: var(--tang); }
-.about-page__promise { border-left: 4px solid var(--tang); }
-@media (max-width: 700px) { .about-page__grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -969,11 +975,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         <a href="#/search?sort=discount">Deals of the week</a>
       </div>
       <div class="footer__col">
-        <h4>UVID</h4>
-        <a href="#/account">My account</a>
-        <a href="#/wishlist">Wishlist</a>
-        <a href="#/cart">Cart</a>
-        <a href="#/about">About Us</a>
+        <h4>About Us</h4>
+        <a href="#/about">Our story</a>
+        <address class="footer__contact"><strong>UVID ART AND CRAFT SUPPLIES</strong><br>
+          #114, Ravikirloskar Layout<br>
+          Nagasandra Post<br>
+          Bengaluru – 560073
+        </address>
+        <p class="footer__contact"><strong>Phone:</strong><br>
+          <a href="tel:+919075012945">+91 90750 12945</a><br>
+          <a href="tel:+917406155738">+91 74061 55738</a>
+        </p>
       </div>
     </div>
     <p class="footer__note">© <span id="year"></span> UVID Art and Craft · UPI payments are verified before order confirmation.</p>
@@ -2993,6 +3005,38 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (editBtn) editBtn.addEventListener("click", function () { A.openAuth("profile"); });
   }
 
+  function aboutPage() {
+    view.innerHTML = crumbs([{ label: "Home", href: "#/" }, { label: "About Us" }]) +
+      '<div class="about-page">' +
+      '<header class="card about-page__hero">' +
+      '<p class="about-page__eyebrow">UVID ART AND CRAFT SUPPLIES</p>' +
+      '<h1>About Us</h1><p class="about-page__headline">Inspiring Creativity, One Art Project at a Time!</p>' +
+      '<p class="about-page__tagline">Pens, paper &amp; pretty desk things.<br>Made for people who still love to write.</p>' +
+      '</header>' +
+      '<section class="card about-page__section"><h2>Our Story</h2>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES</strong> was founded on <strong>1st December 2019</strong> by <strong>Umesh Vidhant and Ishwaraj Dandoti</strong> with a shared vision: to make high-quality art and craft materials accessible and affordable for every artist, creator, and craft enthusiast.</p>' +
+      '<p>We believe that creativity has no limits, and everyone deserves the right materials to bring their imagination to life. Our mission is to provide a wide range of quality art and craft supplies at competitive prices, helping artists, students, hobbyists, and creative professionals turn their ideas into beautiful creations.</p>' +
+      '<p>From painting and resin art to jewellery making, candle making, DIY crafts, and home décor, we aim to be your trusted destination for all your creative needs.</p></section>' +
+      '<div class="about-page__grid">' +
+      '<section class="card about-page__section"><h2>Our Mission</h2><p>To empower creativity by offering reliable, high-quality, and affordable art and craft materials that inspire people to explore their artistic potential.</p></section>' +
+      '<section class="card about-page__section"><h2>Our Vision</h2><p>To become one of India&#39;s most trusted art and craft supply brands, making creativity accessible to everyone and supporting the growing community of artists and creators.</p></section>' +
+      '</div>' +
+      '<section class="card about-page__section"><h2>Why Choose UVID?</h2><ul class="about-page__reasons">' +
+      '<li><strong>Quality You Can Trust:</strong> Carefully selected products to support your creative projects.</li>' +
+      '<li><strong>Affordable Prices:</strong> Quality art and craft materials at prices that suit different budgets.</li>' +
+      '<li><strong>Wide Product Range:</strong> Supplies for painting, resin art, jewellery making, candle making, DIY crafts, and more.</li>' +
+      '<li><strong>For Every Creator:</strong> Products for beginners, students, hobbyists, professional artists, and craft businesses.</li>' +
+      '<li><strong>Passion for Creativity:</strong> We are committed to helping every creator transform ideas into reality.</li>' +
+      '</ul></section>' +
+      '<section class="card about-page__section about-page__promise"><h2>Our Promise</h2>' +
+      '<p>At UVID ART AND CRAFT SUPPLIES, we are more than just a supplier of art materials. We are a part of your creative journey. Every product we offer reflects our commitment to quality, affordability, and the joy of creating.</p>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES – Your Creativity, Our Commitment!</strong></p></section>' +
+      '<section class="card about-page__section about-page__contact"><h2>Visit Us</h2>' +
+      '<p><strong>UVID ART AND CRAFT SUPPLIES</strong><br>#114, Ravikirloskar Layout<br>Nagasandra Post<br>Bengaluru – 560073</p>' +
+      '<p><strong>Phone:</strong> <a href="tel:+919075012945">+91 90750 12945</a>, <a href="tel:+917406155738">+91 74061 55738</a></p></section>' +
+      '</div>';
+  }
+
   /* ================= routing ================= */
 
   function rerender() {
@@ -3012,6 +3056,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       A.route("orders", function () { ordersPage(); });
       A.route("orders/:id", function (params) { orderDetailPage(params.id); });
       A.route("account", function (params, query) { accountPage(query || {}); });
+      A.route("about", function () { aboutPage(); });
     },
     rerender: rerender
   };
