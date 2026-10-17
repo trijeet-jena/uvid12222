@@ -1222,7 +1222,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-sms>Send SMS alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1256,22 +1256,24 @@
       if (!verified) return;
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
-        if (result.notification && result.notification.sent) toast("UPI payment confirmed. Store SMS alert sent.", true);
-        else toast("UPI payment confirmed. Store SMS alert needs setup or retry.", false);
+        if (result.notification && result.notification.sent) toast("UPI payment confirmed. Phone alert sent to " + result.notification.count + " device(s).", true);
+        else if (result.notification && result.notification.reason === "no_subscriptions") toast("UPI payment confirmed. Enable phone alerts in Settings on your phone.", false);
+        else if (result.notification && result.notification.reason === "not_configured") toast("UPI payment confirmed. Phone alerts need one-time server setup.", false);
+        else toast("UPI payment confirmed, but the phone alert could not be delivered.", false);
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
     });
-    const smsButton = back.querySelector("[data-send-order-sms]");
-    if (smsButton) smsButton.addEventListener("click", async function () {
-      const verified = await confirmDialog("Send this paid order's name, order number and total to the configured store phone number(s)?", { yes: "Send SMS alert", danger: false });
+    const pushButton = back.querySelector("[data-send-order-push]");
+    if (pushButton) pushButton.addEventListener("click", async function () {
+      const verified = await confirmDialog("Send this paid order's customer name, order number and total to the phones subscribed for order notifications?", { yes: "Send phone alert", danger: false });
       if (!verified) return;
-      smsButton.disabled = true;
+      pushButton.disabled = true;
       try {
-        await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/sms", {});
-        toast("Paid-order SMS alert sent.", true);
+        const result = await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/push", {});
+        toast("Paid-order phone alert sent to " + result.notification.count + " device(s).", true);
       } catch (ex) {
         toast(ex.message, false);
-        smsButton.disabled = false;
+        pushButton.disabled = false;
       }
     });
   }
@@ -1386,9 +1388,33 @@
 
   /* ---------------- settings ---------------- */
   VIEWS.settings = async function () {
-    let mfa = { enabled: false }, log = { entries: [] };
+    let mfa = { enabled: false }, log = { entries: [] }, push = { available: false, publicKey: null, subscriptionCount: 0 };
     try { mfa = await api("GET", "/api/auth/admin/mfa/status"); } catch (_e) { /* keep defaults */ }
     try { log = await api("GET", "/api/admin/audit?limit=25"); } catch (_e) { /* keep defaults */ }
+    try { push = await api("GET", "/api/admin/push/status"); } catch (_e) { /* show setup guidance */ }
+
+    const isAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    const pushSupported = Boolean(window.isSecureContext && "Notification" in window && "serviceWorker" in navigator && "PushManager" in window && (!isAppleMobile || isStandalone));
+    let phoneSubscription = null;
+    if (push.available && pushSupported) {
+      try {
+        const registration = await navigator.serviceWorker.register("/service-worker.js");
+        phoneSubscription = await registration.pushManager.getSubscription();
+      } catch (_e) { /* explain unsupported or blocked browser below */ }
+    }
+    const pushDescription = push.available
+      ? "Get a phone notification when a UPI payment is confirmed. The alert includes the customer name, order number, total, and paid status. No SMS gateway or SMS credits are needed."
+      : "Phone alerts need one-time secure key setup on the store backend before they can be enabled.";
+    const pushState = !push.available
+      ? "Server setup is not complete yet."
+      : !pushSupported
+        ? (isAppleMobile && !isStandalone
+          ? "On iPhone or iPad, use Share → Add to Home Screen, open the UVID Admin icon, then enable notifications here."
+          : "This browser does not support push notifications. Open the admin page in a supported browser on your phone.")
+        : phoneSubscription
+          ? "This phone is subscribed. " + Number(push.subscriptionCount || 0) + " device(s) receive order alerts."
+          : "This phone is not subscribed. " + Number(push.subscriptionCount || 0) + " other device(s) receive order alerts.";
 
     const auditRows = (log.entries || []).map(function (a) {
       return "<tr><td><small>" + esc(String(a.created_at || "").slice(0, 16)) + "</small></td>" +
@@ -1427,6 +1453,15 @@
       '<section class="panel"><div class="panel__head"><h4>Two-factor authentication</h4></div><div class="panel__body">' +
       mfaBody +
       "</div></section>" +
+      '<section class="panel"><div class="panel__head"><h4>Phone order notifications</h4></div><div class="panel__body">' +
+      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">' + esc(pushDescription) + '</p>' +
+      '<p id="pushState" style="color:var(--muted);font-size:13.5px">' + esc(pushState) + '</p>' +
+      (push.available && pushSupported
+        ? (phoneSubscription
+          ? '<button class="btn btn--ghost" id="pushDisable">Disable on this phone</button>'
+          : '<button class="btn btn--primary" id="pushEnable">Enable on this phone</button>')
+        : "") +
+      '</div></section>' +
       '<section class="panel"><div class="panel__head"><h4>Security audit log</h4></div><div class="panel__body">' +
       '<p style="margin-top:0;color:var(--muted);font-size:13.5px">Server-recorded admin actions (last 25). Passwords, codes and payment details are never logged.</p>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>IP</th></tr></thead><tbody>' +
@@ -1440,6 +1475,41 @@
 
     const b = $("#setLogout");
     if (b) b.addEventListener("click", function () { $("#logoutBtn").click(); });
+
+    const pushEnable = $("#pushEnable");
+    if (pushEnable) pushEnable.addEventListener("click", async function () {
+      const undo = busy(pushEnable, "Enabling…");
+      try {
+        if (Notification.permission !== "granted") {
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") throw new Error("Allow notifications in your browser settings, then try again.");
+        }
+        const registration = await navigator.serviceWorker.register("/service-worker.js");
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: pushKeyBytes(push.publicKey),
+        });
+        try {
+          await api("POST", "/api/admin/push/subscriptions", { subscription: subscription.toJSON() });
+        } catch (ex) {
+          await subscription.unsubscribe().catch(function () {});
+          throw ex;
+        }
+        undo(); toast("Phone order notifications enabled on this device.", true);
+        await repaint(VIEWS.settings);
+      } catch (ex) { undo(); toast(ex.message || "Could not enable phone notifications.", false); }
+    });
+
+    const pushDisable = $("#pushDisable");
+    if (pushDisable) pushDisable.addEventListener("click", async function () {
+      const undo = busy(pushDisable, "Disabling…");
+      try {
+        await api("DELETE", "/api/admin/push/subscriptions", { endpoint: phoneSubscription.endpoint });
+        await phoneSubscription.unsubscribe();
+        undo(); toast("Phone order notifications disabled on this device.", true);
+        await repaint(VIEWS.settings);
+      } catch (ex) { undo(); toast(ex.message || "Could not disable phone notifications.", false); }
+    });
 
     const start = $("#mfaStart");
     if (start) start.addEventListener("click", async function () {
@@ -1480,6 +1550,14 @@
       } catch (ex) { undo(); toast(ex.message, false); }
     });
   };
+
+  function pushKeyBytes(value) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
 
   /* ---------------- go ---------------- */
   boot();

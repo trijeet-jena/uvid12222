@@ -170,3 +170,12 @@ CREATE TABLE IF NOT EXISTS seminar_registrations (
   organization TEXT, notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO seminar_details (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS admin_push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_admin_push_subscriptions_updated ON admin_push_subscriptions(updated_at);

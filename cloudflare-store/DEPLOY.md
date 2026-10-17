@@ -15,8 +15,8 @@ Terminal**, then run these commands one at a time:
 cd cloudflare-store
 npm install
 npx wrangler login
-npx wrangler d1 execute uvid-store --remote --file=schema.sql
-npx wrangler d1 execute uvid-store --remote --file=seed-catalog.sql
+npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=schema.sql
+npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=seed-catalog.sql
 ```
 
 `wrangler login` opens a Cloudflare page. Approve it with the same account
@@ -36,10 +36,10 @@ Now add the admin credentials as encrypted Cloudflare secrets. Run each command
 and enter the value when Wrangler prompts:
 
 ```powershell
-npx wrangler secret put ADMIN_EMAIL
-npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put SESSION_SECRET
-npx wrangler secret put SUPABASE_SECRET_KEY
+npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
+npx wrangler --config wrangler.toml secret put ADMIN_PASSWORD
+npx wrangler --config wrangler.toml secret put SESSION_SECRET
+npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
 Use your admin Gmail for `ADMIN_EMAIL`, choose a strong admin password, and set
@@ -53,7 +53,7 @@ remains Gmail-only with no password or OTP, as requested.
 Deploy the backend:
 
 ```powershell
-npx wrangler deploy
+npx wrangler --config wrangler.toml deploy
 ```
 
 Wrangler prints a URL similar to:
@@ -94,38 +94,40 @@ until the allowance resets; do not upgrade or add a paid subscription unless
 you choose to. Watch D1 usage in **Cloudflare → Storage & databases → D1 →
 uvid-store → Metrics**.
 
-## Order-paid SMS alerts
+## Phone push notifications for paid orders
 
-The Worker sends a store SMS alert when an admin confirms a UPI payment. It
-uses MSG91's SMS Flow API and an approved template; no SMS is sent for an
-unverified payment. Create the MSG91 Flow template after mapping the approved
-DLT content template, then use the MSG91 Flow template ID here (not the raw DLT
-template ID). Its variables must map the order number, customer name, and
-total amount to `VAR1`, `VAR2`, and `VAR3`, in that order. MSG91 requires an
-approved DLT template for Indian SMS delivery.
+The Worker sends a browser push notification after an admin confirms a UPI
+payment. The alert includes the customer name, order number, total, and paid
+status. This uses the browser's push service and does not require MSG91, DLT
+registration, SMS credits, or a paid SMS gateway. The alert reaches each phone
+or browser that has enabled notifications from Admin → Settings.
 
-Add these as encrypted secrets for the `uvid-store-api` Worker in Cloudflare:
+Generate a VAPID key pair once. Put the public key in the Worker's
+`VAPID_SERVER_PUBLIC_KEY` variable in `wrangler.toml`; keep the private key
+only in Cloudflare Secrets:
 
-```text
-MSG91_AUTHKEY
-MSG91_ORDER_TEMPLATE_ID
-ORDER_SMS_RECIPIENTS
+```powershell
+npx wrangler --config wrangler.toml secret put VAPID_SERVER_PRIVATE_KEY
 ```
 
-Set `ORDER_SMS_RECIPIENTS` to one or more Indian mobile numbers, separated by
-commas. Enter either 10-digit numbers or numbers with the `+91` country code.
-The MSG91 key must stay in Cloudflare Secrets and must not be committed to
-GitHub or pasted into chat. After adding the values, deploy the Worker. If SMS
-setup is missing or a send fails, the order is still marked paid; open its
-invoice in the admin panel and use **Send SMS alert** to retry after setup.
+When prompted, paste the private key and press Enter. Do not commit the private
+key or paste it into chat. `VAPID_SUBJECT` is set to the store website URL.
+After configuring the keys, run the D1 migration and deploy the Worker. Then
+open the admin page on the phone, sign in, go to **Settings**, and choose
+**Enable on this phone**. Allow notifications when the browser asks. Use the
+same steps on each additional device that should receive order alerts.
+
+If a phone alert could not be delivered when payment was confirmed, open the
+paid order's invoice and choose **Send phone alert** to retry. The order stays
+marked paid even if a notification cannot be delivered.
 
 ## After changing backend code
 
 From the `cloudflare-store` folder run:
 
 ```powershell
-npx wrangler d1 execute uvid-store --remote --file=schema.sql
-npx wrangler deploy
+npx wrangler --config wrangler.toml d1 migrations apply uvid-store --remote
+npx wrangler --config wrangler.toml deploy
 ```
 
 The schema adds the metadata tables used to link images to Supabase objects and
@@ -134,9 +136,8 @@ a persistent order-number counter. New orders receive IDs such as `UVID001`,
 already numbered `UVID` orders, the counter continues after the highest one.
 Cancelled orders keep their number, so IDs are never reused.
 
-The schema command is safe to rerun: it creates any new tables without deleting
-existing products, images, users, or orders. Run it when backend changes add a
-table (the saved-address feature adds `customer_addresses`). Netlify needs
-redeploying only when the website files or `netlify.toml` change.
+The migration command applies any new tables without deleting existing
+products, images, users, or orders. Netlify redeploys automatically after the
+website files are pushed.
 
 Customer delivery addresses are saved under the signed-in Gmail account in D1.

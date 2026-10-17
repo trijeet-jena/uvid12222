@@ -2,6 +2,8 @@
  * Catalog data stays in D1; product image files are stored in Supabase Storage.
  */
 
+import { buildPushPayload } from "@block65/webcrypto-web-push";
+
 const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
 const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row limit
@@ -353,44 +355,55 @@ async function orderList(env, customerId = null, status = null) {
   const byOrder = new Map(); for (const row of rows) { const a = byOrder.get(row.order_id) || []; a.push(row); byOrder.set(row.order_id, a); }
   return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || [] }));
 }
-function normalizeSmsRecipient(value) {
-  let digits = String(value || "").replace(/\D/g, "");
-  if (digits.length === 10) digits = "91" + digits;
-  else if (digits.length === 11 && digits[0] === "0") digits = "91" + digits.slice(1);
-  return /^91\d{10}$/.test(digits) ? digits : null;
-}
-async function sendPaidOrderSms(env, order, customerName) {
-  if (!env.MSG91_AUTHKEY || !env.MSG91_ORDER_TEMPLATE_ID || !env.ORDER_SMS_RECIPIENTS) {
-    return { sent: false, reason: "not_configured" };
-  }
-  const numbers = String(env.ORDER_SMS_RECIPIENTS).split(",").map(normalizeSmsRecipient);
-  if (!numbers.length || numbers.some((number) => !number)) return { sent: false, reason: "invalid_recipients" };
+function validPushEndpoint(value) {
   try {
-    const response = await fetch("https://control.msg91.com/api/v5/flow", {
-      method: "POST",
-      headers: { accept: "application/json", authkey: env.MSG91_AUTHKEY, "content-type": "application/json" },
-      body: JSON.stringify({
-        template_id: env.MSG91_ORDER_TEMPLATE_ID,
-        realTimeResponse: "1",
-        recipients: numbers.map((mobiles) => ({
-          mobiles,
-          VAR1: String(order.id),
-          VAR2: clean(customerName, 80) || "Customer",
-          VAR3: Number(order.total_amount).toFixed(2),
-        })),
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.type !== "success") {
-      console.warn("[ORDER SMS] MSG91 did not accept the paid-order alert.", response.status);
-      return { sent: false, reason: "provider_error" };
-    }
-    return { sent: true };
-  } catch (cause) {
-    console.warn("[ORDER SMS] Could not reach MSG91.", cause?.name || "network error");
-    return { sent: false, reason: "provider_error" };
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && !url.username && !url.password && (
+      host === "fcm.googleapis.com" || host === "push.services.mozilla.com" || host.endsWith(".push.services.mozilla.com") ||
+      host === "web.push.apple.com" || host.endsWith(".push.apple.com") || host.endsWith(".notify.windows.com")
+    );
+  } catch { return false; }
+}
+async function sendPaidOrderPush(env, order, customerName) {
+  if (!env.VAPID_SERVER_PUBLIC_KEY || !env.VAPID_SERVER_PRIVATE_KEY) {
+    return { sent: false, count: 0, reason: "not_configured" };
   }
+  const subscriptions = (await env.DB.prepare("SELECT endpoint,p256dh,auth FROM admin_push_subscriptions").all()).results || [];
+  if (!subscriptions.length) return { sent: false, count: 0, reason: "no_subscriptions" };
+  const vapid = {
+    subject: env.VAPID_SUBJECT || "https://uvidartandcraftsupplies.com",
+    publicKey: env.VAPID_SERVER_PUBLIC_KEY,
+    privateKey: env.VAPID_SERVER_PRIVATE_KEY,
+  };
+  const name = clean(customerName, 80) || "Customer";
+  const amount = Number(order.total_amount).toFixed(2);
+  const payloadData = {
+    title: "New paid UVID order",
+    body: `${name} placed order ${order.id}. Paid: ₹${amount}.`,
+    url: "/admin/#/orders",
+    tag: `uvid-order-${order.id}`,
+  };
+  const results = await Promise.all(subscriptions.map(async (subscription) => {
+    if (!validPushEndpoint(subscription.endpoint)) return false;
+    try {
+      const payload = await buildPushPayload({ data: payloadData, options: { ttl: 3600, urgency: "high" } }, {
+        endpoint: subscription.endpoint,
+        expirationTime: null,
+        keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+      }, vapid);
+      const response = await fetch(subscription.endpoint, { ...payload, signal: AbortSignal.timeout(10000) });
+      if (response.status === 404 || response.status === 410) {
+        await env.DB.prepare("DELETE FROM admin_push_subscriptions WHERE endpoint=?").bind(subscription.endpoint).run();
+      }
+      return response.ok;
+    } catch (cause) {
+      console.warn("[ORDER PUSH] Could not deliver a paid-order notification.", cause?.name || "network error");
+      return false;
+    }
+  }));
+  const count = results.filter(Boolean).length;
+  return { sent: count > 0, count, reason: count ? null : "delivery_failed" };
 }
 async function placeOrder(env, user, body) {
   const items = Array.isArray(body.items) ? body.items : [];
@@ -577,6 +590,40 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
   if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"))});
+  if (path === "/api/admin/push/status" && method === "GET") {
+    if (adminOnly) return adminOnly;
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM admin_push_subscriptions").first();
+    return json({
+      available: Boolean(env.VAPID_SERVER_PUBLIC_KEY && env.VAPID_SERVER_PRIVATE_KEY),
+      publicKey: env.VAPID_SERVER_PUBLIC_KEY || null,
+      subscriptionCount: Number(row?.n || 0),
+    });
+  }
+  if (path === "/api/admin/push/subscriptions" && method === "POST") {
+    if (adminOnly) return adminOnly;
+    if (!env.VAPID_SERVER_PUBLIC_KEY || !env.VAPID_SERVER_PRIVATE_KEY) return error("Phone notifications are not configured on the server yet.",503);
+    const b = await readBody();
+    const subscription = b.subscription && typeof b.subscription === "object" ? b.subscription : b;
+    const endpoint = String(subscription.endpoint || "").slice(0,2048);
+    const p256dh = String(subscription.keys?.p256dh || "");
+    const auth = String(subscription.keys?.auth || "");
+    if (!validPushEndpoint(endpoint) || !/^[A-Za-z0-9_-]{20,200}$/.test(p256dh) || !/^[A-Za-z0-9_-]{16,100}$/.test(auth)) {
+      return error("This browser returned an invalid phone notification subscription.");
+    }
+    await env.DB.prepare("INSERT INTO admin_push_subscriptions (endpoint,p256dh,auth,created_at,updated_at) VALUES (?,?,?,datetime('now'),datetime('now')) ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,updated_at=excluded.updated_at")
+      .bind(endpoint,p256dh,auth).run();
+    await audit(env,request,user,"notification.push_subscribed",null,{});
+    return json({ok:true});
+  }
+  if (path === "/api/admin/push/subscriptions" && method === "DELETE") {
+    if (adminOnly) return adminOnly;
+    const b = await readBody();
+    const endpoint = String(b.endpoint || "").slice(0,2048);
+    if (!validPushEndpoint(endpoint)) return error("The phone notification subscription is invalid.");
+    await env.DB.prepare("DELETE FROM admin_push_subscriptions WHERE endpoint=?").bind(endpoint).run();
+    await audit(env,request,user,"notification.push_unsubscribed",null,{});
+    return json({ok:true});
+  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/delivery$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly;
@@ -614,27 +661,27 @@ async function handleApi(request, env, user, url) {
     if (!alreadyPaid) await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
     await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
     const notification = alreadyPaid
-      ? { sent: false, reason: "already_paid" }
-      : await sendPaidOrderSms(env, order, parseJson(order.address_json, {}).name || "Customer");
+      ? { sent: false, count: 0, reason: "already_paid" }
+      : await sendPaidOrderPush(env, order, parseJson(order.address_json, {}).name || "Customer");
     return json({ok:true,notification,order:(await orderList(env,null)).find((item)=>item.id===id)});
   }
-  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/sms$/);
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/push$/);
   if (match && method === "POST") {
     if (adminOnly) return adminOnly;
     const id = decodeURIComponent(match[1]);
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!order) return error("Order not found.",404);
-    if (order.payment_status !== "PAID") return error("Confirm the payment before sending a paid-order alert.",409);
-    const notification = await sendPaidOrderSms(env, order, parseJson(order.address_json, {}).name || "Customer");
+    if (order.payment_status !== "PAID") return error("Confirm the payment before sending a paid-order notification.",409);
+    const notification = await sendPaidOrderPush(env, order, parseJson(order.address_json, {}).name || "Customer");
     if (!notification.sent) {
       const message = notification.reason === "not_configured"
-        ? "Order SMS is not configured. Add the MSG91 key, approved template ID and store phone number in Cloudflare."
-        : notification.reason === "invalid_recipients"
-          ? "The configured order SMS phone number is invalid. Use a 10-digit Indian mobile number or +91 number."
-          : "MSG91 could not accept the SMS. Check its template and account settings, then retry.";
-      return error(message, notification.reason === "not_configured" ? 503 : 502);
+        ? "Phone notifications are not configured on the server yet."
+        : notification.reason === "no_subscriptions"
+          ? "No phone is subscribed yet. Enable order notifications in Admin → Settings on your phone."
+          : "The phone notification could not be delivered. Check that the phone is online, then retry.";
+      return error(message, notification.reason === "not_configured" ? 503 : notification.reason === "no_subscriptions" ? 409 : 502);
     }
-    await audit(env,request,user,"order.sms_sent",id,{provider:"MSG91"});
+    await audit(env,request,user,"order.push_sent",id,{devices:notification.count});
     return json({ok:true,notification});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
