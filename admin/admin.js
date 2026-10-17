@@ -641,9 +641,9 @@
       '<div class="imgpick__prev" id="imgPrev">' + (editing && p.imageUrl ? '<img src="' + esc(p.imageUrl) + '" alt="">' : ICONS.img) + "</div>" +
       '<div class="imgpick__ctrl">' +
       '<label class="fld" style="margin-bottom:8px"><input name="imageUrl" placeholder="https://… or /uploads/…" value="' + (editing && p.imageUrl && !String(p.imageUrl).startsWith("data:") ? esc(p.imageUrl) : "") + '"></label>' +
-      '<input type="file" id="imgFile" accept="image/*">' +
+      '<input type="file" id="imgFile" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">' +
       '<button type="button" class="btn btn--ghost btn--sm" id="imgPick">Upload image</button> ' +
-      '<small>JPEG / PNG / WebP — auto-compressed to ~1400px before upload.</small></div></div></div>' +
+      '<small>JPG / JPEG / PNG / WebP — auto-compressed to ~1400px before upload.</small></div></div></div>' +
       '<label class="fld"><span>Product price (₹) <i>*</i></span><input name="price" type="number" min="0" step="0.01" required value="' + base + '"><small>List price the store compares against.</small></label>' +
       '<label class="fld"><span>Discount price (₹, optional)</span><input name="discount" type="number" min="0" step="0.01" value="' + disc + '"><small>What the customer pays. Leave blank for full price.</small></label>' +
       '<label class="fld"><span>Stock quantity <i>*</i></span><input name="stock" type="number" min="0" step="1" required value="' + (editing ? p.stockQuantity : "") + '"></label>' +
@@ -658,9 +658,9 @@
       '<p class="varbox__hint">Photos are saved in cloud storage. The first one is the main photo. Choose a colour to add photos for that colour only.</p>' +
       '<div class="gal__tabs" id="galTabs"></div>' +
       '<div class="gal" id="galGrid"></div>' +
-      '<input type="file" id="galFile" accept="image/*" multiple>' +
+      '<input type="file" id="galFile" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple>' +
       '<button type="button" class="btn btn--ghost btn--sm" id="galAdd">' + ICONS.plus + " Add photos</button>" +
-      '<small>JPEG / PNG / WebP — several files at once is fine.</small></div></div>' +
+      '<small>JPG / JPEG / PNG / WebP — several files at once is fine.</small></div></div>' +
       "</div>" +
       '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-close>Cancel</button>' +
       '<button type="submit" class="btn btn--primary" id="pSave">' + (editing ? "Save changes" : "Add product") + "</button></div></form>",
@@ -971,7 +971,7 @@
       '<input class="v-img" placeholder="Image URL" value="' + (imageUrl && !String(imageUrl).startsWith("data:") ? esc(imageUrl) : "") + '">' +
       '<label class="v-file" title="Upload or replace this variant photo"><span class="v-file__preview">' +
       (imageUrl ? '<img src="' + esc(imageUrl) + '" alt="">' : ICONS.img) +
-      '</span><span class="v-file__caption">Photo</span><input type="file" accept="image/*"></label>' +
+      '</span><span class="v-file__caption">Photo</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"></label>' +
       '<button type="button" class="iconbtn" data-vremove title="Remove variant">' + ICONS.trash + "</button>" +
       "</div>";
   }
@@ -1006,9 +1006,13 @@
   async function prepareImage(file) {
     if (!file) return null;
     if (file.type === "image/svg+xml" || /\.svg$/i.test(file.name)) throw new Error("SVG isn't supported — upload JPEG, PNG or WebP.");
-    if (!/^image\//.test(file.type)) throw new Error("That file isn't an image.");
+    const mime = String(file.type || "").toLowerCase();
+    const name = String(file.name || "");
+    const supportedMime = ["image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp"].includes(mime);
+    const supportedExtension = /\.(jpe?g|png|webp)$/i.test(name);
+    if (!supportedMime && !supportedExtension) throw new Error("Upload a JPG, JPEG, PNG or WebP image.");
     let dataUrl = await readAsDataUrl(file);
-    const isPng = file.type === "image/png" || file.type === "image/webp";
+    const isPng = mime === "image/png" || mime === "image/webp" || /\.(png|webp)$/i.test(name);
     if (isPng && file.size <= 700 * 1024) return dataUrl; /* small PNGs keep transparency as-is */
     dataUrl = await shrinkDataUrl(dataUrl, isPng ? 1200 : 1400, 0.85, isPng ? "image/png" : "image/jpeg");
     return dataUrl;
