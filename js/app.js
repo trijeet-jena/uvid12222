@@ -147,6 +147,16 @@
   /* ---------------- auth ---------------- */
   function findUser(email) { return state.users[email] || null; }
 
+  /* Keep login and logout requests in order so a late logout response cannot
+     clear the cookie created by the next Gmail sign-in. */
+  var authRequestQueue = Promise.resolve();
+  var authRevision = 0;
+  function queueAuthRequest(request) {
+    var next = authRequestQueue.then(request, request);
+    authRequestQueue = next.then(function () {}, function () {});
+    return next;
+  }
+
   function signIn(email, name) {
     email = accountEmail(email);
     var previousEmail = accountEmail(state.user);
@@ -169,6 +179,7 @@
   }
 
   function signOut() {
+    authRevision += 1;
     saveAccountData(state.user);
     state.user = null;
     state.cart = [];
@@ -176,12 +187,21 @@
     state.orders = [];
     state.addresses = [];
     state.recent = [];
-    setSession({ addressId: null, address: null, paymentMethod: null, cardNum: null, cardExp: null, cardName: null });
-    try { fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (_e) { /* offline */ }
+    try { sessionStorage.removeItem(SKEY); } catch (_e) { /* private mode */ }
+    var logoutRequest = queueAuthRequest(function () {
+      return fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(function () { return null; });
+    });
     save();
     toast("Signed out. Come back soon!");
     navigateTo("#/");
     renderChrome();
+    return logoutRequest;
+  }
+
+  function switchAccount() {
+    return signOut().then(function () {
+      openAuth("login", "Sign in with a different Gmail address.");
+    });
   }
 
   function requireLogin(purpose) {
@@ -251,19 +271,33 @@
         err.hidden = false;
         return;
       }
-      fetch("/api/auth/email/login", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-        body: JSON.stringify({ email: email })
+      var authAttempt = ++authRevision;
+      var signInButton = $("#authForm button[type=submit]");
+      if (signInButton) { signInButton.disabled = true; signInButton.textContent = "Signing in…"; }
+      queueAuthRequest(function () {
+        return fetch("/api/auth/email/login", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+          body: JSON.stringify({ email: email })
+        });
       }).then(function (r) {
         return r.json().then(function (d) { return { ok: r.ok, d: d }; });
       }).then(function (r) {
+        if (authAttempt !== authRevision) return;
         if (!r.ok) { err.textContent = (r.d && r.d.error) || "Could not sign in."; err.hidden = false; return; }
         var user = signIn(r.d.user.email, r.d.user.name);
         closeAuth();
         toast("Welcome, " + (user.name || "customer") + "!", true);
         renderChrome();
         if (window.PT && window.PT.View && window.PT.View.rerender) window.PT.View.rerender();
-      }).catch(function () { err.textContent = "Cannot reach the server. Is it running?"; err.hidden = false; });
+      }).catch(function () {
+        if (authAttempt !== authRevision) return;
+        err.textContent = "Cannot reach the server. Is it running?";
+        err.hidden = false;
+      }).then(function () {
+        if (authAttempt !== authRevision) return;
+        var button = $("#authForm button[type=submit]");
+        if (button) { button.disabled = false; button.textContent = "Sign in"; }
+      });
     });
     $("#authSignout") && $("#authSignout").addEventListener("click", function () {
       closeAuth(); signOut();
@@ -554,7 +588,7 @@
     state: state, save: save, session: session, setSession: setSession,
     computeTotals: computeTotals, cartCount: cartCount,
     addToCart: addToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
-    requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut,
+    requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut, switchAccount: switchAccount,
     findUser: findUser, placeOrder: placeOrder, buildServerOrder: buildServerOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
     navigateTo: navigateTo, renderChrome: renderChrome,
     addSearch: addSearch, route: route, pushRecent: pushRecent

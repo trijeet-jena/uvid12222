@@ -1028,7 +1028,7 @@
         '<button class="btn btn--soft btn--sm" data-editprofile>Edit profile</button></div>' +
         '<ul class="accstats"><li><b>' + A.state.orders.length + '</b><span>orders</span></li><li><b>' + A.state.wishlist.length + '</b><span>wishlist</span></li>' +
         '<li><b>' + A.state.addresses.length + '</b><span>addresses</span></li></ul>' +
-        '<button class="btn btn--ghost" data-signout>Sign out</button></div>';
+        '<div class="acc-auth-actions"><button class="btn btn--soft" data-switchaccount>Switch Gmail account</button><button class="btn btn--ghost" data-signout>Sign out</button></div></div>';
     } else if (tab === "orders") {
       var os = A.state.orders.slice(0, 4);
       pane = '<div class="apane"><h2>Recent orders</h2>' +
@@ -1198,6 +1198,9 @@
 
     var oa = t.closest("[data-openauth]");
     if (oa) { e.preventDefault(); A.openAuth(oa.getAttribute("data-openauth") || "login"); return; }
+
+    var sa = t.closest("[data-switchaccount]");
+    if (sa) { e.preventDefault(); A.switchAccount(); return; }
 
     var so = t.closest("[data-signout]");
     if (so) { e.preventDefault(); A.signOut(); return; }

@@ -606,6 +606,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .profcard span { color: var(--ink-2); font-size: 13.5px; }
 .profcard em { color: var(--ink-3); font-size: 12px; font-style: normal; }
 .profcard__avatar { width: 54px; height: 54px; border-radius: 99px; background: linear-gradient(135deg, var(--green), var(--green-d)); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 22px; }
+.acc-auth-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.acc-auth-actions .btn { margin-top: 0 !important; }
 .accstats { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0; margin: 18px 0; }
 .accstats li { background: var(--paper-2); border-radius: var(--rad-sm); text-align: center; padding: 14px; display: flex; flex-direction: column; }
 .accstats b { font-size: 1.4rem; }
