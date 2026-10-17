@@ -1222,7 +1222,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-sms>Send SMS alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1255,10 +1255,24 @@
       const verified = await confirmDialog("Check this order's exact amount in the PhonePe Business account before confirming. The customer sees success only after this action.", { yes: "I verified it — confirm payment", danger: false });
       if (!verified) return;
       try {
-        await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
-        toast("UPI payment confirmed", true);
+        const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
+        if (result.notification && result.notification.sent) toast("UPI payment confirmed. Store SMS alert sent.", true);
+        else toast("UPI payment confirmed. Store SMS alert needs setup or retry.", false);
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
+    });
+    const smsButton = back.querySelector("[data-send-order-sms]");
+    if (smsButton) smsButton.addEventListener("click", async function () {
+      const verified = await confirmDialog("Send this paid order's name, order number and total to the configured store phone number(s)?", { yes: "Send SMS alert", danger: false });
+      if (!verified) return;
+      smsButton.disabled = true;
+      try {
+        await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/sms", {});
+        toast("Paid-order SMS alert sent.", true);
+      } catch (ex) {
+        toast(ex.message, false);
+        smsButton.disabled = false;
+      }
     });
   }
   content.addEventListener("click", function (e) {

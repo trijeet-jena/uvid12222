@@ -353,6 +353,45 @@ async function orderList(env, customerId = null, status = null) {
   const byOrder = new Map(); for (const row of rows) { const a = byOrder.get(row.order_id) || []; a.push(row); byOrder.set(row.order_id, a); }
   return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || [] }));
 }
+function normalizeSmsRecipient(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 10) digits = "91" + digits;
+  else if (digits.length === 11 && digits[0] === "0") digits = "91" + digits.slice(1);
+  return /^91\d{10}$/.test(digits) ? digits : null;
+}
+async function sendPaidOrderSms(env, order, customerName) {
+  if (!env.MSG91_AUTHKEY || !env.MSG91_ORDER_TEMPLATE_ID || !env.ORDER_SMS_RECIPIENTS) {
+    return { sent: false, reason: "not_configured" };
+  }
+  const numbers = String(env.ORDER_SMS_RECIPIENTS).split(",").map(normalizeSmsRecipient);
+  if (!numbers.length || numbers.some((number) => !number)) return { sent: false, reason: "invalid_recipients" };
+  try {
+    const response = await fetch("https://control.msg91.com/api/v5/flow", {
+      method: "POST",
+      headers: { accept: "application/json", authkey: env.MSG91_AUTHKEY, "content-type": "application/json" },
+      body: JSON.stringify({
+        template_id: env.MSG91_ORDER_TEMPLATE_ID,
+        realTimeResponse: "1",
+        recipients: numbers.map((mobiles) => ({
+          mobiles,
+          VAR1: String(order.id),
+          VAR2: clean(customerName, 80) || "Customer",
+          VAR3: Number(order.total_amount).toFixed(2),
+        })),
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.type !== "success") {
+      console.warn("[ORDER SMS] MSG91 did not accept the paid-order alert.", response.status);
+      return { sent: false, reason: "provider_error" };
+    }
+    return { sent: true };
+  } catch (cause) {
+    console.warn("[ORDER SMS] Could not reach MSG91.", cause?.name || "network error");
+    return { sent: false, reason: "provider_error" };
+  }
+}
 async function placeOrder(env, user, body) {
   const items = Array.isArray(body.items) ? body.items : [];
   if (!items.length || items.length > 40) throw Object.assign(new Error("Add 1–40 items to the order."), { status: 400 });
@@ -571,9 +610,32 @@ async function handleApi(request, env, user, url) {
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
-    await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
+    const alreadyPaid = order.payment_status === "PAID";
+    if (!alreadyPaid) await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
     await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
-    return json({ok:true,order:(await orderList(env,null)).find((item)=>item.id===id)});
+    const notification = alreadyPaid
+      ? { sent: false, reason: "already_paid" }
+      : await sendPaidOrderSms(env, order, parseJson(order.address_json, {}).name || "Customer");
+    return json({ok:true,notification,order:(await orderList(env,null)).find((item)=>item.id===id)});
+  }
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/sms$/);
+  if (match && method === "POST") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+    if (!order) return error("Order not found.",404);
+    if (order.payment_status !== "PAID") return error("Confirm the payment before sending a paid-order alert.",409);
+    const notification = await sendPaidOrderSms(env, order, parseJson(order.address_json, {}).name || "Customer");
+    if (!notification.sent) {
+      const message = notification.reason === "not_configured"
+        ? "Order SMS is not configured. Add the MSG91 key, approved template ID and store phone number in Cloudflare."
+        : notification.reason === "invalid_recipients"
+          ? "The configured order SMS phone number is invalid. Use a 10-digit Indian mobile number or +91 number."
+          : "MSG91 could not accept the SMS. Check its template and account settings, then retry.";
+      return error(message, notification.reason === "not_configured" ? 503 : 502);
+    }
+    await audit(env,request,user,"order.sms_sent",id,{provider:"MSG91"});
+    return json({ok:true,notification});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
   if(match && method === "PUT"){

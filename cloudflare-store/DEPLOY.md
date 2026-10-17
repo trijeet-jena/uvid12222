@@ -94,6 +94,29 @@ until the allowance resets; do not upgrade or add a paid subscription unless
 you choose to. Watch D1 usage in **Cloudflare → Storage & databases → D1 →
 uvid-store → Metrics**.
 
+## Order-paid SMS alerts
+
+The Worker sends a store SMS alert when an admin confirms a UPI payment. It
+uses MSG91's SMS Flow API and an approved template; no SMS is sent for an
+unverified payment. The template must include variables for the order number,
+customer name, and total amount, mapped to `VAR1`, `VAR2`, and `VAR3` in that
+order. MSG91 requires an approved DLT template for Indian SMS delivery.
+
+Add these as encrypted secrets for the `uvid-store-api` Worker in Cloudflare:
+
+```text
+MSG91_AUTHKEY
+MSG91_ORDER_TEMPLATE_ID
+ORDER_SMS_RECIPIENTS
+```
+
+Set `ORDER_SMS_RECIPIENTS` to one or more Indian mobile numbers, separated by
+commas. Enter either 10-digit numbers or numbers with the `+91` country code.
+The MSG91 key must stay in Cloudflare Secrets and must not be committed to
+GitHub or pasted into chat. After adding the values, deploy the Worker. If SMS
+setup is missing or a send fails, the order is still marked paid; open its
+invoice in the admin panel and use **Send SMS alert** to retry after setup.
+
 ## After changing backend code
 
 From the `cloudflare-store` folder run:
