@@ -29,7 +29,8 @@
     { slug: "art",       label: "Art & Craft",      emoji: "🎨", blurb: "Paints, pencils & canvas" },
     { slug: "desk",      label: "Desk Accessories", emoji: "🗂️", blurb: "Organisers, stands & clips" },
     { slug: "school",    label: "School Essentials",emoji: "✏️", blurb: "Geometry, labels & kits" },
-    { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" }
+    { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" },
+    { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" }
   ];
 
   /* ---------- products ---------- */
@@ -138,12 +139,43 @@
       specs: { "Material": "Natural bamboo", "Thickness": "5 mm", "Length": "20 cm", "Finish": "Natural" } }
   ];
 
+  /* Resin mould photos are static repository assets. The live catalog mirrors
+     these records in the product database, while this keeps the storefront
+     useful if its API is temporarily unavailable. */
+  var RESIN_MOULD_VARIANTS = [
+    { id: "resin-moulds-designs-flower-8-inch", label: "Flower Mould — 8 in", size: "Flower Mould — 8 in", image: "/assets/resin-moulds/flower-mould-8-inch.jpeg", specs: { "Design": "Flower", "Size": "8 in" } },
+    { id: "resin-moulds-designs-flower-set-1-4-inch", label: "Flower Mould Set — 1–4 in", size: "Flower Mould Set — 1–4 in", image: "/assets/resin-moulds/flower-garland-1-4-inch.jpeg", specs: { "Design": "Flower mould set", "Sizes": "1 in, 2 in, 3 in and 4 in" } },
+    { id: "resin-moulds-designs-tray-12x16-inch", label: "Rectangular Tray — 12 × 16 in", size: "Rectangular Tray — 12 × 16 in", image: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", specs: { "Design": "Rectangular tray", "Size": "12 × 16 in (as marked in photo)" } },
+    { id: "resin-moulds-designs-car-dashboard-4-inch", label: "Car Dashboard Mould — 4 in", size: "Car Dashboard Mould — 4 in", image: "/assets/resin-moulds/car-dashboard-4-inch.jpeg", specs: { "Design": "Car dashboard mould", "Size": "4 in" } },
+    { id: "resin-moulds-designs-four-slot-rectangle", label: "Four-Slot Rectangle Mould", size: "Four-Slot Rectangle Mould", image: "/assets/resin-moulds/four-slot-rectangle-mould.jpeg", specs: { "Design": "Four-slot rectangle" } },
+    { id: "resin-moulds-designs-circular-ring", label: "Circular Ring Mould", size: "Circular Ring Mould", image: "/assets/resin-moulds/circular-ring-mould.jpeg", specs: { "Design": "Circular ring" } },
+    { id: "resin-moulds-designs-heart-set", label: "Heart Mould Set", size: "Heart Mould Set", image: "/assets/resin-moulds/heart-mould-set.jpeg", specs: { "Design": "Heart mould set" } },
+    { id: "resin-moulds-designs-bookmark-pair", label: "Decorative Bookmark Mould Pair", size: "Decorative Bookmark Mould Pair", image: "/assets/resin-moulds/decorative-bookmark-mould-pair.jpeg", specs: { "Design": "Decorative wing/bookmark pair" } }
+  ];
+  var resinMouldDescription = "Choose from eight resin mould designs for flowers, trays, car dashboard pieces, rings, hearts and decorative bookmarks. Select a design to view its photo and size. Each design is ₹200, with 30 pieces available.";
+  P.push({
+    id: "resin-moulds-designs", name: "Resin Moulds — Choose Your Design", brand: "UVID", category: "resin-moulds",
+    price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "🌸", bg: "#FFF8F0", ink: "#85614A", stock: 240,
+    tags: ["new"], highlights: ["Eight mould designs to choose from", "Each design costs ₹200", "30 pieces available per design"],
+    specs: { "Category": "Resin Moulds", "Price": "₹200 per design", "Stock": "30 per design" },
+    description: resinMouldDescription,
+    variantMeta: RESIN_MOULD_VARIANTS.map(function (v) { return { id: v.id, size: v.size, label: v.label, price: 200, stock: 30 }; })
+  });
+  RESIN_MOULD_VARIANTS.forEach(function (v) {
+    P.push({
+      id: v.id, name: "Resin Moulds — Choose Your Design — " + v.label, brand: "UVID", category: "resin-moulds",
+      price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "🌸", bg: "#FFF8F0", ink: "#85614A", stock: 30,
+      tags: ["vc-hidden"], parent: "resin-moulds-designs", localImage: v.image,
+      highlights: ["Resin mould for creative projects", v.label, "₹200 each · 30 in stock"], specs: v.specs, description: resinMouldDescription
+    });
+  });
+
   /* attach generated art + derived fields.
      Real photos: window.UVID_IMG (from data/product-images.js) overrides SVG art
      when assets/<product-id>.jpg exists — built by tools/embed-images.js. */
   var REAL = (typeof window !== "undefined" && window.UVID_IMG) || {};
   P.forEach(function (p, i) {
-    p.img = REAL[p.id] || art(p.emoji, p.bg, p.ink);
+    p.img = p.localImage || REAL[p.id] || art(p.emoji, p.bg, p.ink);
     p.thumb = p.img;
     p.discount = Math.round(((p.mrp - p.price) / p.mrp) * 100);
     p.added = P.length - i;              // "newest" ordering
@@ -165,6 +197,25 @@
       main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, img: rec.img });
     }
     if (main.variants.length) main.img = main.variants[0].img; // 3 mm pack shot
+  })();
+
+  /* Wire the eight resin mould designs to the product page selector. */
+  (function () {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === "resin-moulds-designs") main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      rec.parent = main.id;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+    if (main.variants.length) {
+      main.img = main.variants[0].img;
+      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
+    }
   })();
 
   /* products shown in listings/search/home — excludes _vc-* variant records */
