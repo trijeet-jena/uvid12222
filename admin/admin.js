@@ -649,13 +649,13 @@
       '<label class="fld"><span>Stock quantity <i>*</i></span><input name="stock" type="number" min="0" step="1" required value="' + (editing ? p.stockQuantity : "") + '"></label>' +
       '<label class="fld"><span>Emoji (art fallback)</span><input name="emoji" maxlength="4" placeholder="📦" value="' + esc(editing && p.emoji ? p.emoji : "") + '"></label>' +
       "</div>" +
-      '<div class="fld"><span>Colours / variants (optional)</span><div class="varbox">' +
-      '<p class="varbox__hint">Add one row for each colour or option. Give each its own name, price, stock and photo. For example: Red, Green and Yellow.</p>' +
+      '<div class="fld"><span>Variants (optional)</span><div class="varbox">' +
+      '<p class="varbox__hint">Add one row for each design, size or colour. Give each its own name, price, stock and photo. For example: Rose Mould, Daisy Mould or 3 inch.</p>' +
       '<div id="varList">' + children.map(varRowHtml).join("") + "</div>" +
       '<button type="button" class="btn btn--ghost btn--sm var-add" id="varAdd">' + ICONS.plus + " Add variant</button>" +
       "</div></div>" +
       '<div class="fld span2"><span>Photos</span><div class="varbox">' +
-      '<p class="varbox__hint">Photos are saved in cloud storage. The first one is the main photo. Choose a colour to add photos for that colour only.</p>' +
+      '<p class="varbox__hint">Photos uploaded here are saved in cloud storage. The first photo is the main photo. Select a variant to add photos for that option only.</p>' +
       '<div class="gal__tabs" id="galTabs"></div>' +
       '<div class="gal" id="galGrid"></div>' +
       '<input type="file" id="galFile" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple>' +
@@ -866,7 +866,7 @@
       const seenVariantNames = new Set();
       for (const v of variants) {
         const key = v.label.toLocaleLowerCase();
-        if (seenVariantNames.has(key)) return fail('The variant name "' + v.label + '" is repeated. Use a different name for each colour or option.');
+        if (seenVariantNames.has(key)) return fail('The variant name "' + v.label + '" is repeated. Use a different name for each design, size or colour.');
         seenVariantNames.add(key);
       }
 

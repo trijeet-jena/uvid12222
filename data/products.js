@@ -30,7 +30,8 @@
     { slug: "desk",      label: "Desk Accessories", emoji: "🗂️", blurb: "Organisers, stands & clips" },
     { slug: "school",    label: "School Essentials",emoji: "✏️", blurb: "Geometry, labels & kits" },
     { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" },
-    { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" }
+    { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" },
+    { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" }
   ];
 
   /* ---------- products ---------- */
@@ -169,6 +170,64 @@
       highlights: ["Resin mould for creative projects", v.label, "₹200 each · 30 in stock"], specs: v.specs, description: resinMouldDescription
     });
   });
+  /* Candle mould photos are shipped as repository assets. Each collection is
+     one editable catalog parent with five individually priced/stocked designs. */
+  var CANDLE_MOULD_COLLECTIONS = [
+    {
+      id: "candle-rose-moulds", name: "Rose Candle Mould Collection",
+      image: "/assets/candle-moulds/rose-zw354.jpeg", emoji: "🌹", bg: "#FFF5F4", ink: "#A04F63",
+      variants: [
+        { id: "candle-rose-moulds-zw352", label: "ZW352 · Rose Bouquet", image: "/assets/candle-moulds/rose-bouquet-zw352.jpeg", specs: { "Design": "Rose bouquet", "Model": "ZW352", "Mould size": "81 × 79 mm" } },
+        { id: "candle-rose-moulds-zw343", label: "ZW343 · Three-Rose Pillar", image: "/assets/candle-moulds/three-rose-pillar-zw343.jpeg", specs: { "Design": "Three-rose pillar", "Model": "ZW343", "Mould size": "65 × 107 mm" } },
+        { id: "candle-rose-moulds-zw342", label: "ZW342 · Rose Bloom", image: "/assets/candle-moulds/rose-bloom-zw342.jpeg", specs: { "Design": "Sculpted rose bloom", "Model": "ZW342", "Mould size": "87 × 83 × 80 mm" } },
+        { id: "candle-rose-moulds-zw345", label: "ZW345 · Twin Rose Pillar", image: "/assets/candle-moulds/twin-rose-pillar-zw345.jpeg", specs: { "Design": "Twin rose pillar", "Model": "ZW345", "Mould size": "65 × 71 × 102 mm" } },
+        { id: "candle-rose-moulds-zw346", label: "ZW346 · Layered Rose Bloom", image: "/assets/candle-moulds/layered-rose-bloom-zw346.jpeg", specs: { "Design": "Layered rose bloom", "Model": "ZW346", "Mould size": "99 mm" } }
+      ]
+    },
+    {
+      id: "candle-flower-moulds", name: "Flower Candle Mould Collection",
+      image: "/assets/candle-moulds/flower-cluster-zw382.jpeg", emoji: "🌼", bg: "#FFF9ED", ink: "#A87426",
+      variants: [
+        { id: "candle-flower-moulds-zw381", label: "ZW381 · Lavender Pillar", image: "/assets/candle-moulds/lavender-pillar-zw381.jpeg", specs: { "Design": "Lavender pillar", "Model": "ZW381", "Mould size": "79 × 88 mm" } },
+        { id: "candle-flower-moulds-zw347", label: "ZW347 · Dahlia Bloom", image: "/assets/candle-moulds/dahlia-bloom-zw347.jpeg", specs: { "Design": "Dahlia bloom", "Model": "ZW347", "Mould size": "93 × 92 mm" } },
+        { id: "candle-flower-moulds-zw299", label: "ZW299 · Sunflower", image: "/assets/candle-moulds/sunflower-zw299.jpeg", specs: { "Design": "Sunflower", "Model": "ZW299", "Mould size": "91 mm" } },
+        { id: "candle-flower-moulds-zw217", label: "ZW217 · Daisy Stem", image: "/assets/candle-moulds/daisy-stem-zw217.jpeg", specs: { "Design": "Daisy on stem", "Model": "ZW217", "Mould size": "75 × 116 mm" } },
+        { id: "candle-flower-moulds-zw216", label: "ZW216 · Tulip Stem", image: "/assets/candle-moulds/tulip-stem-zw216.jpeg", specs: { "Design": "Tulip on stem", "Model": "ZW216", "Mould size": "75 × 106 mm" } }
+      ]
+    },
+    {
+      id: "candle-lotus-floral-moulds", name: "Lotus & Floral Candle Mould Collection",
+      image: "/assets/candle-moulds/lotus-bloom-zw295.jpeg", emoji: "🪷", bg: "#FFF5F8", ink: "#9D5572",
+      variants: [
+        { id: "candle-lotus-floral-moulds-zw315", label: "ZW315 · Lotus Bowl", image: "/assets/candle-moulds/lotus-bowl-zw315.jpeg", specs: { "Design": "Lotus bowl", "Model": "ZW315", "Mould size": "86 × 50 mm" } },
+        { id: "candle-lotus-floral-moulds-zw312", label: "ZW312 · Lotus Bud", image: "/assets/candle-moulds/lotus-bud-zw312.jpeg", specs: { "Design": "Lotus bud", "Model": "ZW312", "Mould size": "73 × 73 mm" } },
+        { id: "candle-lotus-floral-moulds-zw327", label: "ZW327 · Blossom", image: "/assets/candle-moulds/blossom-zw327.jpeg", specs: { "Design": "Blossom candle", "Model": "ZW327", "Mould size": "80 × 48 mm" } },
+        { id: "candle-lotus-floral-moulds-zw301", label: "ZW301 · Red Flower", image: "/assets/candle-moulds/red-flower-zw301.jpeg", specs: { "Design": "Red flower", "Model": "ZW301", "Mould size": "93 mm" } },
+        { id: "candle-lotus-floral-moulds-zw353", label: "ZW353 · Rose Pedestal", image: "/assets/candle-moulds/rose-pedestal-zw353.jpeg", specs: { "Design": "Rose pedestal", "Model": "ZW353", "Mould size": "84 × 74 mm" } }
+      ]
+    }
+  ];
+  CANDLE_MOULD_COLLECTIONS.forEach(function (group) {
+    var description = "Explore five selectable decorative mould designs in the " + group.name.toLowerCase() + ". The main photo introduces the collection; choose a design to view its mould and finished-candle photo. Each design is ₹200, with 30 pieces in stock per design.";
+    P.push({
+      id: group.id, name: group.name, brand: "UVID", category: "candle-making",
+      price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink,
+      stock: group.variants.length * 30, tags: ["new"], localImage: group.image,
+      highlights: ["Six decorative mould photos", "₹200 per selected design", "30 pieces in stock per design"],
+      specs: { "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" },
+      description: description,
+      variantMeta: group.variants.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
+    });
+    group.variants.forEach(function (variant) {
+      P.push({
+        id: variant.id, name: group.name + " — " + variant.label, brand: "UVID", category: "candle-making",
+        price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink, stock: 30,
+        tags: ["vc-hidden"], parent: group.id, variantLabel: variant.label, localImage: variant.image,
+        highlights: ["Decorative candle mould for handmade candle projects", variant.label, "₹200 each · 30 in stock"],
+        specs: variant.specs, description: description
+      });
+    });
+  });
   var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
   var ROUND_MOULD_VARIANTS = [
     { id: "round-resin-mould-3-inch", label: "3 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
@@ -261,6 +320,21 @@
       main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
     }
   })();
+
+  /* Wire each candle mould collection's five photos to its design selector. */
+  CANDLE_MOULD_COLLECTIONS.forEach(function (group) {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === group.id) main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      rec.parent = main.id;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+  });
 
   /* products shown in listings/search/home — excludes _vc-* variant records */
   var VISIBLE = P.filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });

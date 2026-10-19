@@ -107,7 +107,7 @@
       (p.rating ? '<div class="rate"><span class="rate__badge">' + p.rating.toFixed(1) + ' <i>★</i></span><span class="rate__count">(' + p.ratingCount.toLocaleString("en-IN") + ')</span></div>' : '<div class="rate rate--new">New</div>') +
       '<div class="pcard__price"><b>' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
       (p.variants && p.variants.length
-        ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">Choose a colour</a>'
+        ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">' + (p.category === "candle-making" || p.category === "resin-moulds" ? "Choose a design" : "Choose an option") + '</a>'
         : inCart > 0
           ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
           : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
@@ -397,7 +397,7 @@
     var hasVariants = !!(mainP.variants && mainP.variants.length);
     var variantHeading = hasVariants && mainP.variants.every(function (v) {
       return /^\d+(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?)$/i.test(String(v.label || v.size || "").trim());
-    }) ? "Available sizes" : (mainP.category === "resin-moulds" ? "Available designs" : "Available options");
+    }) ? "Available sizes" : (mainP.category === "resin-moulds" || mainP.category === "candle-making" ? "Available designs" : "Available options");
     A.pushRecent && A.pushRecent(mainId);
     var reviews = D.reviewsFor(id);
     var wished = A.inWishlist(mainId);
