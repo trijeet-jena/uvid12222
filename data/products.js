@@ -169,6 +169,31 @@
       highlights: ["Resin mould for creative projects", v.label, "₹200 each · 30 in stock"], specs: v.specs, description: resinMouldDescription
     });
   });
+  var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
+  var ROUND_MOULD_VARIANTS = [
+    { id: "round-resin-mould-3-inch", label: "3 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
+    { id: "round-resin-mould-4-inch", label: "4 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
+    { id: "round-resin-mould-6-inch", label: "6 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
+    { id: "round-resin-mould-8-inch", label: "8 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
+    { id: "round-resin-mould-18-inch", label: "18 inches", image: "/assets/resin-moulds/round-resin-mould.jpg" }
+  ];
+  P.push({
+    id: "round-resin-mould", name: "Round Resin Mould", brand: "UVID", category: "resin-moulds",
+    price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "⚪", bg: "#FFF8F0", ink: "#85614A", stock: 150,
+    tags: ["new"], highlights: ["Round mould for resin projects", "Available sizes: 3, 4, 6, 8 and 18 inches", "₹200 each · 30 in stock per size"],
+    specs: { "Design": "Round resin mould", "Available sizes": "3, 4, 6, 8 and 18 inches", "Stock": "30 per size" },
+    description: roundResinDescription,
+    variantMeta: ROUND_MOULD_VARIANTS.map(function (v) { return { id: v.id, size: v.label, label: v.label, price: 200, stock: 30 }; })
+  });
+  ROUND_MOULD_VARIANTS.forEach(function (v) {
+    P.push({
+      id: v.id, name: "Round Resin Mould — " + v.label, brand: "UVID", category: "resin-moulds",
+      price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "⚪", bg: "#FFF8F0", ink: "#85614A", stock: 30,
+      tags: ["vc-hidden"], parent: "round-resin-mould", localImage: v.image,
+      highlights: ["Round mould for resin projects", "Size: " + v.label, "₹200 each · 30 in stock"],
+      specs: { "Design": "Round resin mould", "Size": v.label }, description: roundResinDescription
+    });
+  });
 
   /* attach generated art + derived fields.
      Real photos: window.UVID_IMG (from data/product-images.js) overrides SVG art
@@ -203,6 +228,25 @@
   (function () {
     var main = null, i, j;
     for (i = 0; i < P.length; i++) if (P[i].id === "resin-moulds-designs") main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      rec.parent = main.id;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+    if (main.variants.length) {
+      main.img = main.variants[0].img;
+      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
+    }
+  })();
+
+  /* Wire the round mould size options to the product page selector. */
+  (function () {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === "round-resin-mould") main = P[i];
     if (!main || !main.variantMeta) return;
     main.variants = [];
     for (i = 0; i < main.variantMeta.length; i++) {

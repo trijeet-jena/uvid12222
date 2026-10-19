@@ -399,6 +399,9 @@
       p = D.findProduct(selectedVariant.id) || p;
     }
     var hasVariants = !!(mainP.variants && mainP.variants.length);
+    var variantHeading = hasVariants && mainP.variants.every(function (v) {
+      return /^\d+(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?)$/i.test(String(v.label || v.size || "").trim());
+    }) ? "Available sizes" : (mainP.category === "resin-moulds" ? "Available designs" : "Available options");
     A.pushRecent && A.pushRecent(mainId);
     var reviews = D.reviewsFor(id);
     var wished = A.inWishlist(mainId);
@@ -422,7 +425,7 @@
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
       (hasVariants
-        ? '<div class="pdp__colours" role="group" aria-label="Colour"><span class="pdp__colourslabel">Colour</span>' +
+        ? '<div class="pdp__colours" role="group" aria-label="' + variantHeading + '"><span class="pdp__colourslabel">' + variantHeading + '</span>' +
           mainP.variants.map(function (v) {
             return '<button type="button" class="pdp__swatch' + (p.id === v.id ? " pdp__swatch--on" : "") + '" data-vcsize="' + esc(v.size) + '" data-vcid="' + v.id + '" aria-pressed="' + (p.id === v.id) + '">' +
               '<img src="' + v.img + '" alt="" />' + esc(v.label) + "</button>";
