@@ -205,15 +205,25 @@
         { id: "candle-lotus-floral-moulds-zw301", label: "ZW301 · Red Flower", image: "/assets/candle-moulds/red-flower-zw301.jpeg", specs: { "Design": "Red flower", "Model": "ZW301", "Mould size": "93 mm" } },
         { id: "candle-lotus-floral-moulds-zw353", label: "ZW353 · Rose Pedestal", image: "/assets/candle-moulds/rose-pedestal-zw353.jpeg", specs: { "Design": "Rose pedestal", "Model": "ZW353", "Mould size": "84 × 74 mm" } }
       ]
+    },
+    {
+      id: "candle-ornate-pillar-moulds", name: "Ornate Pillar Candle Mould Collection",
+      image: "/assets/candle-moulds/ornate-pillar-zl198.jpeg", emoji: "🕯️", bg: "#FFF8F3", ink: "#80533F",
+      variants: [
+        { id: "candle-ornate-pillar-moulds-zl197", label: "ZL-197 · Scroll Pillar", image: "/assets/candle-moulds/ornate-pillar-zl197.jpeg", specs: { "Design": "Ornate scroll pillar", "Model": "ZL-197", "Mould dimensions": "58 × 123 mm", "Finished candle dimensions": "41 × 112 mm" } },
+        { id: "candle-ornate-pillar-moulds-zl195", label: "ZL-195 · Sculpted Pillar", image: "/assets/candle-moulds/ornate-pillar-zl195.jpeg", specs: { "Design": "Sculpted pillar", "Model": "ZL-195", "Mould dimensions": "70 × 112 mm", "Finished candle dimensions": "59 × 101 mm" } },
+        { id: "candle-ornate-pillar-moulds-zl194", label: "ZL-194 · Fluted Pillar", image: "/assets/candle-moulds/ornate-pillar-zl194.jpeg", specs: { "Design": "Fluted pillar", "Model": "ZL-194", "Mould dimensions": "61 × 111 mm", "Finished candle dimensions": "51 × 102 mm" } },
+        { id: "candle-ornate-pillar-moulds-zl196", label: "ZL-196 · Ripple Pillar", image: "/assets/candle-moulds/ornate-pillar-zl196.jpeg", specs: { "Design": "Ripple pillar", "Model": "ZL-196", "Mould dimensions": "59 × 121 mm", "Finished candle dimensions": "45 × 111 mm" } }
+      ]
     }
   ];
   CANDLE_MOULD_COLLECTIONS.forEach(function (group) {
-    var description = "Explore five selectable decorative mould designs in the " + group.name.toLowerCase() + ". The main photo introduces the collection; choose a design to view its mould and finished-candle photo. Each design is ₹200, with 30 pieces in stock per design.";
+    var description = "Browse " + group.variants.length + " selectable decorative candle mould designs in the " + group.name.toLowerCase() + ". View the featured mould and finished candle, then choose an available design. Each design is ₹200, with 30 pieces in stock per design.";
     P.push({
       id: group.id, name: group.name, brand: "UVID", category: "candle-making",
       price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink,
       stock: group.variants.length * 30, tags: ["new"], localImage: group.image,
-      highlights: ["Six decorative mould photos", "₹200 per selected design", "30 pieces in stock per design"],
+      highlights: [(group.variants.length + 1) + " collection photos", "₹200 per selected design", "30 pieces in stock per design"],
       specs: { "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" },
       description: description,
       variantMeta: group.variants.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
