@@ -133,8 +133,8 @@
 
   /* ================= HOME ================= */
 
-  function shelf(title, note, list, href) {
-    return '<section class="shelf reveal">' +
+  function shelf(title, note, list, href, className) {
+    return '<section class="shelf reveal' + (className ? " " + className : "") + '">' +
       '<div class="shelf__head"><div><h2>' + esc(title) + '</h2>' + (note ? '<p>' + esc(note) + '</p>' : "") + '</div>' +
       (href ? '<a class="shelf__more" href="' + href + '">View all →</a>' : "") + '</div>' +
       '<div class="hgrid">' + list.map(productCard).join("") + '</div></section>';
@@ -146,11 +146,7 @@
       { src: "/assets/resin-moulds/round-resin-mould.jpg", label: "Round resin mould" },
       { src: "/assets/resin-moulds/heart-mould-set.jpeg", label: "Heart mould set" },
       { src: "/assets/resin-moulds/flower-garland-1-4-inch.jpeg", label: "Flower mould set · 1–4 in" },
-      { src: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", label: "Rectangular tray mould · 12 × 16 in" },
-      { src: "/assets/resin-moulds/car-dashboard-4-inch.jpeg", label: "Car dashboard mould · 4 in" },
-      { src: "/assets/resin-moulds/four-slot-rectangle-mould.jpeg", label: "Four-slot rectangle mould" },
-      { src: "/assets/resin-moulds/circular-ring-mould.jpeg", label: "Circular ring mould" },
-      { src: "/assets/resin-moulds/decorative-bookmark-mould-pair.jpeg", label: "Decorative bookmark mould pair" }
+      { src: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", label: "Rectangular tray mould · 12 × 16 in" }
     ];
     return '<section class="mould-showcase card reveal" aria-labelledby="mouldShowcaseTitle">' +
       '<div class="mould-showcase__head"><div><p class="kicker">UVID Resin Moulds</p><h2 id="mouldShowcaseTitle">A closer look at our mould collection</h2><p>Browse the designs and details in these product photos.</p></div></div>' +
@@ -163,7 +159,26 @@
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 5);
-    var recent = A.state.recent.filter(function (id) { return id.charAt(0) !== "_" && D.findProduct(id); }).slice(0, 6).map(D.findProduct).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
+    var recentByCategory = Object.create(null), recentCategoryOrder = [];
+    A.state.recent.forEach(function (id) {
+      if (id.charAt(0) === "_") return;
+      var product = D.findProduct(id);
+      if (!product || product.tags.indexOf("vc-hidden") !== -1) return;
+      var category = product.category;
+      if (!recentByCategory[category]) {
+        recentByCategory[category] = { category: D.categoryBySlug(category), products: [] };
+        recentCategoryOrder.push(category);
+      }
+      if (recentByCategory[category].products.length < 4) recentByCategory[category].products.push(product);
+    });
+    var recent = recentCategoryOrder.length
+      ? '<div class="recent-categories"><div class="shelf__head"><div><h2>Recently viewed</h2><p>Up to four products from each category</p></div></div>' +
+        recentCategoryOrder.map(function (category) {
+          var group = recentByCategory[category];
+          var label = group.category ? group.category.label : category;
+          return shelf(label, "Recently viewed in " + label, group.products, null, "shelf--recent");
+        }).join("") + '</div>'
+      : "";
 
     view.innerHTML =
       mouldShowcase() +
@@ -177,7 +192,7 @@
       '<div class="perk"><span>🇮🇳</span><h4>Made for India</h4><p>Prices in ₹, GST invoice, support that replies.</p></div>' +
       '</section>' +
 
-      (recent.length ? shelf("Recently viewed", "Pick up where you left off", recent) : "");
+      recent;
   }
 
   /* ================= LISTING + FILTERS ================= */

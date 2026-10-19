@@ -356,7 +356,7 @@
     var idx = state.recent.indexOf(id);
     if (idx !== -1) state.recent.splice(idx, 1);
     state.recent.unshift(id);
-    state.recent = state.recent.slice(0, 8);
+    state.recent = state.recent.slice(0, 40);
     save();
   }
 
