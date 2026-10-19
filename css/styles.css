@@ -250,10 +250,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .shelf__more:hover { text-decoration: underline; }
 .hgrid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(212px, 1fr); gap: 14px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x mandatory; }
 .shelf--recent .hgrid { grid-auto-columns: minmax(150px, 178px); gap: 10px; padding-bottom: 10px; }
-.recent-categories { margin: 34px 0; }
-.recent-categories > .shelf__head { margin-bottom: 16px; }
-.recent-categories > .shelf { margin: 18px 0; }
-.recent-categories > .shelf .shelf__head { margin-bottom: 8px; }
 .hgrid > * { scroll-snap-align: start; }
 .hgrid::-webkit-scrollbar { height: 8px; }
 .hgrid::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }

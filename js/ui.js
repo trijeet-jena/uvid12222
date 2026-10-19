@@ -159,25 +159,19 @@
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 5);
-    var recentByCategory = Object.create(null), recentCategoryOrder = [];
+    var recent = [], recentCategoryCounts = Object.create(null);
     A.state.recent.forEach(function (id) {
       if (id.charAt(0) === "_") return;
       var product = D.findProduct(id);
       if (!product || product.tags.indexOf("vc-hidden") !== -1) return;
       var category = product.category;
-      if (!recentByCategory[category]) {
-        recentByCategory[category] = { category: D.categoryBySlug(category), products: [] };
-        recentCategoryOrder.push(category);
-      }
-      if (recentByCategory[category].products.length < 4) recentByCategory[category].products.push(product);
+      recentCategoryCounts[category] = recentCategoryCounts[category] || 0;
+      if (recentCategoryCounts[category] >= 4) return;
+      recentCategoryCounts[category] += 1;
+      recent.push(product);
     });
-    var recent = recentCategoryOrder.length
-      ? '<div class="recent-categories"><div class="shelf__head"><div><h2>Recently viewed</h2><p>Up to four products from each category</p></div></div>' +
-        recentCategoryOrder.map(function (category) {
-          var group = recentByCategory[category];
-          var label = group.category ? group.category.label : category;
-          return shelf(label, "Recently viewed in " + label, group.products, null, "shelf--recent");
-        }).join("") + '</div>'
+    var recentShelf = recent.length
+      ? shelf("Recently viewed", "Up to four products from each category", recent, null, "shelf--recent")
       : "";
 
     view.innerHTML =
@@ -192,7 +186,7 @@
       '<div class="perk"><span>🇮🇳</span><h4>Made for India</h4><p>Prices in ₹, GST invoice, support that replies.</p></div>' +
       '</section>' +
 
-      recent;
+      recentShelf;
   }
 
   /* ================= LISTING + FILTERS ================= */
