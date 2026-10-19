@@ -1303,16 +1303,31 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         { id: "candle-ornate-pillar-moulds-zl194", label: "ZL-194 · Fluted Pillar", image: "/assets/candle-moulds/ornate-pillar-zl194.jpeg", specs: { "Design": "Fluted pillar", "Model": "ZL-194", "Mould dimensions": "61 × 111 mm", "Finished candle dimensions": "51 × 102 mm" } },
         { id: "candle-ornate-pillar-moulds-zl196", label: "ZL-196 · Ripple Pillar", image: "/assets/candle-moulds/ornate-pillar-zl196.jpeg", specs: { "Design": "Ripple pillar", "Model": "ZL-196", "Mould dimensions": "59 × 121 mm", "Finished candle dimensions": "45 × 111 mm" } }
       ]
+    },
+    {
+      id: "candle-whimsical-moulds", name: "Whimsical Candle Mould Collection",
+      image: "/assets/candle-moulds/honey-bear-pillar-zl943.jpeg", emoji: "🕯️", bg: "#FFF7E7", ink: "#8A5A22",
+      localOnly: true,
+      description: "Create playful, character-inspired candles with this whimsical collection. ZL-943 is the featured design; choose from six additional mould designs. Each selectable design is ₹200, with 30 pieces available.",
+      specs: { "Featured model": "ZL-943", "Featured candle height": "100 mm", "Price": "₹200 per selected design", "Stock": "30 pieces per selected design" },
+      variants: [
+        { id: "candle-whimsical-moulds-zl900", label: "ZL900 · Portrait", image: "/assets/candle-moulds/portrait-candle-zl900.jpeg", specs: { "Model": "ZL900", "Mould dimensions": "113 × 85 mm (150 g)", "Finished candle": "101 × 75 mm (146 g)" } },
+        { id: "candle-whimsical-moulds-zl895", label: "ZL895 · Owl", image: "/assets/candle-moulds/owl-candle-zl895.jpeg", specs: { "Model": "ZL895", "Mould dimensions": "83 × 83 mm (110 g)", "Finished candle": "74 × 71 mm (117 g)" } },
+        { id: "candle-whimsical-moulds-zl888", label: "ZL888 · Witch and Owl", image: "/assets/candle-moulds/witch-owl-candle-zl888.jpeg", specs: { "Model": "ZL888", "Mould dimensions": "77 × 106 mm (161 g)", "Finished candle": "73 × 93 mm (255 g)" } },
+        { id: "candle-whimsical-moulds-zl878", label: "ZL878 · Cherub", image: "/assets/candle-moulds/cherub-candle-zl878.jpeg", specs: { "Model": "ZL878", "Mould dimensions": "83 × 88 mm (141 g)", "Finished candle": "69 × 79 mm (151 g)" } },
+        { id: "candle-whimsical-moulds-zl890", label: "ZL890 · Owl on Stump", image: "/assets/candle-moulds/owl-candle-zl890.jpeg", specs: { "Model": "ZL890", "Mould dimensions": "70 × 89 mm (96 g)", "Finished candle": "60 × 79 mm (96 g)" } },
+        { id: "candle-whimsical-moulds-zl909", label: "ZL909 · Heart Babies", image: "/assets/candle-moulds/heart-babies-candle-zl909.jpeg", specs: { "Model": "ZL909", "Mould dimensions": "90 × 87 mm", "Finished candle": "80 × 75 mm" } }
+      ]
     }
   ];
   CANDLE_MOULD_COLLECTIONS.forEach(function (group) {
-    var description = "Browse " + group.variants.length + " selectable decorative candle mould designs in the " + group.name.toLowerCase() + ". View the featured mould and finished candle, then choose an available design. Each design is ₹200, with 30 pieces in stock per design.";
+    var description = group.description || ("Browse " + group.variants.length + " selectable decorative candle mould designs in the " + group.name.toLowerCase() + ". View the featured mould and finished candle, then choose an available design. Each design is ₹200, with 30 pieces in stock per design.");
     P.push({
       id: group.id, name: group.name, brand: "UVID", category: "candle-making",
       price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink,
-      stock: group.variants.length * 30, tags: ["new"], localImage: group.image,
-      highlights: [(group.variants.length + 1) + " collection photos", "₹200 per selected design", "30 pieces in stock per design"],
-      specs: { "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" },
+      stock: group.variants.length * 30, tags: ["new"], localImage: group.image, localOnly: group.localOnly === true,
+      highlights: group.highlights || [(group.variants.length + 1) + " collection photos", "₹200 per selected design", "30 pieces in stock per design"],
+      specs: Object.assign({ "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" }, group.specs || {}),
       description: description,
       variantMeta: group.variants.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
     });
@@ -1320,7 +1335,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       P.push({
         id: variant.id, name: group.name + " — " + variant.label, brand: "UVID", category: "candle-making",
         price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink, stock: 30,
-        tags: ["vc-hidden"], parent: group.id, variantLabel: variant.label, localImage: variant.image,
+        tags: ["vc-hidden"], parent: group.id, variantLabel: variant.label, localImage: variant.image, localOnly: group.localOnly === true,
         highlights: ["Decorative candle mould for handmade candle projects", variant.label, "₹200 each · 30 in stock"],
         specs: variant.specs, description: description
       });
