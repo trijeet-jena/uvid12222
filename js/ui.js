@@ -133,18 +133,6 @@
 
   /* ================= HOME ================= */
 
-  function dealCountdown() {
-    var now = new Date();
-    var end = new Date(now); end.setHours(23, 59, 59, 999);
-    var s = Math.max(0, Math.floor((end - now) / 1000));
-    var h = String(Math.floor(s / 3600)).padStart(2, "0");
-    var m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-    var sec = String(s % 60).padStart(2, "0");
-    var el = document.getElementById("dealTimer");
-    if (el) el.textContent = h + ":" + m + ":" + sec;
-  }
-  setInterval(dealCountdown, 1000);
-
   function shelf(title, note, list, href) {
     return '<section class="shelf reveal">' +
       '<div class="shelf__head"><div><h2>' + esc(title) + '</h2>' + (note ? '<p>' + esc(note) + '</p>' : "") + '</div>' +
@@ -152,23 +140,33 @@
       '<div class="hgrid">' + list.map(productCard).join("") + '</div></section>';
   }
 
+  function mouldShowcase() {
+    var images = [
+      { src: "/assets/resin-moulds/flower-mould-8-inch.jpeg", label: "Flower mould · 8 in" },
+      { src: "/assets/resin-moulds/round-resin-mould.jpg", label: "Round resin mould" },
+      { src: "/assets/resin-moulds/heart-mould-set.jpeg", label: "Heart mould set" },
+      { src: "/assets/resin-moulds/flower-garland-1-4-inch.jpeg", label: "Flower mould set · 1–4 in" },
+      { src: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", label: "Rectangular tray mould · 12 × 16 in" },
+      { src: "/assets/resin-moulds/car-dashboard-4-inch.jpeg", label: "Car dashboard mould · 4 in" },
+      { src: "/assets/resin-moulds/four-slot-rectangle-mould.jpeg", label: "Four-slot rectangle mould" },
+      { src: "/assets/resin-moulds/circular-ring-mould.jpeg", label: "Circular ring mould" },
+      { src: "/assets/resin-moulds/decorative-bookmark-mould-pair.jpeg", label: "Decorative bookmark mould pair" }
+    ];
+    return '<section class="mould-showcase card reveal" aria-labelledby="mouldShowcaseTitle">' +
+      '<div class="mould-showcase__head"><div><p class="kicker">UVID Resin Moulds</p><h2 id="mouldShowcaseTitle">A closer look at our mould collection</h2><p>Browse the designs and details in these product photos.</p></div></div>' +
+      '<div class="mould-showcase__grid">' + images.map(function (item) {
+        return '<figure class="mould-showcase__item"><img src="' + item.src + '" alt="' + esc(item.label) + '" loading="lazy" decoding="async"><figcaption>' + esc(item.label) + '</figcaption></figure>';
+      }).join("") + '</div></section>';
+  }
+
   function home() {
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 6);
     var recent = A.state.recent.filter(function (id) { return id.charAt(0) !== "_" && D.findProduct(id); }).slice(0, 6).map(D.findProduct).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
-    var deal = D.visibleProducts.filter(function (p) { return p.discount >= 33; }).sort(function (a, b) { return b.discount - a.discount; })[0] || D.visibleProducts[0];
 
     view.innerHTML =
-      (deal ? '<section class="dealstrip card reveal">' +
-      '<div class="dealstrip__info"><p class="kicker">Deal of the day</p>' +
-      '<h3>' + esc(deal.name) + '</h3>' +
-      '<div class="pcard__price"><b>' + money(deal.price) + '</b><s>' + money(deal.mrp) + '</s><em>' + deal.discount + '% off</em></div>' +
-      '<div class="dealstrip__timer">Ends in <b id="dealTimer">--:--:--</b></div>' +
-      (deal.variants && deal.variants.length
-        ? '<a class="btn btn--primary" href="#/p/' + deal.id + '">Choose a colour</a>'
-        : '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button>') + '</div>' +
-      '<img class="dealstrip__img" src="' + deal.img + '" alt="" /></section>' : "") +
+      mouldShowcase() +
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
       shelf("Deals of the week", "Marked down, marked out of stock soon", deals, "#/search?sort=discount") +
@@ -180,8 +178,6 @@
       '</section>' +
 
       (recent.length ? shelf("Recently viewed", "Pick up where you left off", recent) : "");
-
-    dealCountdown();
   }
 
   /* ================= LISTING + FILTERS ================= */

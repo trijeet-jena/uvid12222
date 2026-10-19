@@ -244,11 +244,15 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 }
 
 /* ---------------- deal strip ---------------- */
-.dealstrip { display: flex; align-items: center; gap: 26px; padding: 22px 30px; margin: 18px 0 30px; background: linear-gradient(120deg, #fff 55%, var(--tang-t)); }
-.dealstrip__info { flex: 1; }
-.dealstrip__timer { margin: 10px 0 16px; font-size: 14px; color: var(--ink-2); }
-.dealstrip__timer b { font-variant-numeric: tabular-nums; background: var(--ink); color: #fff; border-radius: 8px; padding: 3px 10px; font-size: 13.5px; letter-spacing: .06em; }
-.dealstrip__img { width: min(190px, 56vw); border-radius: 14px; border: 1px solid var(--line); transform: rotate(2.5deg); box-shadow: var(--shadow-lg); }
+.mould-showcase { margin: 18px 0 30px; padding: clamp(18px, 2.4vw, 30px); background: linear-gradient(125deg, #fff 45%, var(--green-t)); }
+.mould-showcase__head { margin-bottom: 18px; }
+.mould-showcase__head .kicker { margin: 0 0 4px; }
+.mould-showcase__head h2 { margin: 0 0 5px; }
+.mould-showcase__head p:last-child { margin: 0; color: var(--ink-2); }
+.mould-showcase__grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.mould-showcase__item { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
+.mould-showcase__item img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+.mould-showcase__item figcaption { padding: 10px 12px; color: var(--ink-2); text-align: center; font-size: 13px; font-weight: 600; }
 
 /* ---------------- shelves ---------------- */
 .shelf { margin: 34px 0; }
@@ -802,9 +806,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hero__points { gap: 10px 16px; font-size: 12.8px; }
   .hero__cards { min-height: 210px; }
   .hero__c--1 { width: 138px; } .hero__c--2 { width: 118px; top: 84px; left: 10px; } .hero__c--3 { width: 104px; right: 30px; }
-  .dealstrip { flex-direction: column; text-align: center; padding: 20px 16px; gap: 18px; }
-  .dealstrip__img { width: min(170px, 52vw); }
-  .dealstrip .btn { width: 100%; }
+  .mould-showcase__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .mould-showcase__item figcaption { padding: 8px 6px; font-size: 12px; }
   .hgrid { grid-auto-columns: minmax(164px, 1fr); gap: 10px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .pcard__body { padding: 10px 11px 12px; gap: 5px; }
@@ -864,7 +867,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .pcard__price s { font-size: 11.5px; }
   .rate__badge { font-size: 11px; }
   .hero__c--1 { width: 118px; } .hero__c--2 { width: 102px; top: 76px; left: 8px; } .hero__c--3 { width: 90px; right: 20px; }
-  .dealstrip__img { width: min(150px, 48vw); }
+  .mould-showcase__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .paysub__row { grid-template-columns: 1fr; }
   .stepsbar .step { padding: 5px 9px; font-size: 11px; }
   .success__cta .btn { width: 100%; }
@@ -2056,18 +2059,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
   /* ================= HOME ================= */
 
-  function dealCountdown() {
-    var now = new Date();
-    var end = new Date(now); end.setHours(23, 59, 59, 999);
-    var s = Math.max(0, Math.floor((end - now) / 1000));
-    var h = String(Math.floor(s / 3600)).padStart(2, "0");
-    var m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-    var sec = String(s % 60).padStart(2, "0");
-    var el = document.getElementById("dealTimer");
-    if (el) el.textContent = h + ":" + m + ":" + sec;
-  }
-  setInterval(dealCountdown, 1000);
-
   function shelf(title, note, list, href) {
     return '<section class="shelf reveal">' +
       '<div class="shelf__head"><div><h2>' + esc(title) + '</h2>' + (note ? '<p>' + esc(note) + '</p>' : "") + '</div>' +
@@ -2075,23 +2066,33 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="hgrid">' + list.map(productCard).join("") + '</div></section>';
   }
 
+  function mouldShowcase() {
+    var images = [
+      { src: "/assets/resin-moulds/flower-mould-8-inch.jpeg", label: "Flower mould · 8 in" },
+      { src: "/assets/resin-moulds/round-resin-mould.jpg", label: "Round resin mould" },
+      { src: "/assets/resin-moulds/heart-mould-set.jpeg", label: "Heart mould set" },
+      { src: "/assets/resin-moulds/flower-garland-1-4-inch.jpeg", label: "Flower mould set · 1–4 in" },
+      { src: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", label: "Rectangular tray mould · 12 × 16 in" },
+      { src: "/assets/resin-moulds/car-dashboard-4-inch.jpeg", label: "Car dashboard mould · 4 in" },
+      { src: "/assets/resin-moulds/four-slot-rectangle-mould.jpeg", label: "Four-slot rectangle mould" },
+      { src: "/assets/resin-moulds/circular-ring-mould.jpeg", label: "Circular ring mould" },
+      { src: "/assets/resin-moulds/decorative-bookmark-mould-pair.jpeg", label: "Decorative bookmark mould pair" }
+    ];
+    return '<section class="mould-showcase card reveal" aria-labelledby="mouldShowcaseTitle">' +
+      '<div class="mould-showcase__head"><div><p class="kicker">UVID Resin Moulds</p><h2 id="mouldShowcaseTitle">A closer look at our mould collection</h2><p>Browse the designs and details in these product photos.</p></div></div>' +
+      '<div class="mould-showcase__grid">' + images.map(function (item) {
+        return '<figure class="mould-showcase__item"><img src="' + item.src + '" alt="' + esc(item.label) + '" loading="lazy" decoding="async"><figcaption>' + esc(item.label) + '</figcaption></figure>';
+      }).join("") + '</div></section>';
+  }
+
   function home() {
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 6);
     var recent = A.state.recent.filter(function (id) { return id.charAt(0) !== "_" && D.findProduct(id); }).slice(0, 6).map(D.findProduct).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
-    var deal = D.visibleProducts.filter(function (p) { return p.discount >= 33; }).sort(function (a, b) { return b.discount - a.discount; })[0] || D.visibleProducts[0];
 
     view.innerHTML =
-      (deal ? '<section class="dealstrip card reveal">' +
-      '<div class="dealstrip__info"><p class="kicker">Deal of the day</p>' +
-      '<h3>' + esc(deal.name) + '</h3>' +
-      '<div class="pcard__price"><b>' + money(deal.price) + '</b><s>' + money(deal.mrp) + '</s><em>' + deal.discount + '% off</em></div>' +
-      '<div class="dealstrip__timer">Ends in <b id="dealTimer">--:--:--</b></div>' +
-      (deal.variants && deal.variants.length
-        ? '<a class="btn btn--primary" href="#/p/' + deal.id + '">Choose a colour</a>'
-        : '<button class="btn btn--primary" data-add="' + deal.id + '">Grab the deal</button>') + '</div>' +
-      '<img class="dealstrip__img" src="' + deal.img + '" alt="" /></section>' : "") +
+      mouldShowcase() +
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
       shelf("Deals of the week", "Marked down, marked out of stock soon", deals, "#/search?sort=discount") +
@@ -2103,8 +2104,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '</section>' +
 
       (recent.length ? shelf("Recently viewed", "Pick up where you left off", recent) : "");
-
-    dealCountdown();
   }
 
   /* ================= LISTING + FILTERS ================= */
