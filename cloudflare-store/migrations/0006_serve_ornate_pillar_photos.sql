@@ -1,0 +1,6 @@
+-- Serve the new catalog photos from the committed assets until the static site republishes them.
+UPDATE products SET image_url='https://raw.githubusercontent.com/trijeet-jena/uvid12222/ff4f53ca8fe98ea8541a71fcd55c1fd12c7f6d9a/assets/candle-moulds/ornate-pillar-zl198.jpeg' WHERE id='candle-ornate-pillar-moulds';
+UPDATE products SET image_url='https://raw.githubusercontent.com/trijeet-jena/uvid12222/ff4f53ca8fe98ea8541a71fcd55c1fd12c7f6d9a/assets/candle-moulds/ornate-pillar-zl197.jpeg' WHERE id='candle-ornate-pillar-moulds-zl197';
+UPDATE products SET image_url='https://raw.githubusercontent.com/trijeet-jena/uvid12222/ff4f53ca8fe98ea8541a71fcd55c1fd12c7f6d9a/assets/candle-moulds/ornate-pillar-zl195.jpeg' WHERE id='candle-ornate-pillar-moulds-zl195';
+UPDATE products SET image_url='https://raw.githubusercontent.com/trijeet-jena/uvid12222/ff4f53ca8fe98ea8541a71fcd55c1fd12c7f6d9a/assets/candle-moulds/ornate-pillar-zl194.jpeg' WHERE id='candle-ornate-pillar-moulds-zl194';
+UPDATE products SET image_url='https://raw.githubusercontent.com/trijeet-jena/uvid12222/ff4f53ca8fe98ea8541a71fcd55c1fd12c7f6d9a/assets/candle-moulds/ornate-pillar-zl196.jpeg' WHERE id='candle-ornate-pillar-moulds-zl196';
