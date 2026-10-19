@@ -162,7 +162,7 @@
   function home() {
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
-    var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 6);
+    var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 5);
     var recent = A.state.recent.filter(function (id) { return id.charAt(0) !== "_" && D.findProduct(id); }).slice(0, 6).map(D.findProduct).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
 
     view.innerHTML =
@@ -170,7 +170,7 @@
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
       shelf("Deals of the week", "Marked down, marked out of stock soon", deals, "#/search?sort=discount") +
-      shelf("Just landed", "Fresh arrivals for your desk", newest, "#/search?sort=newest") +
+      shelf("Recently added", "The latest additions to the store", newest, "#/search?sort=newest") +
       '<section class="perks reveal">' +
       '<div class="perk"><span>🚚</span><h4>Fast delivery</h4><p>2–4 days metro to metro, tracked end to end.</p></div>' +
       '<div class="perk"><span>🔒</span><h4>UPI QR payment</h4><p>Pay with PhonePe or another UPI app. Orders are confirmed after payment verification.</p></div>' +
