@@ -38,7 +38,7 @@
   --font: "Outfit", "Segoe UI", system-ui, sans-serif;
 
   --h-push: clamp(16px, 4.5vw, 64px);
-  --b-push: 76px;
+  --b-push: 0px;
   --maxw: 1600px;
 }
 
@@ -721,6 +721,14 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
 /* ================= responsive ================= */
 
+/* desktop shell: keep the full header and browsing canvas open on laptops */
+@media (min-width: 1024px) {
+  :root { --b-push: 0px; }
+  .header__row { gap: clamp(14px, 1.6vw, 24px); }
+  .view { padding-top: 30px; padding-bottom: 72px; }
+  .mould-showcase__grid { gap: 18px; }
+}
+
 /* touch ergonomics (also applies on desktop with touchscreens) */
 @media (hover: none) and (pointer: coarse) {
   .btn { min-height: 44px; }
@@ -764,7 +772,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 @media (max-width: 760px) {
   :root { --h-push: 14px; --b-push: 84px; }
   body { font-size: 14.5px; }
-  .header__row { padding: 8px var(--h-push); gap: 8px; flex-wrap: nowrap; }
+  .header__row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas: "menu brand actions" "search search search";
+    gap: 8px 10px;
+    padding: 8px var(--h-push) 10px;
+  }
+  .burger { grid-area: menu; width: 36px; height: 42px; align-items: center; justify-content: center; padding: 8px; }
+  .header .brand { grid-area: brand; min-width: 0; }
+  .search { grid-area: search; width: 100%; max-width: none; }
+  .hactions { grid-area: actions; margin-left: 0; gap: 4px; }
   .header .brand { gap: 7px; }
   .header .brand__tag { display: block; font-size: 8.5px; line-height: 1.1; letter-spacing: .055em; }
   .header .brand__name { font-size: 20px; }
@@ -780,8 +798,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .chip { padding: 4px; }
   .search__box { padding: 9px 13px; }
   .search__box input { font-size: 14px; }
-  .search__drop { position: fixed; left: 10px; right: 10px; top: 62px; }
-  .burger { display: inline-flex; flex-direction: column; gap: 5px; background: none; border: 0; padding: 10px 8px; }
+  .search__drop { position: fixed; left: 10px; right: 10px; top: 112px; max-height: min(62dvh, 420px); }
+  .burger { display: inline-flex; flex-direction: column; gap: 5px; background: none; border: 0; }
   .burger span { width: 21px; height: 2.2px; background: var(--ink); border-radius: 2px; transition: transform .2s ease; }
   .bottomnav { display: block; }
   .toast { bottom: 96px; max-width: 92vw; }
@@ -793,7 +811,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hero__points { gap: 10px 16px; font-size: 12.8px; }
   .hero__cards { min-height: 210px; }
   .hero__c--1 { width: 138px; } .hero__c--2 { width: 118px; top: 84px; left: 10px; } .hero__c--3 { width: 104px; right: 30px; }
-  .mould-showcase__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .mould-showcase__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .mould-showcase__item figcaption { padding: 8px 6px; font-size: 12px; }
   .hgrid { grid-auto-columns: minmax(164px, 1fr); gap: 10px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -847,14 +865,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hicon { padding: 8px 9px; }
   .search__box { padding: 8px 11px; }
   .search__box input { font-size: 13.5px; }
-  .search__drop { top: 56px; }
+  .search__drop { top: 108px; }
   .grid { gap: 8px; }
   .pcard__name { font-size: 12.4px; }
   .pcard__price b { font-size: 14px; }
   .pcard__price s { font-size: 11.5px; }
   .rate__badge { font-size: 11px; }
   .hero__c--1 { width: 118px; } .hero__c--2 { width: 102px; top: 76px; left: 8px; } .hero__c--3 { width: 90px; right: 20px; }
-  .mould-showcase__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .paysub__row { grid-template-columns: 1fr; }
   .stepsbar .step { padding: 5px 9px; font-size: 11px; }
   .success__cta .btn { width: 100%; }
