@@ -12,6 +12,9 @@
 
   var PT = window.PT;
   if (!PT || !Array.isArray(PT.PRODUCTS) || !Array.isArray(PT.CATEGORIES)) return;
+  /* These products and photos are bundled with the storefront source. Keep a
+     stable snapshot so API refreshes don't erase locally maintained entries. */
+  var bundledProducts = PT.PRODUCTS.filter(function (p) { return p.localOnly === true; });
 
   var booted = false;    /* true once the router has registered */
   var loading = false;   /* a refresh is in flight */
@@ -87,6 +90,17 @@
   function apply(rawProducts, rawCategories) {
     var list = (rawProducts || []).map(toProduct);
     var i;
+
+    /* The server catalog remains authoritative for server-backed products.
+       Add bundled products that are intentionally maintained in local files. */
+    var ids = Object.create(null);
+    for (i = 0; i < list.length; i++) ids[list[i].id] = true;
+    for (i = 0; i < bundledProducts.length; i++) {
+      if (!ids[bundledProducts[i].id]) {
+        list.push(bundledProducts[i]);
+        ids[bundledProducts[i].id] = true;
+      }
+    }
 
     /* categories: API rows are {slug, name, emoji, blurb, count} */
     var cats = (rawCategories || []).map(function (c) {
