@@ -14,6 +14,7 @@
   var view = $("#view");
   var addressLoadedKey = "";
   var addressPendingKey = "";
+  var dailyShowcaseTimer = null;
 
   function addressRequest(method, path, body) {
     var options = { method: method, credentials: "same-origin", headers: body ? { "Content-Type": "application/json" } : undefined };
@@ -141,17 +142,48 @@
   }
 
   function mouldShowcase() {
-    var images = [
-      { src: "/assets/resin-moulds/flower-mould-8-inch.jpeg", label: "Flower mould · 8 in" },
-      { src: "/assets/resin-moulds/round-resin-mould.jpg", label: "Round resin mould" },
-      { src: "/assets/resin-moulds/heart-mould-set.jpeg", label: "Heart mould set" },
-      { src: "/assets/resin-moulds/flower-garland-1-4-inch.jpeg", label: "Flower mould set · 1–4 in" },
-      { src: "/assets/resin-moulds/rectangular-tray-12x16-inch.jpeg", label: "Rectangular tray mould · 12 × 16 in" }
-    ];
+    var day = new Date();
+    var dayKey = [day.getFullYear(), String(day.getMonth() + 1).padStart(2, "0"), String(day.getDate()).padStart(2, "0")].join("-");
+    var byCategory = Object.create(null);
+
+    function dailyRank(value) {
+      var hash = 2166136261;
+      value = dayKey + ":" + value;
+      for (var i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return hash >>> 0;
+    }
+
+    D.visibleProducts.forEach(function (product) {
+      if (!product.category || product.parent || product.tags.indexOf("vc-hidden") !== -1) return;
+      (byCategory[product.category] = byCategory[product.category] || []).push(product);
+    });
+
+    var categories = Object.keys(byCategory).sort(function (a, b) {
+      var difference = dailyRank("category:" + a) - dailyRank("category:" + b);
+      return difference || a.localeCompare(b);
+    }).slice(0, 5);
+    var images = categories.map(function (slug) {
+      var category = D.categoryBySlug(slug);
+      var products = byCategory[slug].slice().sort(function (a, b) {
+        var difference = dailyRank("product:" + slug + ":" + a.id) - dailyRank("product:" + slug + ":" + b.id);
+        return difference || a.id.localeCompare(b.id);
+      });
+      return { product: products[0], category: category ? category.label : slug };
+    });
+
+    clearTimeout(dailyShowcaseTimer);
+    var nextDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1, 0, 0, 1);
+    dailyShowcaseTimer = setTimeout(function () {
+      if (!location.hash || location.hash === "#/") rerender();
+    }, Math.max(1000, nextDay.getTime() - Date.now()));
+
     return '<section class="mould-showcase card reveal" aria-labelledby="mouldShowcaseTitle">' +
-      '<div class="mould-showcase__head"><div><p class="kicker">UVID Resin Moulds</p><h2 id="mouldShowcaseTitle">A closer look at our mould collection</h2><p>Browse the designs and details in these product photos.</p></div></div>' +
+      '<div class="mould-showcase__head"><div><p class="kicker">Picked for today</p><h2 id="mouldShowcaseTitle">Explore our categories</h2><p>One product photo from each of five categories. The selection refreshes daily.</p></div></div>' +
       '<div class="mould-showcase__grid">' + images.map(function (item) {
-        return '<figure class="mould-showcase__item"><img src="' + item.src + '" alt="' + esc(item.label) + '" loading="lazy" decoding="async"><figcaption>' + esc(item.label) + '</figcaption></figure>';
+        return '<figure class="mould-showcase__item"><img src="' + esc(item.product.img) + '" alt="' + esc(item.product.name) + '" loading="lazy" decoding="async"><figcaption><small>' + esc(item.category) + '</small><span>' + esc(item.product.name) + '</span></figcaption></figure>';
       }).join("") + '</div></section>';
   }
 

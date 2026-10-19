@@ -240,6 +240,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .mould-showcase__item { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
 .mould-showcase__item img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
 .mould-showcase__item figcaption { padding: 10px 12px; color: var(--ink-2); text-align: center; font-size: 13px; font-weight: 600; }
+.mould-showcase__item figcaption small { display: block; margin-bottom: 3px; color: var(--green-d); font-size: 11px; font-weight: 700; }
+.mould-showcase__item figcaption span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
 /* ---------------- shelves ---------------- */
 .shelf { margin: 34px 0; }
