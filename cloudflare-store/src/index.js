@@ -759,10 +759,13 @@ async function handleApi(request, env, user, url) {
     if (bytes.length > D1_IMAGE_LIMIT) return error("Payment screenshot must be 1.4 MB or smaller. Choose a compressed image.",413);
     const timestamp = now();
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,byte_size,data,created_at) VALUES (?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
-        .bind(id,mime,bytes.length,bytes,timestamp),
-      env.DB.prepare("UPDATE orders SET status='PLACED',payment_status='PROOF_SUBMITTED',updated_at=? WHERE id=?").bind(timestamp,id),
+      env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,byte_size,data,created_at) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM orders WHERE id=? AND customer_id=? AND status!='CANCELLED' AND payment_status!='PAID') AND EXISTS (SELECT 1 FROM order_delivery_quotes WHERE order_id=? AND finalized=1) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
+        .bind(id,mime,bytes.length,bytes,timestamp,id,user.id,id),
+      env.DB.prepare("UPDATE orders SET status='PLACED',payment_status='PROOF_SUBMITTED',updated_at=? WHERE id=? AND customer_id=? AND status!='CANCELLED' AND payment_status!='PAID' AND EXISTS (SELECT 1 FROM order_payment_proofs WHERE order_id=?) AND EXISTS (SELECT 1 FROM order_delivery_quotes WHERE order_id=? AND finalized=1)")
+        .bind(timestamp,id,user.id,id,id),
     ]);
+    const submitted = await env.DB.prepare("SELECT status,payment_status FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+    if (!submitted || submitted.status === "CANCELLED" || submitted.payment_status !== "PROOF_SUBMITTED") return error("This order changed while the screenshot was uploading. Refresh your order status and try again if it is still awaiting proof.",409);
     await audit(env,request,user,"order.payment_proof_submitted",id,{mime,byteSize:bytes.length});
     return json({ok:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
   }
