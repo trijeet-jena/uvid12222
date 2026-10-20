@@ -2687,7 +2687,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       p = D.findProduct(selectedVariant.id) || p;
     }
     var hasVariants = !!(mainP.variants && mainP.variants.length);
-    var variantHeading = hasVariants && mainP.id === "water-based-pigment" ? "Available colours" : hasVariants && mainP.variants.every(function (v) {
+    var variantHeading = hasVariants && mainP.id === "water-based-pigment" ? "Available colours" : hasVariants && mainP.id === "display-stands" ? "Available sizes and finishes" : hasVariants && mainP.variants.every(function (v) {
       return /^\d+(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?)$/i.test(String(v.label || v.size || "").trim());
     }) ? "Available sizes" : (mainP.category === "resin-moulds" || mainP.category === "candle-making" ? "Available designs" : "Available options");
     A.pushRecent && A.pushRecent(mainId);
