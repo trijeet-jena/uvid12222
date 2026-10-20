@@ -117,7 +117,7 @@
     var seen = {};
     for (i = 0; i < cats.length; i++) seen[cats[i].slug] = true;
     for (i = 0; i < list.length; i++) {
-      if (!seen[list[i].category]) {
+      if (!seen[list[i].category] && list[i].category !== "uncategorized") {
         seen[list[i].category] = true;
         cats.push({ slug: list[i].category, label: list[i].category, emoji: "🗂️", blurb: "", count: 0 });
       }

@@ -190,7 +190,7 @@ async function categories(env) {
        (SELECT COUNT(*) FROM products p WHERE p.category=c.slug AND p.status!='ARCHIVED') AS count
      FROM categories c ORDER BY c.sort_order,c.name`).all()).results || [];
   if (rows.length) return rows;
-  return (await env.DB.prepare("SELECT category AS slug,category AS name,COUNT(*) AS count FROM products WHERE status!='ARCHIVED' GROUP BY category ORDER BY category").all()).results || [];
+  return (await env.DB.prepare("SELECT category AS slug,category AS name,COUNT(*) AS count FROM products WHERE status!='ARCHIVED' AND category!='uncategorized' GROUP BY category ORDER BY category").all()).results || [];
 }
 const slugify = (s) => clean(s, 120).toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "product";
 

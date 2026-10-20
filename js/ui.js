@@ -157,7 +157,7 @@
     }
 
     D.visibleProducts.forEach(function (product) {
-      if (!product.category || product.parent || product.tags.indexOf("vc-hidden") !== -1) return;
+      if (!product.category || product.category === "uncategorized" || product.parent || product.tags.indexOf("vc-hidden") !== -1) return;
       (byCategory[product.category] = byCategory[product.category] || []).push(product);
     });
 
@@ -442,7 +442,7 @@
     A.pushRecent && A.pushRecent(mainId);
     var reviews = D.reviewsFor(id);
     var wished = A.inWishlist(mainId);
-    var cat = D.categoryBySlug(p.category);
+    var cat = p.category === "uncategorized" ? { label: "Shop", slug: "" } : D.categoryBySlug(p.category);
     var eta = new Date(); eta.setDate(eta.getDate() + 4);
     var etaStr = eta.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
     var similar = D.visibleProducts.filter(function (x) { return x.category === p.category && x.id !== mainId; })
@@ -457,7 +457,7 @@
     var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
 
     view.innerHTML =
-      crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }, { label: variantLabel }]) +
+      crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: cat.slug ? "#/c/" + cat.slug : "#/search" }, { label: variantLabel }]) +
       '<div class="pdp">' +
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
