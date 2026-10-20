@@ -518,7 +518,7 @@
       const stock = effStock(p);
       const off = p.mrp != null && p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
       return "<tr>" +
-        '<td><div class="pcell">' + pImg(p) + "<div><b>" + esc(p.productName) + "</b><small>" + esc(p.id) + (k.length ? " · " + k.length + " sizes" : "") + "</small></div></div></td>" +
+        '<td><div class="pcell">' + pImg(p) + "<div><b>" + esc(p.productName) + "</b><small>" + esc(p.id) + (k.length ? " · " + k.length + " variants" : "") + "</small></div></div></td>" +
         "<td>" + esc(p.category) + "</td>" +
         '<td class="num"><b>' + money(p.price) + "</b>" + (off ? ' <s style="color:var(--muted);font-size:12.5px">' + money(p.mrp) + "</s> <small style=\"color:var(--tang)\">-" + off + "%</small>" : "") + "</td>" +
         '<td class="num">' + stock + "</td>" +
