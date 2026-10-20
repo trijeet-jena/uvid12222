@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS orders (
   customer_id    INTEGER NOT NULL REFERENCES users(id),
   total_amount   REAL NOT NULL,
   status         TEXT NOT NULL DEFAULT 'PLACED'
-                 CHECK (status IN ('PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED')),
+                 CHECK (status IN ('AWAITING_PAYMENT','PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED')),
   payment_method TEXT NOT NULL DEFAULT 'COD',
   payment_status TEXT NOT NULL DEFAULT 'PENDING',
   address_json   TEXT,

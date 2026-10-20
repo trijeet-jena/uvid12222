@@ -549,6 +549,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status { padding: 12px; border-radius: var(--rad-sm); background: #fff3e7; color: #87501f !important; font-weight: 700; }
 .upi-wait__status--error { background: #fff0ef; color: var(--red) !important; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
+.proof-upload { display: grid; gap: 7px; margin: 18px 0 8px; padding: 16px; border: 1px dashed var(--brand); border-radius: var(--rad-sm); background: var(--paper-2); text-align: left; cursor: pointer; }
+.proof-upload span { color: var(--ink-2); font-size: 13px; }
+.proof-upload input { width: 100%; margin-top: 4px; font: inherit; }
+.proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
+.proof-message { min-height: 20px; color: var(--ink-2); font-size: 13px; }
 
 /* ---------------- orders ---------------- */
 .orderspage { max-width: 860px; }

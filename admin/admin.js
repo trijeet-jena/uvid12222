@@ -401,10 +401,10 @@
     if (p.imageUrl) return '<img src="' + esc(p.imageUrl) + '" alt="" loading="lazy" style="width:' + s + "px;height:" + s + 'px">';
     return '<span style="width:' + s + "px;height:" + s + 'px;border-radius:10px;background:var(--brand-soft);display:grid;place-items:center;font-size:' + Math.round(s / 2.2) + 'px;flex:none">' + esc(p.emoji || "📦") + "</span>";
   }
-  const ORDER_STATUSES = [["PLACED", "Placed"], ["PACKED", "Packed"], ["SHIPPED", "Shipped"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"]];
+  const ORDER_STATUSES = [["AWAITING_PAYMENT", "Awaiting payment proof"], ["PLACED", "Placed"], ["PACKED", "Packed"], ["SHIPPED", "Shipped"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"]];
   function orderLabel(s) { const f = ORDER_STATUSES.find(function (x) { return x[0] === s; }); return f ? f[1] : s; }
   function orderBadge(s) {
-    const tone = { PLACED: "green", PACKED: "green", SHIPPED: "amber", OUT_FOR_DELIVERY: "amber", DELIVERED: "green", CANCELLED: "red" }[s] || "grey";
+    const tone = { AWAITING_PAYMENT: "amber", PLACED: "green", PACKED: "green", SHIPPED: "amber", OUT_FOR_DELIVERY: "amber", DELIVERED: "green", CANCELLED: "red" }[s] || "grey";
     return '<span class="badge badge--' + tone + '">' + orderLabel(s) + "</span>";
   }
 
@@ -1158,14 +1158,15 @@
     const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
     const addr = orderAddress(o);
     const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID";
+    const paymentNote = awaitingUpi ? (o.payment_proof_available ? " · Screenshot received" : (o.status === "AWAITING_PAYMENT" ? " · Awaiting screenshot" : " · Payment pending")) : "";
     return '<tr data-orow="' + esc(o.id) + '">' +
-      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + (awaitingUpi ? " · Payment pending" : "") + "</small></td>" +
+      "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
       '<td class="num"><b>' + (Number(o.shipping_finalized) === 0 ? 'Delivery pending' : money(o.total_amount)) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
       '<td><select class="ostat" data-oid="' + esc(o.id) + '">' +
       ORDER_STATUSES.map(function (s) {
-        const blockedUntilPaid = awaitingUpi && !["PLACED", "CANCELLED"].includes(s[0]);
+        const blockedUntilPaid = awaitingUpi && !(s[0] === "CANCELLED" || (s[0] === "PLACED" && o.payment_proof_available));
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
       }).join("") + "</select></td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
@@ -1193,13 +1194,14 @@
     const addressLines = [address.line, [address.city, address.pin].filter(Boolean).join(" — ")].filter(Boolean);
     const buyerName = address.name || "Customer";
     const phone = address.phone || order.mobile_number || "—";
-    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
+    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.payment_status === "PROOF_SUBMITTED" ? "Screenshot submitted · awaiting verification" : (order.status === "AWAITING_PAYMENT" ? "Awaiting payment screenshot" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "))));
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID logo" width="54" height="54"><div><strong>UVID</strong><span>ART AND CRAFT</span></div></div>' +
       '<div class="invoice__heading"><h2>INVOICE</h2><span>Order ' + esc(order.id) + '</span></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div></div>' +
+      (order.payment_proof_available ? '<section class="invoice-proof"><h3>Payment screenshot</h3><a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/payment-proof" target="_blank" rel="noopener"><img src="/api/admin/orders/' + encodeURIComponent(order.id) + '/payment-proof" alt="Customer payment screenshot for order ' + esc(order.id) + '" /></a><small>Click the screenshot to open the full image.</small></section>' : (String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" ? '<p class="invoice-proof__empty">No payment screenshot uploaded yet.</p>' : "")) +
       '<div class="invoice__parties"><section><h3>Bill to</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th>Item</th><th class="invoice__qty">Qty</th><th class="invoice__num">Unit price</th><th class="invoice__num">Amount</th></tr></thead><tbody>' +
@@ -1222,7 +1224,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_available ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");

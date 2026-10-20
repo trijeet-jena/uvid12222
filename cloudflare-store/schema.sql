@@ -121,6 +121,14 @@ CREATE TABLE IF NOT EXISTS order_delivery_quotes (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS order_payment_proofs (
+  order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+  mime TEXT NOT NULL,
+  byte_size INTEGER NOT NULL CHECK (byte_size > 0 AND byte_size <= 1400000),
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS order_id_counter (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   last_value INTEGER NOT NULL CHECK (last_value >= 0)

@@ -347,12 +347,13 @@ async function stats(env) {
     lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'"),
     inactive: await q("SELECT COUNT(*) n FROM products WHERE status='ARCHIVED'"),
     orders: await q("SELECT COUNT(*) n FROM orders"),
-    openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
+    openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('AWAITING_PAYMENT','PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
     revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
-async function orderList(env, customerId = null, status = null) {
-  let sql = "SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id", args = [];
+async function orderList(env, customerId = null, status = null, includePaymentProof = false) {
+  const proofColumn = includePaymentProof ? ",EXISTS (SELECT 1 FROM order_payment_proofs p WHERE p.order_id=o.id) AS payment_proof_available" : "";
+  let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${proofColumn} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id`, args = [];
   if (customerId != null) { sql += " WHERE customer_id=?"; args.push(customerId); }
   else if (status) { sql += " WHERE status=?"; args.push(status); }
   sql += " ORDER BY created_at DESC LIMIT 200";
@@ -438,7 +439,7 @@ async function placeOrder(env, user, body) {
   if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
   const batches = [
     env.DB.prepare("INSERT INTO order_id_counter (id,last_value) VALUES (1,1) ON CONFLICT(id) DO UPDATE SET last_value=last_value+1 RETURNING last_value"),
-    env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) SELECT 'UVID'||printf('%03d',last_value),?,?, 'PLACED',?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
+    env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) SELECT 'UVID'||printf('%03d',last_value),?,?, 'AWAITING_PAYMENT',?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
       .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping),
     env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized) SELECT 'UVID'||printf('%03d',last_value),0 FROM order_id_counter WHERE id=1")
   ];
@@ -597,7 +598,7 @@ async function handleApi(request, env, user, url) {
     return json({ok:true,url:`/uploads/${id}`},201);
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
-  if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"))});
+  if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"),true)});
   if (path === "/api/admin/push/status" && method === "GET") {
     if (adminOnly) return adminOnly;
     const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM admin_push_subscriptions").first();
@@ -632,6 +633,19 @@ async function handleApi(request, env, user, url) {
     await audit(env,request,user,"notification.push_unsubscribed",null,{});
     return json({ok:true});
   }
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment-proof$/);
+  if (match && method === "GET") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const proof = await env.DB.prepare("SELECT mime,data FROM order_payment_proofs WHERE order_id=?").bind(id).first();
+    if (!proof) return error("Payment screenshot not found.",404);
+    return new Response(imageBytes(proof.data), { headers: {
+      "Content-Type": proof.mime,
+      "Cache-Control": "private, no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": "inline",
+    }});
+  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/delivery$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly;
@@ -645,6 +659,7 @@ async function handleApi(request, env, user, url) {
     if (!current) return error("Order not found.",404);
     if (current.status === "CANCELLED") return error("A cancelled order cannot be repriced.",409);
     if (current.payment_status === "PAID") return error("This order is already paid, so its delivery charge cannot be changed.",409);
+    if (current.payment_status === "PROOF_SUBMITTED") return error("A payment screenshot has been submitted, so the final total can no longer be changed.",409);
     const amounts = await env.DB.prepare("SELECT COALESCE(SUM(price_at_purchase*quantity),0) AS subtotal FROM order_items WHERE order_id=?").bind(id).first();
     const total = Math.round((Number(amounts?.subtotal || 0) - Number(current.discount || 0) + shipping) * 100) / 100;
     const timestamp = now();
@@ -666,6 +681,7 @@ async function handleApi(request, env, user, url) {
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
     const alreadyPaid = order.payment_status === "PAID";
+    if (!alreadyPaid && !(await env.DB.prepare("SELECT 1 AS found FROM order_payment_proofs WHERE order_id=?").bind(id).first())) return error("The customer has not uploaded a payment screenshot yet.",409);
     if (!alreadyPaid) await env.DB.prepare("UPDATE orders SET payment_status='PAID',updated_at=? WHERE id=?").bind(now(),id).run();
     await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
     const notification = alreadyPaid
@@ -695,11 +711,14 @@ async function handleApi(request, env, user, url) {
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
   if(match && method === "PUT"){
     if(adminOnly) return adminOnly; const b=await readBody(),status=clean(b.status,30).toUpperCase();
-    if(!["PLACED","PACKED","SHIPPED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"].includes(status)) return error("Invalid order status.");
+    if(!["AWAITING_PAYMENT","PLACED","PACKED","SHIPPED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"].includes(status)) return error("Invalid order status.");
     const orderId = decodeURIComponent(match[1]);
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
     if (!current) return error("Order not found.",404);
-    if (current.payment_method === "UPI" && current.payment_status !== "PAID" && !["PLACED","CANCELLED"].includes(status)) return error("Confirm the UPI payment before packing or shipping this order.",409);
+    if (current.payment_method === "UPI" && current.payment_status !== "PAID" && status !== "CANCELLED") {
+      if (current.status === "AWAITING_PAYMENT") return error("This order is not placed until the customer submits a payment screenshot.",409);
+      if (status !== "PLACED") return error("Confirm the UPI payment before packing or shipping this order.",409);
+    }
     if (status === "CANCELLED" && current.status !== "CANCELLED") {
       const items = (await env.DB.prepare("SELECT product_id,quantity FROM order_items WHERE order_id=?").bind(orderId).all()).results || [];
       const batches = [env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),orderId)];
@@ -723,11 +742,35 @@ async function handleApi(request, env, user, url) {
     if(customerOnly) return customerOnly; const out=await placeOrder(env,user,await readBody()); return json({ok:true,...out},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
+  match = path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
+  if (match && method === "POST") {
+    if (customerOnly) return customerOnly;
+    const id = decodeURIComponent(match[1]);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+    if (!order) return error("Order not found.",404);
+    if (order.payment_method !== "UPI") return error("This order does not use UPI payment.",409);
+    if (order.status === "CANCELLED") return error("A cancelled order cannot receive a payment screenshot.",409);
+    if (order.payment_status === "PAID") return error("This order is already marked paid.",409);
+    const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
+    if (!quote || Number(quote.finalized) !== 1) return error("Wait until the store confirms your final delivery charge before uploading proof.",409);
+    const b = await readBody();
+    const { bytes, mime } = decodeImage(b.image || b.dataUri);
+    if (!new Set(["image/jpeg","image/png","image/webp"]).has(mime)) return error("Upload a JPEG, PNG or WebP payment screenshot.");
+    if (bytes.length > D1_IMAGE_LIMIT) return error("Payment screenshot must be 1.4 MB or smaller. Choose a compressed image.",413);
+    const timestamp = now();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,byte_size,data,created_at) VALUES (?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
+        .bind(id,mime,bytes.length,bytes,timestamp),
+      env.DB.prepare("UPDATE orders SET status='PLACED',payment_status='PROOF_SUBMITTED',updated_at=? WHERE id=?").bind(timestamp,id),
+    ]);
+    await audit(env,request,user,"order.payment_proof_submitted",id,{mime,byteSize:bytes.length});
+    return json({ok:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+  }
   match=path.match(/^\/api\/orders\/([^/]+)(?:\/cancel)?$/);
   if(match && method==="POST" && path.endsWith("/cancel")){
     if(customerOnly) return customerOnly; const id=decodeURIComponent(match[1]);
     const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
-    if(!order) return error("Order not found.",404); if(order.status!=="PLACED") return error("This order can no longer be cancelled.",409);
+    if(!order) return error("Order not found.",404); if(!["AWAITING_PAYMENT","PLACED"].includes(order.status) || order.payment_status === "PAID") return error("This order can no longer be cancelled.",409);
     const items=(await env.DB.prepare("SELECT * FROM order_items WHERE order_id=?").bind(id).all()).results||[];
     const batch=[env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),id),...items.map(i=>env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?,status='ACTIVE',updated_at=? WHERE id=?").bind(i.quantity,now(),i.product_id))];
     await env.DB.batch(batch); return json({ok:true,order:(await orderList(env,user.id)).find(o=>o.id===id)});
