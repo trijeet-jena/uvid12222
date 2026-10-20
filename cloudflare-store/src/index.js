@@ -167,8 +167,16 @@ async function productRows(env, admin = false) {
   const rows = (await env.DB.prepare(sql).all()).results || [];
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const imageRows = (await env.DB.prepare(`SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id IN (${placeholders}) ORDER BY i.sort_order,i.id`).bind(...ids).all()).results || [];
+  // D1 allows at most 100 bound parameters per query. Admin lists include
+  // archived products too, so keep this lookup below that limit as the
+  // catalog grows.
+  const imageRows = [];
+  for (let offset = 0; offset < ids.length; offset += 80) {
+    const chunk = ids.slice(offset, offset + 80);
+    const placeholders = chunk.map(() => "?").join(",");
+    const result = await env.DB.prepare(`SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id IN (${placeholders}) ORDER BY i.sort_order,i.id`).bind(...chunk).all();
+    imageRows.push(...(result.results || []));
+  }
   const byProduct = new Map();
   for (const im of imageRows) {
     const arr = byProduct.get(im.product_id) || [];
