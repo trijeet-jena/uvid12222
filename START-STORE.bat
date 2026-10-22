@@ -1,15 +1,15 @@
 @echo off
 rem ============================================================
-rem  UVID Stationery Store - one-click launcher for Windows
+rem  UVID Art and Craft - one-click launcher for Windows
 rem  Starts the server, then opens the customer site and the
 rem  admin panel in your browser.
 rem ============================================================
-title UVID Stationery Store
+title UVID Art and Craft
 cd /d "%~dp0server"
 if errorlevel 1 (
   echo.
   echo  [X] Could not open this project's server folder.
-  echo      Extract the ZIP first, then run this file from the stationery folder.
+  echo      Extract the ZIP first, then run this file from the project folder.
   echo.
   pause
   exit /b 1

@@ -14,7 +14,7 @@ const path = require("path");
 const bcrypt = require("bcryptjs");
 const { db } = require("./db");
 
-/* Real photos in stationery/assets are served to BOTH portals at
+/* Real photos in assets are served to BOTH portals at
    /assets/<id>.jpg; fall back to the embedded art data-URI. */
 const ASSETS_DIR = path.join(__dirname, "..", "..", "assets");
 function storeImage(p) {

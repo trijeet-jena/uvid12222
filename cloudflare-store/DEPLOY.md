@@ -8,7 +8,7 @@ connected.
 
 ## One-time setup in VS Code
 
-Open the extracted `stationery` folder in VS Code. Open **Terminal → New
+Open the extracted project folder in VS Code. Open **Terminal → New
 Terminal**, then run these commands one at a time:
 
 ```powershell
@@ -83,16 +83,15 @@ https://uvid-store-api.your-account.workers.dev
 
 ## Connect the existing Netlify site
 
-1. In VS Code, open the top-level `netlify.toml` file in the `stationery`
-   folder.
+1. In VS Code, open the top-level `netlify.toml` file in the project root.
 2. This package is preconfigured for the `uvid21-store` workers.dev subdomain.
    Confirm Wrangler printed `https://uvid-store-api.uvid21-store.workers.dev`.
    If you selected a different subdomain, replace `uvid21-store` in both
    Worker targets in the top-level `netlify.toml` with the subdomain from
    Wrangler's URL.
 3. Save `netlify.toml`.
-4. Push the updated `stationery` folder to the same GitHub repository Netlify
-   uses. Netlify should redeploy automatically. If it does not, open Netlify's
+4. Push the updated project to the same GitHub repository Netlify uses.
+   Netlify should redeploy automatically. If it does not, open Netlify's
    site and choose **Deploys → Trigger deploy**.
 5. Open `https://uvid09art12and48craft54.netlify.app/admin/`, enter the admin
    Gmail address, retrieve the one-time code from that inbox, and sign in. Add

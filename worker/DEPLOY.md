@@ -1,7 +1,7 @@
 # Deploy the separate seminar page only
 
 This folder deploys the seminar landing page and registration form only. It
-does not connect the stationery store's customer and admin portals. For the
+does not connect the main UVID customer and admin portals. For the
 store backend, use [`../cloudflare-store/DEPLOY.md`](../cloudflare-store/DEPLOY.md)
 and its `uvid-store` D1 binding instead.
 
@@ -16,11 +16,11 @@ Verified locally before deployment: `node test/worker-test.mjs` → **23 passed,
 
 ## One-time setup (about 5 minutes)
 
-Run these from the `stationery/worker` folder in a terminal.
+From the project root, open a terminal and enter the worker folder first.
 **Use `wrangler@3`** — the latest version needs Node 22, and this machine runs Node 20.
 
 ```bash
-cd stationery/worker
+cd worker
 
 # 1. Log in to Cloudflare (free account). Opens a browser tab — authorise it.
 npx wrangler@3 login
@@ -67,12 +67,12 @@ npx wrangler@3 d1 execute uvid-seminar --command \
 
 ## Things to know
 
-- **The page is the same file** the local store serves (`stationery/seminar/index.html`),
+- **The page is the same file** the local project serves (`seminar/index.html`),
   so editing it updates both. There is no second copy.
 - Registrations are only visible with the owner password; `/admin` returns 401 otherwise.
 - Spam protection: hidden honeypot field, minimum time on form, and a per-IP limit
   (20/hour). Caught spam is silently discarded.
-- The main stationery store is unaffected and still runs locally on port 8787.
+- The main UVID store is unaffected and still runs locally on port 8787.
 
 ## Redeploying after editing the page
 

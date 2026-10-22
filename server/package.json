@@ -2,7 +2,7 @@
   "name": "uvid-server",
   "version": "1.0.0",
   "private": true,
-  "description": "UVID stationery store — backend API + admin + customer server",
+  "description": "UVID Art and Craft — backend API, admin, and customer server",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

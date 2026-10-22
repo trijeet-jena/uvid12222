@@ -19,10 +19,10 @@ const { securityHeaders, sameOriginGuard, rateLimit } = require("./security");
 const app = express();
 const PORT_ENV = parseInt(process.env.PORT || "", 10);
 const PORT = Number.isFinite(PORT_ENV) && PORT_ENV > 0 ? PORT_ENV : 8787;
-const ROOT = path.join(__dirname, "..", "..");          // stationery/
-const CUSTOMER_DIR = ROOT;                               // stationery/index.html (built bundle)
-const ADMIN_DIR = path.join(ROOT, "admin");              // stationery/admin/index.html
-const SEMINAR_DIR = path.join(ROOT, "seminar");          // stationery/seminar/index.html
+const ROOT = path.join(__dirname, "..", "..");          // project root
+const CUSTOMER_DIR = ROOT;                               // index.html (built bundle)
+const ADMIN_DIR = path.join(ROOT, "admin");              // admin/index.html
+const SEMINAR_DIR = path.join(ROOT, "seminar");          // seminar/index.html
 
 app.disable("x-powered-by");
 
