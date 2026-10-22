@@ -28,22 +28,22 @@
         </div>
       </div>
       <h1>Sign in</h1>
-      <p class="login__sub">Use the admin email and password. Customers cannot access this panel.</p>
+      <p class="login__sub">Enter the approved admin Gmail address. We’ll email you a one-time sign-in code.</p>
       <form id="loginForm" novalidate>
         <label class="fld">
           <span>Admin email</span>
-          <input id="loginEmail" type="email" autocomplete="username" placeholder="admin@uvid.store" required />
+          <input id="loginEmail" type="email" autocomplete="username" value="uvidartandcraft@gmail.com" required />
         </label>
-        <label class="fld" id="pwField">
-          <span>Password</span>
-          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required />
-        </label>
-        <label class="fld" id="mfaField" hidden>
-          <span>Authenticator code</span>
-          <input id="loginMfa" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6" />
+        <label class="fld" id="otpField" hidden>
+          <span>Code from email</span>
+          <input id="loginOtp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6" />
         </label>
         <p id="loginError" class="form-error" role="alert" hidden></p>
-        <button id="loginBtn" class="btn btn--primary btn--block" type="submit">Sign in to dashboard</button>
+        <button id="loginBtn" class="btn btn--primary btn--block" type="submit">Email me a sign-in code</button>
+        <div class="login__otp-actions" id="otpActions" hidden>
+          <button id="changeEmailBtn" class="login__text-button" type="button">Change email</button>
+          <button id="resendOtpBtn" class="login__text-button" type="button">Send a new code</button>
+        </div>
       </form>
       <a class="login__back" href="/">← Back to storefront</a>
     </div>

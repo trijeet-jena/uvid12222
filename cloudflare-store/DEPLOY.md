@@ -32,27 +32,46 @@ The existing bucket is already configured with those settings. The project's
 public URL is preconfigured in `wrangler.toml`; only its secret API key must be
 entered into Cloudflare.
 
-Now add the admin credentials as encrypted Cloudflare secrets. Run each command
-and enter the value when Wrangler prompts:
+## Email sign-in and order alerts
+
+Admin sign-in uses a one-time code sent only to the approved admin address.
+New orders send an email to that same address with the order ID, items, and
+payment status. A second email is sent after an admin confirms a UPI payment.
+At order creation, the email identifies the amount as an item subtotal when
+the delivery charge has not been set yet. UPI payments remain manually
+verified from the customer's screenshot in the admin panel.
+
+Create a Resend account, add a domain you control, and follow the DNS records
+Resend provides until the domain is verified. Create a sending-only API key.
+Use a sender address on that verified domain. If you control the DNS for
+`uvidartandcraftsupplies.com`, one option is
+`UVID Admin <orders@uvidartandcraftsupplies.com>`. Otherwise choose a domain
+you control. The admin inbox can remain `uvidartandcraft@gmail.com`.
+
+Now add the admin email and email service settings as encrypted Cloudflare
+secrets. Run each command and enter the value when Wrangler prompts:
 
 ```powershell
 npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
-npx wrangler --config wrangler.toml secret put ADMIN_PASSWORD
 npx wrangler --config wrangler.toml secret put SESSION_SECRET
+npx wrangler --config wrangler.toml secret put RESEND_API_KEY
+npx wrangler --config wrangler.toml secret put EMAIL_FROM
 npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
-Use your admin Gmail for `ADMIN_EMAIL`, choose a strong admin password, and set
-`SESSION_SECRET` to a different random value at least 32 characters long. Keep
-all secret values private. Copy a new `sb_secret_...` key from your Supabase
-project's **Project Settings → API Keys**. When Wrangler prompts for
-`SUPABASE_SECRET_KEY`, enter the key directly in the terminal. Do not paste
-the secret key into the website files, GitHub, or chat. Customer sign-in
-remains Gmail-only with no password or OTP, as requested.
+Set `ADMIN_EMAIL` to `uvidartandcraft@gmail.com`. Set `EMAIL_FROM` to the exact
+sender address shown as verified in Resend. Keep the existing `SESSION_SECRET`
+value if one is already configured; changing it signs out existing customer
+and admin sessions. If it is not configured, set it to a random value at least
+32 characters long. Keep secret values private; do not put them in website
+files, GitHub, or chat. Copy a new `sb_secret_...` key from your
+Supabase project's **Project Settings → API Keys**. Enter it directly when
+Wrangler prompts for `SUPABASE_SECRET_KEY`. Customer sign-in remains unchanged.
 
 Deploy the backend:
 
 ```powershell
+npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=migrations/0018_admin_email_otp.sql
 npx wrangler --config wrangler.toml deploy
 ```
 
@@ -75,8 +94,9 @@ https://uvid-store-api.your-account.workers.dev
 4. Push the updated `stationery` folder to the same GitHub repository Netlify
    uses. Netlify should redeploy automatically. If it does not, open Netlify's
    site and choose **Deploys → Trigger deploy**.
-5. Open `https://uvid09art12and48craft54.netlify.app/admin/`, sign in with the admin Gmail and
-   password you set above, add a test product and a compressed photo, then
+5. Open `https://uvid09art12and48craft54.netlify.app/admin/`, enter the admin
+   Gmail address, retrieve the one-time code from that inbox, and sign in. Add
+   a test product and a compressed photo, then
    refresh the storefront. Product details and image links are saved in D1;
    the uploaded photo file is saved in Supabase Storage and can be viewed on
    the customer page.

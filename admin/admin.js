@@ -202,59 +202,66 @@
     router();
   }
 
-  /* ---- sign-in with optional TOTP second factor ---- */
-  let mfaPending = null; /* email awaiting the second factor */
+  /* ---- sign-in with a one-time code sent to the approved admin email ---- */
+  let otpPending = false;
 
   function resetLoginStep() {
-    mfaPending = null;
-    const pw = $("#pwField"), mfa = $("#mfaField"), btn = $("#loginBtn"), input = $("#loginMfa");
-    if (pw) pw.hidden = false;
-    if (mfa) mfa.hidden = true;
+    otpPending = false;
+    const email = $("#loginEmail"), otp = $("#otpField"), actions = $("#otpActions");
+    const btn = $("#loginBtn"), input = $("#loginOtp");
+    if (email) email.readOnly = false;
+    if (otp) otp.hidden = true;
+    if (actions) actions.hidden = true;
     if (input) input.value = "";
-    if (btn) btn.textContent = "Sign in to dashboard";
+    if (btn) btn.textContent = "Email me a sign-in code";
   }
 
   $("#loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
     const err = $("#loginError"); err.hidden = true;
-
-    if (!mfaPending) {
-      const email = $("#loginEmail").value.trim();
-      const password = $("#loginPassword").value;
-      if (!email || !password) { err.textContent = "Email and password are required."; err.hidden = false; return; }
-    }
-
-    const undo = busy($("#loginBtn"), mfaPending ? "Verifying…" : "Signing in…");
+    const email = $("#loginEmail").value.trim().toLowerCase();
+    if (!email) { err.textContent = "Enter the approved admin Gmail address."; err.hidden = false; return; }
+    const btn = $("#loginBtn");
+    const undo = busy(btn, otpPending ? "Verifying…" : "Sending code…");
     try {
-      if (mfaPending) {
-        const code = String($("#loginMfa").value || "").trim();
-        if (!/^\d{6}$/.test(code)) throw new Error("Enter the 6-digit code from your authenticator app.");
-        const out = await api("POST", "/api/auth/admin/mfa/verify", { code: code }, { quiet: true });
-        undo(); resetLoginStep();
-        toast("Welcome back, " + (out.user.name || "Admin"), true);
-        startApp(out.user);
+      if (!otpPending) {
+        await api("POST", "/api/auth/admin/request-otp", { email: email }, { quiet: true });
+        otpPending = true;
+        $("#loginEmail").readOnly = true;
+        $("#otpField").hidden = false;
+        $("#otpActions").hidden = false;
+        btn.textContent = "Verify code & sign in";
+        undo();
+        toast("A sign-in code was sent to the admin Gmail inbox.", true);
+        $("#loginOtp").focus();
         return;
       }
-      const email2 = $("#loginEmail").value.trim();
-      const out = await api("POST", "/api/auth/admin/login", { email: email2, password: $("#loginPassword").value }, { quiet: true });
-      undo();
-      if (out && out.mfa) {
-        /* password passed — second factor required before a session is issued */
-        mfaPending = email2;
-        $("#pwField").hidden = true;
-        $("#mfaField").hidden = false;
-        $("#loginBtn").textContent = "Verify code & sign in";
-        toast("Enter your 6-digit authenticator code", true);
-        $("#loginMfa").focus();
-        return;
-      }
+      const code = String($("#loginOtp").value || "").trim();
+      if (!/^\d{6}$/.test(code)) throw new Error("Enter the 6-digit code sent to your email.");
+      const out = await api("POST", "/api/auth/admin/verify-otp", { email: email, code: code }, { quiet: true });
+      undo(); resetLoginStep();
       toast("Welcome back, " + (out.user.name || "Admin"), true);
       startApp(out.user);
     } catch (ex) {
       undo();
-      err.textContent = ex.message || "Invalid admin credentials.";
+      err.textContent = ex.message || "Could not sign in. Please try again.";
       err.hidden = false;
     }
+  });
+
+  $("#changeEmailBtn").addEventListener("click", function () {
+    resetLoginStep();
+    $("#loginError").hidden = true;
+    $("#loginEmail").focus();
+  });
+
+  $("#resendOtpBtn").addEventListener("click", async function () {
+    const button = $("#resendOtpBtn");
+    const undo = busy(button, "Sending…");
+    try {
+      await api("POST", "/api/auth/admin/request-otp", { email: $("#loginEmail").value.trim().toLowerCase() }, { quiet: true });
+      undo(); toast("A new sign-in code was sent.", true);
+    } catch (ex) { undo(); toast(ex.message || "Could not send another code.", false); }
   });
 
   $("#logoutBtn").addEventListener("click", async function () {
@@ -1224,7 +1231,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_available ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_available ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1252,16 +1259,31 @@
     });
     const printButton = back.querySelector("[data-print-invoice]");
     if (printButton) printButton.addEventListener("click", function () { window.print(); });
+    const emailButton = back.querySelector("[data-send-order-email]");
+    if (emailButton) emailButton.addEventListener("click", async function () {
+      const undo = busy(emailButton, "Sending…");
+      try {
+        await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/email", {});
+        undo();
+        toast(order.payment_status === "PAID" ? "Payment confirmation email sent to uvidartandcraft@gmail.com." : "Order email sent to uvidartandcraft@gmail.com.", true);
+      } catch (ex) {
+        undo(); toast(ex.message || "Could not send the order email.", false);
+      }
+    });
     const confirmButton = back.querySelector("[data-confirm-upi]");
     if (confirmButton) confirmButton.addEventListener("click", async function () {
       const verified = await confirmDialog("Check this order's exact amount in the PhonePe Business account before confirming. The customer sees success only after this action.", { yes: "I verified it — confirm payment", danger: false });
       if (!verified) return;
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
-        if (result.notification && result.notification.sent) toast("UPI payment confirmed. Phone alert sent to " + result.notification.count + " device(s).", true);
-        else if (result.notification && result.notification.reason === "no_subscriptions") toast("UPI payment confirmed. Enable phone alerts in Settings on your phone.", false);
-        else if (result.notification && result.notification.reason === "not_configured") toast("UPI payment confirmed. Phone alerts need one-time server setup.", false);
-        else toast("UPI payment confirmed, but the phone alert could not be delivered.", false);
+        const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
+        const phoneSent = Boolean(result.notification && result.notification.sent);
+        const message = "UPI payment confirmed. " + (emailSent
+          ? "Email alert sent to uvidartandcraft@gmail.com."
+          : "Email alert could not be sent; check the email service setup.") + (phoneSent
+          ? " Phone alert sent to " + result.notification.count + " device(s)."
+          : "");
+        toast(message, emailSent);
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
     });
@@ -1390,8 +1412,7 @@
 
   /* ---------------- settings ---------------- */
   VIEWS.settings = async function () {
-    let mfa = { enabled: false }, log = { entries: [] }, push = { available: false, publicKey: null, subscriptionCount: 0 };
-    try { mfa = await api("GET", "/api/auth/admin/mfa/status"); } catch (_e) { /* keep defaults */ }
+    let log = { entries: [] }, push = { available: false, publicKey: null, subscriptionCount: 0 };
     try { log = await api("GET", "/api/admin/audit?limit=25"); } catch (_e) { /* keep defaults */ }
     try { push = await api("GET", "/api/admin/push/status"); } catch (_e) { /* show setup guidance */ }
 
@@ -1426,19 +1447,6 @@
         "<td><small>" + esc(a.ip || "") + "</small></td></tr>";
     }).join("") || '<tr><td colspan="5">No entries yet.</td></tr>';
 
-    const mfaBody = mfa.enabled
-      ? '<p style="margin-top:0;color:var(--muted);font-size:14.5px">✓ Enabled — sign-in now needs your password plus a 6-digit code from your authenticator app.</p>' +
-        '<div class="fld"><span>Authenticator code</span><input id="mfaCodeD" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" /></div>' +
-        '<div class="fld"><span>Confirm with your password</span><input id="mfaPwD" type="password" autocomplete="current-password" placeholder="Admin password" /></div>' +
-        '<button class="btn btn--ghost" id="mfaDisable">Disable two-factor</button>'
-      : '<p style="margin-top:0;color:var(--muted);font-size:14.5px">Not enabled. When enabled, sign-in asks for a 6-digit code from an authenticator app (Google Authenticator, Authy, 1Password…) in addition to your password.</p>' +
-        '<div id="mfaSetup" hidden>' +
-        '<div class="fld"><span>Setup key (enter manually in your app)</span><input id="mfaSecret" readonly style="font-family:monospace;letter-spacing:1px" /></div>' +
-        '<p style="margin:0 0 10px"><small id="mfaUri" style="word-break:break-all;color:var(--muted)"></small></p>' +
-        '<div class="fld"><span>Code from your app</span><input id="mfaCodeE" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code" /></div>' +
-        '<button class="btn btn--primary" id="mfaEnable">Confirm &amp; activate</button></div>' +
-        '<button class="btn btn--ghost" id="mfaStart" style="margin-top:10px">Enable two-factor</button>';
-
     content.innerHTML =
       '<div class="page-head"><div><h3>Settings</h3><p>Panel, store &amp; security</p></div></div>' +
       '<div class="dash-grid">' +
@@ -1446,14 +1454,14 @@
       '<dl class="kv"><dt>Signed in as</dt><dd>' + esc(state.user ? state.user.name : "—") + "</dd>" +
       "<dt>Role</dt><dd>Administrator</dd>" +
       "<dt>Session</dt><dd>7 days · httpOnly cookie · SameSite</dd>" +
-      "<dt>Two-factor</dt><dd>" + (mfa.enabled ? "Enabled" : "Disabled") + "</dd>" +
+      "<dt>Sign-in</dt><dd>Email one-time code</dd>" +
       "<dt>Live updates</dt><dd>" + ($("#livePill") && !$("#livePill").classList.contains("off") ? "Connected (SSE)" : "Reconnecting…") + "</dd></dl>" +
       '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">' +
       '<button class="btn btn--ghost" id="setLogout">Log out</button>' +
       '<a class="btn btn--primary" href="/" target="_blank" rel="noopener">Open storefront ' + "</a></div>" +
       "</div></section>" +
-      '<section class="panel"><div class="panel__head"><h4>Two-factor authentication</h4></div><div class="panel__body">' +
-      mfaBody +
+      '<section class="panel"><div class="panel__head"><h4>Admin email sign-in</h4></div><div class="panel__body">' +
+      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">A one-time code is sent to the approved admin Gmail each time a new sign-in is needed. Codes expire after 5 minutes and can only be used once.</p>' +
       "</div></section>" +
       '<section class="panel"><div class="panel__head"><h4>Phone order notifications</h4></div><div class="panel__body">' +
       '<p style="margin-top:0;color:var(--muted);font-size:14.5px">' + esc(pushDescription) + '</p>' +
@@ -1513,44 +1521,6 @@
       } catch (ex) { undo(); toast(ex.message || "Could not disable phone notifications.", false); }
     });
 
-    const start = $("#mfaStart");
-    if (start) start.addEventListener("click", async function () {
-      try {
-        const out = await api("POST", "/api/auth/admin/mfa/setup", {});
-        $("#mfaSecret").value = out.secret;
-        $("#mfaUri").textContent = out.otpauth || "";
-        $("#mfaSetup").hidden = false;
-        start.hidden = true;
-        $("#mfaCodeE").focus();
-        toast("Add this key to your authenticator app, then enter the code", true);
-      } catch (ex) { toast(ex.message, false); }
-    });
-
-    const enable = $("#mfaEnable");
-    if (enable) enable.addEventListener("click", async function () {
-      const code = String($("#mfaCodeE").value || "").trim();
-      if (!/^\d{6}$/.test(code)) { toast("Enter the 6-digit code.", false); return; }
-      const undo = busy(enable, "Activating…");
-      try {
-        await api("POST", "/api/auth/admin/mfa/enable", { code: code });
-        undo(); toast("Two-factor authentication enabled", true);
-        await repaint(VIEWS.settings);
-      } catch (ex) { undo(); toast(ex.message, false); }
-    });
-
-    const disable = $("#mfaDisable");
-    if (disable) disable.addEventListener("click", async function () {
-      const code = String($("#mfaCodeD").value || "").trim();
-      const pw = String($("#mfaPwD").value || "");
-      if (!/^\d{6}$/.test(code)) { toast("Enter the 6-digit code.", false); return; }
-      if (!pw) { toast("Confirm with your admin password.", false); return; }
-      const undo = busy(disable, "Disabling…");
-      try {
-        await api("POST", "/api/auth/admin/mfa/disable", { code: code, password: pw });
-        undo(); toast("Two-factor authentication disabled", true);
-        await repaint(VIEWS.settings);
-      } catch (ex) { undo(); toast(ex.message, false); }
-    });
   };
 
   function pushKeyBytes(value) {

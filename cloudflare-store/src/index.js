@@ -8,6 +8,7 @@ const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
 const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row limit
 const COOKIE = "uvid_session";
+const ADMIN_OTP_TTL_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -53,6 +54,7 @@ async function verifySession(env, token) {
   try {
     const data = JSON.parse(new TextDecoder().decode(unb64url(parts[0])));
     if (!data.exp || Date.now() >= data.exp || !["ADMIN", "CUSTOMER"].includes(data.role)) return null;
+    if (data.role === "ADMIN" && data.authMethod !== "email_otp") return null;
     return data;
   } catch { return null; }
 }
@@ -84,6 +86,86 @@ async function audit(env, request, user, action, target = null, detail = {}) {
       .bind(user?.id == null ? null : String(user.id), user?.name || null, user?.role || null, action, target,
         JSON.stringify(detail), request.headers.get("CF-Connecting-IP"), request.headers.get("User-Agent")?.slice(0, 250) || null).run();
   } catch { /* audit failures must not fail a product save */ }
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function randomOtp() {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return String(bytes[0] % 1_000_000).padStart(6, "0");
+}
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+
+async function sendTransactionalEmail(env, message) {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return { sent: false, reason: "not_configured" };
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.EMAIL_FROM,
+        to: [message.to],
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn("[EMAIL] Provider rejected a message.", response.status);
+      return { sent: false, reason: "provider_error" };
+    }
+    return { sent: true, id: result.id || null };
+  } catch (cause) {
+    console.warn("[EMAIL] Could not deliver a message.", cause?.name || "network error");
+    return { sent: false, reason: "delivery_failed" };
+  }
+}
+
+async function sendAdminOtpEmail(env, email, code) {
+  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:520px;margin:auto;padding:24px"><h2>UVID Admin sign-in</h2><p>Use this one-time code to sign in:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</p><p>This code expires in 5 minutes and can be used once. If you did not request it, you can ignore this email.</p></div>`;
+  return sendTransactionalEmail(env, {
+    to: email,
+    subject: "Your UVID Admin sign-in code",
+    text: `Your UVID Admin sign-in code is ${code}. It expires in 5 minutes and can be used once. If you did not request it, ignore this email.`,
+    html,
+  });
+}
+
+async function sendOrderEmail(env, order, type, items = []) {
+  const email = clean(env.ADMIN_EMAIL, 200).toLowerCase();
+  if (!email) return { sent: false, reason: "not_configured" };
+  const amount = Number(order.total_amount || 0).toFixed(2);
+  const itemLines = items.map((item) => `${clean(item.variantLabel, 100) ? `${clean(item.variantLabel, 100)} — ` : ""}${clean(item.name, 160)} × ${Number(item.qty) || 0} — ₹${Number(item.priceAtPurchase || 0).toFixed(2)}`);
+  const shippingPending = type === "placed" && Number(order.shipping_finalized) === 0;
+  const paymentLabel = order.payment_status === "PAID" ? "Paid" : (order.payment_status === "PROOF_SUBMITTED" ? "Screenshot submitted; awaiting verification" : "Awaiting payment");
+  const subject = type === "paid" ? `Payment confirmed for ${order.id}` : `New order ${order.id} placed`;
+  const statusText = type === "paid" ? `Paid: ₹${amount}` : (shippingPending
+    ? `Items subtotal: ₹${amount}. Payment status: ${paymentLabel}. Delivery charge is pending; the final total may change.`
+    : `Order amount: ₹${amount}. Payment status: ${paymentLabel}.`);
+  const text = [
+    type === "paid" ? `Payment confirmed. Order ID: ${order.id}.` : `A customer placed an order. Order ID: ${order.id}.`,
+    statusText,
+    itemLines.length ? `Items:\n${itemLines.join("\n")}` : "",
+  ].filter(Boolean).join("\n\n");
+  const rows = items.map((item) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${item.variantLabel ? `<b>${escapeHtml(clean(item.variantLabel, 100))}</b><br>` : ""}${escapeHtml(clean(item.name, 160))}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${Number(item.qty) || 0}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">₹${Number(item.priceAtPurchase || 0).toFixed(2)}</td></tr>`).join("");
+  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:600px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "New order placed"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${escapeHtml(statusText)}</p>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px 10px">Item</th><th>Qty</th><th style="text-align:right">Price</th></tr></thead><tbody>${rows}</tbody></table>` : ""}<p style="color:#666;font-size:13px">UVID Art &amp; Craft Supplies</p></div>`;
+  return sendTransactionalEmail(env, { to: email, subject, text, html });
 }
 
 function parseMeta(row) { return parseJson(row.meta_json, {}) || {}; }
@@ -444,14 +526,29 @@ async function placeOrder(env, user, body) {
     env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized) SELECT 'UVID'||printf('%03d',last_value),0 FROM order_id_counter WHERE id=1")
   ];
   for (const line of lines) {
-    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.qty,line.p.price,line.p.image_url));
+    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.p.variant_label,line.qty,line.p.price,line.p.image_url));
     batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
   const batchResults = await env.DB.batch(batches);
   const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);
   if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) throw new Error("Could not allocate an order number.");
   const id = "UVID" + String(orderNumber).padStart(3, "0");
-  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })) };
+  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })) };
+}
+
+async function orderEmailItems(env, orderId) {
+  const rows = (await env.DB.prepare(`
+    SELECT oi.product_id,oi.product_name,COALESCE(oi.variant_label,p.variant_label) AS variant_label,
+      oi.quantity,oi.price_at_purchase
+    FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id
+    WHERE oi.order_id=? ORDER BY oi.id
+  `).bind(orderId).all()).results || [];
+  return rows.map((item) => ({
+    variantLabel: item.variant_label,
+    name: item.product_name,
+    qty: item.quantity,
+    priceAtPurchase: item.price_at_purchase,
+  }));
 }
 
 async function handleApi(request, env, user, url) {
@@ -464,6 +561,68 @@ async function handleApi(request, env, user, url) {
 
   if (path === "/api/auth/me" && method === "GET") return user ? json({ user }) : error("Not logged in.", 401);
   if (path === "/api/auth/logout" && method === "POST") return json({ ok:true },200,{"Set-Cookie":cookieHeader("",0)});
+  if (path === "/api/auth/admin/request-otp" && method === "POST") {
+    const b = await readBody();
+    const email = clean(b.email, 200).toLowerCase();
+    const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
+    if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
+    if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
+    if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
+
+    const code = randomOtp();
+    const codeHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
+    const sentAt = Date.now();
+    const challenge = await env.DB.prepare(`
+      INSERT INTO admin_email_otps (email,code_hash,sent_at_ms,expires_at_ms,attempt_count,request_window_start_ms,request_count)
+      VALUES (?,?,?,?,0,?,1)
+      ON CONFLICT(email) DO UPDATE SET
+        code_hash=excluded.code_hash,
+        sent_at_ms=excluded.sent_at_ms,
+        expires_at_ms=excluded.expires_at_ms,
+        attempt_count=0,
+        request_window_start_ms=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN excluded.sent_at_ms ELSE admin_email_otps.request_window_start_ms END,
+        request_count=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN 1 ELSE admin_email_otps.request_count+1 END
+      WHERE excluded.sent_at_ms-admin_email_otps.sent_at_ms>=60000
+        AND (excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 OR admin_email_otps.request_count<5)
+      RETURNING email
+    `).bind(email,codeHash,sentAt,sentAt+ADMIN_OTP_TTL_MS,sentAt).first();
+    if (!challenge) return error("Wait a minute before requesting another code. A maximum of five codes can be sent per hour.",429);
+
+    const delivery = await sendAdminOtpEmail(env,email,code);
+    if (!delivery.sent) {
+      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',expires_at_ms=0,attempt_count=5 WHERE email=? AND code_hash=?").bind(email,codeHash).run();
+      return error("The sign-in email could not be sent. Check the email service setup and try again.",delivery.reason === "not_configured" ? 503 : 502);
+    }
+    return json({ok:true,message:"A sign-in code was sent to the approved admin email."});
+  }
+  if (path === "/api/auth/admin/verify-otp" && method === "POST") {
+    const b = await readBody();
+    const email = clean(b.email, 200).toLowerCase();
+    const code = String(b.code || "").trim();
+    const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
+    if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
+    if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
+    const challenge = await env.DB.prepare("SELECT code_hash,expires_at_ms,attempt_count FROM admin_email_otps WHERE email=?").bind(email).first();
+    if (!challenge || Number(challenge.expires_at_ms) <= Date.now() || Number(challenge.attempt_count) >= 5) {
+      return error("The code expired or is no longer valid. Request a new sign-in code.",401);
+    }
+    if (!/^\d{6}$/.test(code)) {
+      await env.DB.prepare("UPDATE admin_email_otps SET attempt_count=attempt_count+1 WHERE email=? AND attempt_count<5").bind(email).run();
+      return error("Enter the 6-digit code sent to the admin email.",401);
+    }
+    const suppliedHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
+    if (!constantTimeEqual(suppliedHash, challenge.code_hash)) {
+      await env.DB.prepare("UPDATE admin_email_otps SET attempt_count=attempt_count+1 WHERE email=? AND attempt_count<5").bind(email).run();
+      return error("The sign-in code is incorrect. Check the email and try again.",401);
+    }
+    const consumed = await env.DB.prepare("DELETE FROM admin_email_otps WHERE email=? AND code_hash=? AND expires_at_ms>? AND attempt_count<5 RETURNING email")
+      .bind(email,suppliedHash,Date.now()).first();
+    if (!consumed) return error("The code expired or is no longer valid. Request a new sign-in code.",401);
+    const admin = {id:"admin",email:adminEmail,name:"UVID Admin",role:"ADMIN"};
+    const token = await issueSession(env,{...admin,authMethod:"email_otp"});
+    await audit(env,request,admin,"admin.login",null,{method:"email_otp"});
+    return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token)});
+  }
   if (path === "/api/auth/email/login" && method === "POST") {
     const b = await readBody(); const email = clean(b.email, 200).toLowerCase();
     if (!GMAIL_RE.test(email)) return error("Enter a valid Gmail address, such as name@gmail.com.");
@@ -477,13 +636,7 @@ async function handleApi(request, env, user, url) {
     const token = await issueSession(env,{id:row.id,email:row.email,name:row.name,role:row.role});
     return json({ok:true,user:{id:row.id,email:row.email,name:row.name,role:row.role}},200,{"Set-Cookie":cookieHeader(token)});
   }
-  if (path === "/api/auth/admin/login" && method === "POST") {
-    const b = await readBody(); const email = clean(b.email,200).toLowerCase(); const password = String(b.password || "");
-    if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET) return error("Admin sign-in is not configured on the backend yet.",503);
-    if (email !== String(env.ADMIN_EMAIL).toLowerCase() || password !== env.ADMIN_PASSWORD) return error("Invalid admin credentials.",401);
-    const token = await issueSession(env,{id:"admin",email:env.ADMIN_EMAIL,name:"UVID Admin",role:"ADMIN"});
-    return json({ok:true,user:{id:"admin",email:env.ADMIN_EMAIL,name:"UVID Admin",role:"ADMIN"}},200,{"Set-Cookie":cookieHeader(token)});
-  }
+  if (path === "/api/auth/admin/login" && method === "POST") return error("Password sign-in is disabled. Request a one-time email code instead.",410);
   if (path === "/api/auth/admin/mfa/status" && method === "GET") return adminOnly || json({enabled:false});
   if (path.startsWith("/api/auth/admin/mfa/") && method === "POST") return adminOnly || error("Two-factor setup is not available on this free Worker backend.",501);
 
@@ -687,7 +840,12 @@ async function handleApi(request, env, user, url) {
     const notification = alreadyPaid
       ? { sent: false, count: 0, reason: "already_paid" }
       : await sendPaidOrderPush(env, order, parseJson(order.address_json, {}).name || "Customer");
-    return json({ok:true,notification,order:(await orderList(env,null)).find((item)=>item.id===id)});
+    const emailItems = alreadyPaid ? [] : await orderEmailItems(env,id);
+    const emailNotification = alreadyPaid
+      ? { sent: false, reason: "already_paid" }
+      : await sendOrderEmail(env,{...order,payment_status:"PAID"},"paid",emailItems);
+    if(!emailNotification.sent && !alreadyPaid) console.warn("[ORDER EMAIL] Payment confirmation was not delivered.",emailNotification.reason);
+    return json({ok:true,notification,emailNotification,order:(await orderList(env,null)).find((item)=>item.id===id)});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/push$/);
   if (match && method === "POST") {
@@ -707,6 +865,26 @@ async function handleApi(request, env, user, url) {
     }
     await audit(env,request,user,"order.push_sent",id,{devices:notification.count});
     return json({ok:true,notification});
+  }
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/email$/);
+  if (match && method === "POST") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+    if (!order) return error("Order not found.",404);
+    if (order.status === "CANCELLED") return error("A cancelled order cannot receive an order email.",409);
+    const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
+    const items = await orderEmailItems(env,id);
+    const type = order.payment_status === "PAID" ? "paid" : "placed";
+    const emailNotification = await sendOrderEmail(env,{...order,shipping_finalized:Number(quote?.finalized ?? 1)},type,items);
+    if (!emailNotification.sent) {
+      const message = emailNotification.reason === "not_configured"
+        ? "Email delivery is not configured on the server yet."
+        : "The email could not be delivered. Check the email service and try again.";
+      return error(message,emailNotification.reason === "not_configured" ? 503 : 502);
+    }
+    await audit(env,request,user,"order.email_sent",id,{type});
+    return json({ok:true,emailNotification});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
   if(match && method === "PUT"){
@@ -739,7 +917,11 @@ async function handleApi(request, env, user, url) {
   }
 
   if(path==="/api/orders" && method==="POST"){
-    if(customerOnly) return customerOnly; const out=await placeOrder(env,user,await readBody()); return json({ok:true,...out},201);
+    if(customerOnly) return customerOnly;
+    const out=await placeOrder(env,user,await readBody());
+    const emailNotification=await sendOrderEmail(env,out.order,"placed",out.items);
+    if(!emailNotification.sent) console.warn("[ORDER EMAIL] New-order notification was not delivered.",emailNotification.reason);
+    return json({ok:true,...out,emailNotification},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
   match = path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
