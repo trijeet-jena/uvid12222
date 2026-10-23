@@ -406,9 +406,13 @@ body.modal-open { overflow: hidden; }
 .invoice__totals > div span { color: #667169; }
 .invoice__delivery-input { width: 148px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: 600 13px "Outfit", Arial, sans-serif; }
 .invoice__delivery-input:focus { outline: 2px solid rgba(47, 128, 97, .22); border-color: var(--brand); }
+.invoice__delivery-value { display: inline-block; }
+.invoice__pending-quote { display: none; }
 .invoice__totals .invoice__grand { margin-top: 8px; padding: 12px 0 0; border-top: 2px solid #2f8061; font-size: 17px; }
 .invoice__grand span, .invoice__grand b { color: #202b25 !important; font-weight: 800; }
 .invoice__thanks { margin: 28px 0 0; padding-top: 14px; border-top: 1px solid #e4e9e5; color: #667169; text-align: center; font-size: 12px; }
+.order-workflow-note { display: block; max-width: 210px; margin-top: 5px; color: #68736d; line-height: 1.35; }
+.order-place-action { margin-top: 7px; white-space: nowrap; }
 @media (max-width: 560px) {
   .invoice { padding: 22px 12px; font-size: 12px; }
   .invoice__top { gap: 10px; }
@@ -445,6 +449,8 @@ body.modal-open { overflow: hidden; }
   .invoice__table tr { break-inside: avoid; page-break-inside: avoid; }
   .invoice__table th { color: #fff !important; background: #171717 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .invoice__image img { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .invoice__delivery-input { display: none !important; }
+  .invoice__pending-quote { display: inline !important; color: #58635c; font-size: 12px; font-weight: 600; }
 }
 
 /* ---------------- toast ---------------- */

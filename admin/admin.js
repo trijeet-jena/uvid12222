@@ -1145,7 +1145,7 @@
       await loadState("orders");
     }
     content.innerHTML =
-      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · every order from the storefront, in real time</p></div>" +
+      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · UPI orders stay Awaiting payment until the final amount is paid and verified in PhonePe. Confirm &amp; place moves them to Placed; then update packing and delivery here.</p></div>" +
       '<div class="filters"><select id="ordFilter" aria-label="Filter by status"><option value="">All statuses</option>' +
       ORDER_STATUSES.map(function (s) {
         return '<option value="' + s[0] + '"' + (state.orderFilter === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
@@ -1164,18 +1164,19 @@
   function orderRowHtml(o) {
     const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
     const addr = orderAddress(o);
-    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID";
+    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID" && o.status !== "CANCELLED";
+    const quotePending = Number(o.shipping_finalized) === 0;
     const paymentNote = awaitingUpi ? " · Payment pending" : "";
     return '<tr data-orow="' + esc(o.id) + '">' +
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
       '<td class="num"><b>' + (Number(o.shipping_finalized) === 0 ? 'Delivery pending' : money(o.total_amount)) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
-      '<td><select class="ostat" data-oid="' + esc(o.id) + '">' +
+      '<td><select class="ostat" data-oid="' + esc(o.id) + '" aria-label="Order status for ' + esc(o.id) + '">' +
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select></td>" +
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : 'Verify this exact total in PhonePe to place the order.') + '</small>' + (quotePending ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm payment &amp; place</button>') : "") + "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
@@ -1229,7 +1230,7 @@
       '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
       '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
-      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="Enter charge" value="" aria-label="Delivery charge in rupees" data-delivery-fee>') + '</b></div>' +
+      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<span class="invoice__delivery-value"><input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="Enter charge" value="" aria-label="Delivery charge in rupees" data-delivery-fee><span class="invoice__pending-quote">Awaiting store quote</span></span>') + '</b></div>' +
       '<div class="invoice__grand"><span>' + (shippingFinalized ? "Total payable" : "Final total") + '</span><b>' + (shippingFinalized ? money(total) : "After delivery charge is saved") + '</b></div></div></div>' +
       '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
   }
@@ -1239,7 +1240,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm UPI payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + (quotePending ? '<button class="btn btn--primary" type="button" disabled title="Save the delivery charge first">Print invoice</button>' : '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button>') + '</div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm payment &amp; place order</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1280,7 +1281,7 @@
     });
     const confirmButton = back.querySelector("[data-confirm-upi]");
     if (confirmButton) confirmButton.addEventListener("click", async function () {
-      const verified = await confirmDialog("Check this order's exact amount in the PhonePe Business account before confirming. The customer sees success only after this action.", { yes: "I verified it — confirm payment", danger: false });
+      const verified = await confirmDialog("Check this order's exact total in the PhonePe Business account. Confirming marks the payment as paid and moves an Awaiting payment order to Placed, so you can continue with packing and delivery.", { yes: "Confirm payment & place order", danger: false });
       if (!verified) return;
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
@@ -1292,6 +1293,7 @@
           ? " Phone alert sent to " + result.notification.count + " device(s)."
           : "");
         toast(message, emailSent);
+        closeModal();
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
     });
@@ -1309,7 +1311,24 @@
       }
     });
   }
-  content.addEventListener("click", function (e) {
+  content.addEventListener("click", async function (e) {
+    const place = e.target.closest("[data-confirm-place]");
+    if (place) {
+      const order = state.orders.find(function (item) { return String(item.id) === place.dataset.confirmPlace; });
+      if (!order || order.status === "CANCELLED") return;
+      if (Number(order.shipping_finalized) === 0) { toast("Set the delivery charge in the invoice before confirming payment.", false); return; }
+      const verified = await confirmDialog("Check this order's exact total in the PhonePe Business account. Confirming marks the payment as paid and moves it from Awaiting payment to Placed, so you can continue with packing and delivery.", { yes: "Confirm payment & place order", danger: false });
+      if (!verified) return;
+      const undo = busy(place, "Placing…");
+      try {
+        const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
+        const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
+        const phoneSent = Boolean(result.notification && result.notification.sent);
+        toast("Payment confirmed; order placed. " + (emailSent ? "Customer email sent." : "Email alert could not be sent; check the email service setup.") + (phoneSent ? " Phone alert sent." : ""), emailSent);
+        await repaint(VIEWS.orders);
+      } catch (ex) { undo(); toast(ex.message, false); }
+      return;
+    }
     const t = e.target.closest("[data-invoice]");
     if (!t) return;
     const order = state.orders.find(function (item) { return String(item.id) === t.dataset.invoice; });

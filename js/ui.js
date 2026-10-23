@@ -908,9 +908,47 @@
       '</div>' +
       '<div class="success__cta">' +
       '<a class="btn btn--primary" href="#/orders/' + order.id + '">Track order</a>' +
+      '<button class="btn btn--ghost" type="button" data-invoice="' + esc(order.id) + '">Download invoice (PDF)</button>' +
       '<a class="btn btn--ghost" href="#/">Continue shopping</a>' +
       '</div></div>' +
       shelf("Complete your desk", "Frequently bought together", D.PRODUCTS.filter(function (p) { return p.tags.indexOf("bestseller") > -1; }).slice(0, 6));
+  }
+
+  function openCustomerInvoice(order) {
+    var popup = window.open("", "_blank");
+    if (!popup) { A.toast("Allow pop-ups for this site to open your invoice.", false); return; }
+    var items = Array.isArray(order.items) ? order.items : [];
+    var address = order.address || {};
+    var addressLines = [address.line, address.line2, address.landmark, address.city, address.state, address.pin ? "PIN " + address.pin : "", address.country].filter(Boolean);
+    var subtotal = Number(order.totals && order.totals.subtotal) || 0;
+    var discount = Number(order.totals && order.totals.discount) || 0;
+    var shippingFinalized = Boolean(order.shippingFinalized);
+    var shipping = Number(order.totals && order.totals.shipping) || 0;
+    var total = Number(order.totals && order.totals.total) || 0;
+    var payment = String(order.payment || "").toUpperCase();
+    var paymentStatus = order.paymentConfirmed ? "Paid" : (order.paymentStatus || (payment === "COD" ? "Pay on delivery" : "Awaiting payment"));
+    var rows = items.map(function (item, index) {
+      var quantity = Number(item.qty) || 0;
+      var price = Number(item.price) || 0;
+      return "<tr><td>" + (index + 1) + "</td><td>" + esc(item.name || "Product") + "</td><td class=\"num\">" + esc(money(price)) + "</td><td class=\"num\">" + quantity + "</td><td class=\"num\">" + esc(money(price * quantity)) + "</td></tr>";
+    }).join("");
+    var title = "Invoice-" + String(order.id || "order").replace(/[^a-z0-9_-]/gi, "") + "-UVID";
+    var html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(title) + '</title><style>' +
+      'body{margin:0;background:#f3f5f2;color:#202b25;font:14px/1.5 Arial,sans-serif}.toolbar{max-width:820px;margin:18px auto;padding:12px 20px;background:#e8f1ec;border-radius:8px;color:#294b3b}.toolbar button{float:right;border:0;border-radius:6px;background:#267653;color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}.sheet{max-width:820px;margin:20px auto;padding:38px;background:#fff;box-shadow:0 4px 24px #15251a18}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #2f8061;padding-bottom:20px}.brand{font-size:22px;font-weight:800;color:#203f6c}.seller{margin-top:8px;color:#58635c;font-size:12px}.heading{text-align:right}.heading h1{margin:0;color:#2f8061;letter-spacing:2px}.muted{color:#667169}.meta,.parties{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:18px 0;border-bottom:1px solid #e1e7e2}.meta b,.meta span,.parties span{display:block}.parties{grid-template-columns:1fr 1fr}.parties h2{font-size:12px;color:#2f8061;text-transform:uppercase;letter-spacing:1px}.items{width:100%;border-collapse:collapse;margin-top:22px}.items th{background:#202b25;color:white;text-align:left}.items th,.items td{padding:10px 8px;border:1px solid #dfe3e0}.num{text-align:right;white-space:nowrap}.totals{width:min(340px,100%);margin:18px 0 0 auto}.totals div{display:flex;justify-content:space-between;gap:20px;padding:5px 0}.grand{border-top:2px solid #2f8061;margin-top:8px;padding-top:12px!important;font-size:17px;font-weight:800}.thanks{text-align:center;margin:34px 0 0;padding-top:14px;border-top:1px solid #e1e7e2;color:#667169;font-size:12px}' +
+      '@page{size:A4;margin:14mm}@media(max-width:600px){.sheet{margin:10px;padding:20px}.toolbar{margin:10px}.top{gap:8px}.brand{font-size:18px}.items th,.items td{padding:7px 4px;font-size:11px}.parties{gap:10px}}@media print{body{background:#fff}.toolbar{display:none}.sheet{max-width:none;margin:0;padding:0;box-shadow:none}.top,.meta,.parties,.totals{break-inside:avoid;page-break-inside:avoid}.items tr{break-inside:avoid;page-break-inside:avoid}}' +
+      '</style></head><body><div class="toolbar">Choose <b>Save as PDF</b> in the print dialog to download this invoice.<button onclick="window.print()">Print / Save as PDF</button></div><main class="sheet">' +
+      '<header class="top"><div><div class="brand">UVID Art and Craft</div><div class="seller">#114, Ravikirloskar Layout<br>Nagasandra Post, Bengaluru – 560073<br>Phone: +91 90750 12945 · +91 74061 55738<br>Email: uvidartandcraft@gmail.com</div></div><div class="heading"><h1>INVOICE</h1><span class="muted">Order No.</span><br><b>' + esc(order.id) + '</b></div></header>' +
+      '<section class="meta"><div><span class="muted">Invoice date</span><b>' + esc(A.fmtDateTime(order.placedAt)) + '</b></div><div><span class="muted">Order status</span><b>' + esc(order.status || "Awaiting payment") + '</b></div><div><span class="muted">Payment</span><b>' + esc(payment + " · " + paymentStatus) + '</b></div></section>' +
+      '<section class="parties"><div><h2>Customer details</h2><b>' + esc(address.name || "Customer") + '</b><span>Phone: ' + esc(address.phone || "—") + '</span><span>Email: ' + esc(A.state.user || "—") + '</span></div><div><h2>Delivery address</h2><b>' + esc(address.name || "Customer") + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></div></section>' +
+      '<table class="items"><thead><tr><th>No.</th><th>Product</th><th class="num">Unit price</th><th class="num">Qty</th><th class="num">Price</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">No item details are available.</td></tr>') + '</tbody></table>' +
+      '<section class="totals"><div><span>Items subtotal</span><b>' + esc(money(subtotal)) + '</b></div>' + (discount ? '<div><span>Discount</span><b>−' + esc(money(discount)) + '</b></div>' : '') +
+      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? esc(money(shipping)) : "Free") : "Awaiting store quote") + '</b></div><div class="grand"><span>' + (shippingFinalized ? "Total payable" : "Final total") + '</span><b>' + (shippingFinalized ? esc(money(total)) : "Pending delivery charge") + '</b></div></section>' +
+      '<p class="thanks">Thank you for shopping with UVID Art and Craft.</p></main></body></html>';
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    popup.setTimeout(function () { try { popup.print(); } catch (_e) { /* customer can use the print button */ } }, 500);
   }
 
   /* ================= ORDERS ================= */
@@ -996,6 +1034,7 @@
             : '<p class="ocard__eta">Arriving by <b>' + A.fmtDate(o.eta) + '</b></p>') + '</div>' +
           '<footer>' +
           '<a class="btn btn--soft btn--sm" href="#/orders/' + o.id + '">View details</a>' +
+          '<button class="btn btn--ghost btn--sm" type="button" data-invoice="' + esc(o.id) + '">Download invoice (PDF)</button>' +
           (o.status !== "Delivered" && o.status !== "Cancelled" ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel</button>' : "") +
           '<button class="btn btn--ghost btn--sm" data-reorder="' + o.id + '">↻ Reorder</button>' +
           '</footer></article>';
@@ -1041,7 +1080,7 @@
       '<div class="odetail__ops">' +
       (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
       '<button class="btn btn--soft btn--sm" data-reorder="' + o.id + '">↻ Reorder</button>' +
-      '<button class="btn btn--ghost btn--sm" data-invoice="' + o.id + '">🧾 Invoice</button>' +
+      '<button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '">Download invoice (PDF)</button>' +
       '</div></section>' +
       '<section class="card odetail__box"><h2>delivery address</h2>' +
       '<p class="odetail__addr"><b>' + esc(o.address.name) + '</b> · ' + esc(o.address.phone) + '<br/>' +
@@ -1258,7 +1297,13 @@
     }
 
     var inv = t.closest("[data-invoice]");
-    if (inv) { e.preventDefault(); A.toast("Invoice " + inv.getAttribute("data-invoice") + ".pdf downloaded (demo)", true); return; }
+    if (inv) {
+      e.preventDefault();
+      var invoiceOrder = A.state.orders.filter(function (x) { return String(x.id) === inv.getAttribute("data-invoice"); })[0];
+      if (invoiceOrder) openCustomerInvoice(invoiceOrder);
+      else A.toast("Order details are unavailable. Refresh My Orders and try again.", false);
+      return;
+    }
 
     var da = t.closest("[data-deladdr]");
     if (da) {
