@@ -580,6 +580,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .proof-upload { display: grid; gap: 7px; margin: 18px 0 8px; padding: 16px; border: 1px dashed var(--brand); border-radius: var(--rad-sm); background: var(--paper-2); text-align: left; cursor: pointer; }
 .proof-upload span { color: var(--ink-2); font-size: 13px; }
 .proof-upload input { width: 100%; margin-top: 4px; font: inherit; }
+.proof-upload--pending { border-style: solid; cursor: not-allowed; opacity: .75; }
+.proof-upload--pending input { cursor: not-allowed; }
 .proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
 .proof-message { min-height: 20px; color: var(--ink-2); font-size: 13px; }
 
@@ -3081,6 +3083,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         '<p>The store is checking your address and will add the delivery charge. Your order is not placed yet. Please wait for the final total before paying.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
+        '<label class="proof-upload proof-upload--pending" for="paymentProofPending" aria-disabled="true"><b>Upload payment proof</b><span>This option will be enabled after the store confirms the delivery charge and final total. Pay the exact total before uploading.</span><input id="paymentProofPending" type="file" accept="image/jpeg,image/png,image/webp" disabled /></label>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
