@@ -948,7 +948,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" /><path d="m20 20-3.8-3.8" />
           </svg>
-          <input id="searchInput" type="search" placeholder="Search pens, notebooks, planners…" autocomplete="off" aria-label="Search products" />
+          <input id="searchInput" type="search" placeholder="Search products…" autocomplete="off" aria-label="Search products" />
         </div>
         <div class="search__drop" id="searchDrop" role="listbox" aria-label="Search suggestions"></div>
       </div>
@@ -3767,7 +3767,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       html += hits.map(function (p) {
         return '<a class="sd" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /><span>' + esc(p.name) + '</span><b>' + money(p.price) + '</b></a>';
       }).join("");
-      if (!html) html = '<p class="sd sd--none">No matches — try “pen”, “notebook”…</p>';
+      if (!html) html = '<p class="sd sd--none">No matches found. Try another search.</p>';
       else html += '<a class="sd sd--all" href="#/search?q=' + encodeURIComponent(input.value.trim()) + '">See all results for “' + esc(input.value.trim()) + '” →</a>';
       drop.innerHTML = html;
       drop.classList.add("search__drop--open");

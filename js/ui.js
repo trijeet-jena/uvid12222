@@ -1481,7 +1481,7 @@
       html += hits.map(function (p) {
         return '<a class="sd" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /><span>' + esc(p.name) + '</span><b>' + money(p.price) + '</b></a>';
       }).join("");
-      if (!html) html = '<p class="sd sd--none">No matches — try “pen”, “notebook”…</p>';
+      if (!html) html = '<p class="sd sd--none">No matches found. Try another search.</p>';
       else html += '<a class="sd sd--all" href="#/search?q=' + encodeURIComponent(input.value.trim()) + '">See all results for “' + esc(input.value.trim()) + '” →</a>';
       drop.innerHTML = html;
       drop.classList.add("search__drop--open");
