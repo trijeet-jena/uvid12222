@@ -190,6 +190,14 @@
   function home() {
     var best = D.visibleProducts.slice().sort(function (a, b) { return b.popularity - a.popularity; }).slice(0, 6);
     var deals = D.visibleProducts.filter(function (p) { return p.tags.indexOf("deal") > -1; }).slice(0, 6);
+    if (deals.length < 4) {
+      var dealIds = deals.map(function (p) { return p.id; });
+      D.visibleProducts.filter(function (p) { return p.discount > 0 && Number(p.stock) > 0 && dealIds.indexOf(p.id) === -1; })
+        .sort(function (a, b) { return b.discount - a.discount || b.popularity - a.popularity; })
+        .slice(0, 4 - deals.length)
+        .forEach(function (p) { deals.push(Object.assign({}, p, { tags: p.tags.concat("deal") })); });
+    }
+    deals = deals.slice(0, 4);
     var newest = D.visibleProducts.slice().sort(function (a, b) { return b.added - a.added; }).slice(0, 5);
     var recent = [], recentCategoryCounts = Object.create(null);
     A.state.recent.forEach(function (id) {
@@ -210,7 +218,7 @@
       mouldShowcase() +
 
       shelf("Bestsellers", "What everyone’s adding to cart", best, "#/search?sort=relevance") +
-      shelf("Deals of the week", "Marked down, marked out of stock soon", deals, "#/search?sort=discount") +
+      shelf("Deals of the day", "Today's offers on selected products", deals, "#/search?sort=discount", "shelf--deals") +
       shelf("Recently added", "The latest additions to the store", newest, "#/search?sort=newest") +
       '<section class="perks reveal">' +
       '<div class="perk"><span>🚚</span><h4>Fast delivery</h4><p>2–4 days metro to metro, tracked end to end.</p></div>' +
