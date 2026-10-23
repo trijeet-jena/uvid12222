@@ -187,10 +187,10 @@ function cancelOrder(orderId, user) {
 
 /* ---------- admin ---------- */
 function listAllOrders({ status, limit = 200 } = {}) {
-  let sql = "SELECT * FROM orders";
+  let sql = "SELECT o.*, u.name AS customer_name, u.email AS customer_email, u.mobile_number AS customer_mobile_number FROM orders o LEFT JOIN users u ON u.id = o.customer_id";
   const args = [];
-  if (status) { sql += " WHERE status = ?"; args.push(String(status).toUpperCase()); }
-  sql += " ORDER BY created_at DESC LIMIT ?";
+  if (status) { sql += " WHERE o.status = ?"; args.push(String(status).toUpperCase()); }
+  sql += " ORDER BY o.created_at DESC LIMIT ?";
   args.push(Number(limit) || 200);
   const orders = db.prepare(sql).all(...args);
   const itemsStmt = db.prepare("SELECT * FROM order_items WHERE order_id = ?");

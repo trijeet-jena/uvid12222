@@ -370,14 +370,17 @@ body.modal-open { overflow: hidden; }
   background: #fff; border: 1px solid var(--line); border-radius: 12px;
   font: 14px/1.5 "Outfit", Arial, sans-serif;
 }
-.invoice__top { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 2px solid #2f8061; }
+.invoice__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 2px solid #2f8061; }
+.invoice__seller { min-width: 0; }
 .invoice__brand { display: flex; align-items: center; gap: 12px; }
 .invoice__brand img { width: 54px; height: 54px; object-fit: contain; border-radius: 8px; }
-.invoice__brand strong { display: block; color: #203f6c; font-size: 23px; line-height: 1.1; }
+.invoice__brand strong { display: block; color: #203f6c; font-size: 19px; line-height: 1.15; }
 .invoice__brand span { display: block; margin-top: 5px; color: #738078; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; }
+.invoice__seller-address { display: grid; gap: 2px; margin: 12px 0 0 66px; color: #58635c; font-size: 11px; font-style: normal; line-height: 1.45; }
 .invoice__heading { text-align: right; }
 .invoice__heading h2 { margin: 0; color: #2f8061; font-size: 25px; letter-spacing: 2px; }
-.invoice__heading span { color: #68736d; font-size: 12px; overflow-wrap: anywhere; }
+.invoice__heading span { display: block; margin-top: 7px; color: #68736d; font-size: 12px; }
+.invoice__heading b { display: block; margin-top: 3px; color: #202b25; font-size: 16px; overflow-wrap: anywhere; }
 .invoice__meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 20px 0; border-bottom: 1px solid #e4e9e5; }
 .invoice__meta span, .invoice__parties span { display: block; color: #707a73; font-size: 12px; }
 .invoice__meta b { display: block; margin-top: 4px; font-size: 13px; text-transform: capitalize; }
@@ -389,10 +392,15 @@ body.modal-open { overflow: hidden; }
 .invoice__parties h3 { margin: 0 0 8px; color: #2f8061; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
 .invoice__parties b { display: block; margin-bottom: 4px; }
 .invoice__table-wrap { overflow-x: auto; }
-.invoice__table { width: 100%; border-collapse: collapse; text-align: left; }
-.invoice__table th { padding: 10px 8px; color: #536159; background: #f3f6f3; border-top: 1px solid #e1e7e2; border-bottom: 1px solid #e1e7e2; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
-.invoice__table td { padding: 12px 8px; border-bottom: 1px solid #e7ebe8; vertical-align: top; }
+.invoice__table { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; }
+.invoice__table th { padding: 10px 7px; color: #fff; background: #171717; border: 1px solid #171717; font-size: 10px; letter-spacing: .35px; text-transform: uppercase; }
+.invoice__table td { padding: 9px 7px; border: 1px solid #dfe3e0; vertical-align: middle; overflow-wrap: anywhere; }
 .invoice__table td small { display: block; margin-top: 3px; color: #707a73; }
+.invoice__rownum { width: 36px; text-align: center !important; }
+.invoice__image { width: 66px; text-align: center !important; }
+.invoice__image img { display: block; width: 48px; height: 48px; margin: 0 auto; object-fit: contain; background: #fff; }
+.invoice__no-image { color: #a1aaa4; }
+.invoice__product { width: 38%; }
 .invoice__qty { width: 56px; text-align: center !important; }
 .invoice__num { text-align: right !important; white-space: nowrap; }
 .invoice__bottom { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-top: 18px; }
@@ -406,11 +414,22 @@ body.modal-open { overflow: hidden; }
 .invoice__grand span, .invoice__grand b { color: #202b25 !important; font-weight: 800; }
 .invoice__thanks { margin: 28px 0 0; padding-top: 14px; border-top: 1px solid #e4e9e5; color: #667169; text-align: center; font-size: 12px; }
 @media (max-width: 560px) {
-  .invoice { padding: 22px 16px; }
+  .invoice { padding: 22px 12px; font-size: 12px; }
+  .invoice__top { gap: 10px; }
+  .invoice__brand { gap: 8px; }
+  .invoice__brand img { width: 44px; height: 44px; }
+  .invoice__brand strong { font-size: 16px; }
+  .invoice__seller-address { margin-left: 52px; font-size: 10px; }
+  .invoice__heading h2 { font-size: 20px; }
   .invoice__meta { grid-template-columns: 1fr 1fr; }
   .invoice__parties { grid-template-columns: 1fr; gap: 18px; }
   .invoice__bottom { display: block; }
   .invoice__totals { width: 100%; margin-top: 12px; }
+  .invoice__table th, .invoice__table td { padding: 7px 4px; font-size: 10px; }
+  .invoice__image { width: 48px; }
+  .invoice__image img { width: 38px; height: 38px; }
+  .invoice__rownum { width: 28px; }
+  .invoice__qty { width: 38px; }
 }
 
 @page { size: A4; margin: 14mm; }
@@ -425,9 +444,12 @@ body.modal-open { overflow: hidden; }
   .modal__head, .modal__foot { display: none !important; }
   .invoice-modal__body, .modal__body { overflow: visible !important; padding: 0 !important; background: #fff !important; }
   .invoice { max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #111 !important; }
-  .invoice__top, .invoice__meta, .invoice__parties, .invoice__table, .invoice__bottom { break-inside: avoid; page-break-inside: avoid; }
+  .invoice__top, .invoice__meta, .invoice__parties, .invoice__bottom { break-inside: avoid; page-break-inside: avoid; }
+  .invoice__table thead { display: table-header-group; }
+  .invoice__table tr { break-inside: avoid; page-break-inside: avoid; }
   .invoice-proof { display: none; }
-  .invoice__table th { background: #f3f6f3 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .invoice__table th { color: #fff !important; background: #171717 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .invoice__image img { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 
 /* ---------------- toast ---------------- */

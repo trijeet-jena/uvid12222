@@ -1183,6 +1183,10 @@
     if (typeof order.address_json === "object") return order.address_json || {};
     try { return JSON.parse(order.address_json) || {}; } catch (_e) { return {}; }
   }
+  function invoiceImageUrl(value) {
+    const src = String(value || "").trim();
+    return /^(https?:\/\/|\/(?!\/)|data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,])/i.test(src) ? src : "";
+  }
   function orderInvoiceHtml(order) {
     const address = orderAddress(order);
     const items = Array.isArray(order.items) ? order.items : [];
@@ -1198,26 +1202,31 @@
       ? Math.max(0, total - subtotal + discount)
       : Math.max(0, savedShipping);
     const itemCount = items.reduce(function (sum, item) { return sum + (Number(item.quantity) || 0); }, 0);
-    const addressLines = [address.line, [address.city, address.pin].filter(Boolean).join(" — ")].filter(Boolean);
-    const buyerName = address.name || "Customer";
-    const phone = address.phone || order.mobile_number || "—";
+    const addressLines = [address.line, address.line2, address.landmark, address.city, address.state, address.pin ? "PIN " + address.pin : "", address.country].filter(Boolean);
+    const buyerName = address.name || order.customer_name || "Customer";
+    const email = address.email || order.customer_email || "—";
+    const phone = address.phone || order.customer_mobile_number || order.mobile_number || "—";
     const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.payment_status === "PROOF_SUBMITTED" ? "Screenshot submitted · awaiting verification" : (order.status === "AWAITING_PAYMENT" ? "Awaiting payment screenshot" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "))));
     return '<article class="invoice" id="invoicePrint">' +
-      '<div class="invoice__top"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID logo" width="54" height="54"><div><strong>UVID</strong><span>ART AND CRAFT</span></div></div>' +
-      '<div class="invoice__heading"><h2>INVOICE</h2><span>Order ' + esc(order.id) + '</span></div></div>' +
+      '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong><span>ART AND CRAFT SUPPLIES</span></div></div>' +
+      '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
+      '<div class="invoice__heading"><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div></div>' +
       (order.payment_proof_available ? '<section class="invoice-proof"><h3>Payment screenshot</h3><a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/payment-proof" target="_blank" rel="noopener"><img src="/api/admin/orders/' + encodeURIComponent(order.id) + '/payment-proof" alt="Customer payment screenshot for order ' + esc(order.id) + '" /></a><small>Click the screenshot to open the full image.</small></section>' : (String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" ? '<p class="invoice-proof__empty">No payment screenshot uploaded yet.</p>' : "")) +
-      '<div class="invoice__parties"><section><h3>Bill to</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span></section>' +
+      '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
-      '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th>Item</th><th class="invoice__qty">Qty</th><th class="invoice__num">Unit price</th><th class="invoice__num">Amount</th></tr></thead><tbody>' +
-      (items.length ? items.map(function (item) {
+      '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
+      (items.length ? items.map(function (item, index) {
         const quantity = Number(item.quantity) || 0;
         const price = Number(item.price_at_purchase) || 0;
-        return '<tr><td><b>' + esc(item.product_name || "Product") + '</b>' + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
-          '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__num">' + money(price * quantity) + '</td></tr>';
-      }).join("") : '<tr><td colspan="4">No item details are available.</td></tr>') +
+        const imageUrl = invoiceImageUrl(item.image_url || item.imageUrl);
+        const image = imageUrl ? '<img src="' + esc(imageUrl) + '" alt="' + esc(item.product_name || "Product") + '" loading="eager">' : '<span class="invoice__no-image">—</span>';
+        return '<tr><td class="invoice__rownum">' + (index + 1) + '</td><td class="invoice__image">' + image + '</td><td class="invoice__product"><b>' + esc(item.product_name || "Product") + '</b>' +
+          (item.product_id ? '<small>SKU: ' + esc(item.product_id) + '</small>' : "") + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
+          '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num"><b>' + money(price * quantity) + '</b></td></tr>';
+      }).join("") : '<tr><td colspan="6">No item details are available.</td></tr>') +
       '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
       '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +

@@ -433,12 +433,14 @@ async function stats(env) {
     revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
-async function orderList(env, customerId = null, status = null, includePaymentProof = false) {
+async function orderList(env, customerId = null, status = null, includePaymentProof = false, includeCustomerDetails = false) {
   const proofColumn = includePaymentProof ? ",EXISTS (SELECT 1 FROM order_payment_proofs p WHERE p.order_id=o.id) AS payment_proof_available" : "";
-  let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${proofColumn} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id`, args = [];
-  if (customerId != null) { sql += " WHERE customer_id=?"; args.push(customerId); }
-  else if (status) { sql += " WHERE status=?"; args.push(status); }
-  sql += " ORDER BY created_at DESC LIMIT 200";
+  const customerColumns = includeCustomerDetails ? ",u.name AS customer_name,u.email AS customer_email,u.mobile_number AS customer_mobile_number" : "";
+  const customerJoin = includeCustomerDetails ? " LEFT JOIN users u ON u.id=o.customer_id" : "";
+  let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${proofColumn}${customerColumns} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id${customerJoin}`, args = [];
+  if (customerId != null) { sql += " WHERE o.customer_id=?"; args.push(customerId); }
+  else if (status) { sql += " WHERE o.status=?"; args.push(status); }
+  sql += " ORDER BY o.created_at DESC LIMIT 200";
   const orders = (await env.DB.prepare(sql).bind(...args).all()).results || [];
   if (!orders.length) return [];
   const ids = orders.map((o) => o.id);
@@ -751,7 +753,7 @@ async function handleApi(request, env, user, url) {
     return json({ok:true,url:`/uploads/${id}`},201);
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
-  if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"),true)});
+  if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"),true,true)});
   if (path === "/api/admin/push/status" && method === "GET") {
     if (adminOnly) return adminOnly;
     const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM admin_push_subscriptions").first();
@@ -821,7 +823,7 @@ async function handleApi(request, env, user, url) {
       env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized,updated_at) VALUES (?,1,?) ON CONFLICT(order_id) DO UPDATE SET finalized=1,updated_at=excluded.updated_at").bind(id,timestamp)
     ]);
     await audit(env,request,user,"order.delivery_quote_saved",id,{shipping,total});
-    return json({ok:true,order:(await orderList(env,null)).find((item)=>item.id===id)});
+    return json({ok:true,order:(await orderList(env,null,null,false,true)).find((item)=>item.id===id)});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment$/);
   if (match && method === "PUT") {
@@ -845,7 +847,7 @@ async function handleApi(request, env, user, url) {
       ? { sent: false, reason: "already_paid" }
       : await sendOrderEmail(env,{...order,payment_status:"PAID"},"paid",emailItems);
     if(!emailNotification.sent && !alreadyPaid) console.warn("[ORDER EMAIL] Payment confirmation was not delivered.",emailNotification.reason);
-    return json({ok:true,notification,emailNotification,order:(await orderList(env,null)).find((item)=>item.id===id)});
+    return json({ok:true,notification,emailNotification,order:(await orderList(env,null,null,false,true)).find((item)=>item.id===id)});
   }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/push$/);
   if (match && method === "POST") {
