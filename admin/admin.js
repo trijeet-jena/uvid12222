@@ -1208,7 +1208,7 @@
     const phone = address.phone || order.customer_mobile_number || order.mobile_number || "—";
     const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.payment_status === "PROOF_SUBMITTED" ? "Screenshot submitted · awaiting verification" : (order.status === "AWAITING_PAYMENT" ? "Awaiting payment screenshot" : (String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting verification" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "))));
     return '<article class="invoice" id="invoicePrint">' +
-      '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong><span>ART AND CRAFT SUPPLIES</span></div></div>' +
+      '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
       '<div class="invoice__heading"><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
