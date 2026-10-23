@@ -1425,9 +1425,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     });
   });
 
-  /* One candle-making product page for the 22 UVID silicone mould catalogue
-     options. Each option keeps its catalogue code, SKU, MRP, price and photo. */
-  var UVID_SILICONE_MOULD_PARENT_ID = "uvid-silicone-moulds";
+   /* Four smaller candle-making listings group the 22 UVID silicone mould designs. */
   var UVID_SILICONE_MOULD_VARIANTS = [
     { id: "uvidsm-123", code: "UVIDSM123", name: "Classic Geometric Earrings Mold", sku: "DI-RM-415", mrp: 220 },
     { id: "uvidsm-124", code: "UVIDSM124", name: "Flower Earrings Mold", sku: "DI-RM-416", mrp: 220 },
@@ -1452,33 +1450,45 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { id: "uvidsm-148", code: "UVIDSM148", name: "Arabic Prayer Mold", sku: "DI-RM-0399", mrp: 560 },
     { id: "uvidsm-149", code: "UVIDSM149", name: "Cross Mold", sku: "DI-RM-0398", mrp: 460 }
   ];
-  var uvidSiliconeMouldDescription = "Choose from 22 silicone mould designs listed in the UVID catalogue. Each design has its own product photo, item code and SKU. Every option is priced at 30% off its catalogue MRP. See the photos for design and dimensions.";
-  var firstUvidSiliconeMould = UVID_SILICONE_MOULD_VARIANTS[0];
-  P.push({
-    id: UVID_SILICONE_MOULD_PARENT_ID, name: "UVID Silicone Moulds — Choose a Design", brand: "UVID Art and Craft Supplies", category: "candle-making",
-    price: Math.round(firstUvidSiliconeMould.mrp * 0.7), mrp: firstUvidSiliconeMould.mrp, rating: null, ratingCount: 0,
-    emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F", stock: UVID_SILICONE_MOULD_VARIANTS.length * 25, tags: ["new", "deal"],
-    localImage: "/assets/uvidsm-123.jpg",
-    highlights: ["Choose from 22 catalogue mould designs", "Each design has its own photo, item code and SKU", "30% off the catalogue MRP on every design"],
-    specs: { "Category": "Candle Making", "Available designs": "22", "Discount": "30% off each catalogue MRP" },
-    description: uvidSiliconeMouldDescription,
-    variantMeta: UVID_SILICONE_MOULD_VARIANTS.map(function (m) {
-      return { id: m.id, size: m.code, label: m.code + " · " + m.name, name: m.name, price: Math.round(m.mrp * 0.7), mrp: m.mrp, stock: 25 };
-    })
-  });
-  UVID_SILICONE_MOULD_VARIANTS.forEach(function (m) {
-    var price = Math.round(m.mrp * 0.7);
+  var UVID_SILICONE_MOULD_GROUPS = [
+    { id: "uvidsm-earring-moulds", name: "Silicone Earring Moulds — Choose a Design", variantIds: ["uvidsm-123", "uvidsm-124", "uvidsm-125"] },
+    { id: "uvidsm-flower-moulds-set-1", name: "Flower Candle Moulds — Set 1", variantIds: ["uvidsm-126", "uvidsm-127", "uvidsm-128", "uvidsm-129", "uvidsm-130", "uvidsm-131", "uvidsm-132", "uvidsm-133"] },
+    { id: "uvidsm-flower-moulds-set-2", name: "Flower Candle Moulds — Set 2", variantIds: ["uvidsm-134", "uvidsm-135", "uvidsm-136", "uvidsm-137", "uvidsm-138", "uvidsm-139", "uvidsm-140", "uvidsm-141"] },
+    { id: "uvidsm-decorative-moulds", name: "Decorative Candle Moulds — Choose a Design", variantIds: ["uvidsm-147", "uvidsm-148", "uvidsm-149"] }
+  ];
+  var uvidSiliconeMouldById = Object.create(null);
+  UVID_SILICONE_MOULD_VARIANTS.forEach(function (m) { uvidSiliconeMouldById[m.id] = m; });
+  UVID_SILICONE_MOULD_GROUPS.forEach(function (group) {
+    var options = group.variantIds.map(function (id) { return uvidSiliconeMouldById[id]; });
+    var first = options[0];
+    var price = Math.round(first.mrp * 0.7);
+    var description = "Choose from " + options.length + " silicone mould designs. Each design has its own photo, UVID item code and catalogue SKU. Every design is priced at 30% off its catalogue MRP.";
     P.push({
-      id: m.id, name: m.name, brand: "UVID Art and Craft Supplies", category: "candle-making",
-      price: price, mrp: m.mrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F",
-      stock: 25, tags: ["vc-hidden", "deal"], parent: UVID_SILICONE_MOULD_PARENT_ID, variantLabel: m.code + " · " + m.name,
-      localImage: "/assets/" + m.id + ".jpg",
-      highlights: ["Silicone mould for candle making and creative projects", "Item code: " + m.code, "Catalogue SKU: " + m.sku],
-      specs: { "Item Code": m.code, "Catalogue SKU": m.sku, "MRP": "₹" + m.mrp, "Discount": "30%", "Price": "₹" + price },
-      description: uvidSiliconeMouldDescription
+      id: group.id, name: group.name, brand: "UVID Art and Craft Supplies", category: "candle-making",
+      price: price, mrp: first.mrp, rating: null, ratingCount: 0,
+      emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F", stock: options.length * 25, tags: ["new", "deal"],
+      localImage: "/assets/" + first.id + ".jpg",
+      highlights: ["Choose from " + options.length + " catalogue designs", "Every design has its own photo, item code and SKU", "30% off each design's catalogue MRP"],
+      specs: { "Category": "Candle Making", "Available designs": String(options.length), "Discount": "30% off each catalogue MRP" },
+      description: description,
+      variantMeta: options.map(function (m) {
+        return { id: m.id, size: m.code, label: m.code + " · " + m.name, name: m.name, price: Math.round(m.mrp * 0.7), mrp: m.mrp, stock: 25 };
+      })
+    });
+    options.forEach(function (m) {
+      var variantPrice = Math.round(m.mrp * 0.7);
+      P.push({
+        id: m.id, name: m.name, brand: "UVID Art and Craft Supplies", category: "candle-making",
+        price: variantPrice, mrp: m.mrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F",
+        stock: 25, tags: ["vc-hidden", "deal"], parent: group.id, variantLabel: m.code + " · " + m.name,
+        localImage: "/assets/" + m.id + ".jpg",
+        highlights: ["Silicone mould for candle making and creative projects", "Item code: " + m.code, "Catalogue SKU: " + m.sku],
+        specs: { "Item Code": m.code, "Catalogue SKU": m.sku, "MRP": "₹" + m.mrp, "Discount": "30%", "Price": "₹" + variantPrice },
+        description: description
+      });
     });
   });
-  var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
+   var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
   var ROUND_MOULD_VARIANTS = [
     { id: "round-resin-mould-3-inch", label: "3 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
     { id: "round-resin-mould-4-inch", label: "4 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
@@ -1620,10 +1630,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
   })();
 
-  /* Wire catalogue codes, prices and photos to the silicone mould selector. */
-  (function () {
+   /* Wire each smaller silicone mould selector to its own photos and prices. */
+  UVID_SILICONE_MOULD_GROUPS.forEach(function (group) {
     var main = null, i, j;
-    for (i = 0; i < P.length; i++) if (P[i].id === UVID_SILICONE_MOULD_PARENT_ID) main = P[i];
+    for (i = 0; i < P.length; i++) if (P[i].id === group.id) main = P[i];
     if (!main || !main.variantMeta) return;
     main.variants = [];
     for (i = 0; i < main.variantMeta.length; i++) {
@@ -1637,9 +1647,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       main.img = main.variants[0].img;
       main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
     }
-  })();
-
-  /* products shown in listings/search/home — excludes _vc-* variant records */
+  });
+   /* products shown in listings/search/home — excludes _vc-* variant records */
   var VISIBLE = P.filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
 
   /* ---------- coupons ---------- */
@@ -1693,6 +1702,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     CATEGORIES: CATEGORIES,
     PRODUCTS: P,
     visibleProducts: VISIBLE,
+    legacyCategoryRedirect: {
+      "uvid-silicone-moulds": "candle-making"
+    },
     legacyProductRedirect: {
       "bamboo-chopsticks-4mm": "bamboo-chopsticks",
       "bamboo-chopsticks-5mm": "bamboo-chopsticks"
@@ -2764,6 +2776,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
   function productPage(id, query) {
     var mainId = id;
+    if (D.legacyCategoryRedirect && D.legacyCategoryRedirect[id]) { A.navigateTo("#/c/" + D.legacyCategoryRedirect[id]); return; }
     if (D.legacyProductRedirect[id]) { A.navigateTo("#/p/" + D.legacyProductRedirect[id] + ((location.hash || "").split("?")[1] ? "?" + (location.hash || "").split("?")[1] : "")); return; }
     var p = D.findProduct(id);
     if (!p) { view.innerHTML = emptyState("🤷", "Product not found", "It may have been removed.", '<a class="btn btn--primary" href="#/">Back to home</a>'); return; }

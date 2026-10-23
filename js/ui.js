@@ -433,6 +433,7 @@
 
   function productPage(id, query) {
     var mainId = id;
+    if (D.legacyCategoryRedirect && D.legacyCategoryRedirect[id]) { A.navigateTo("#/c/" + D.legacyCategoryRedirect[id]); return; }
     if (D.legacyProductRedirect[id]) { A.navigateTo("#/p/" + D.legacyProductRedirect[id] + ((location.hash || "").split("?")[1] ? "?" + (location.hash || "").split("?")[1] : "")); return; }
     var p = D.findProduct(id);
     if (!p) { view.innerHTML = emptyState("🤷", "Product not found", "It may have been removed.", '<a class="btn btn--primary" href="#/">Back to home</a>'); return; }
