@@ -314,6 +314,60 @@
       specs: variant.specs, description: candleSculptedDescription
     });
   });
+
+  /* One candle-making product page for the 22 UVID silicone mould catalogue
+     options. Each option keeps its catalogue code, SKU, MRP, price and photo. */
+  var UVID_SILICONE_MOULD_PARENT_ID = "uvid-silicone-moulds";
+  var UVID_SILICONE_MOULD_VARIANTS = [
+    { id: "uvidsm-123", code: "UVIDSM123", name: "Classic Geometric Earrings Mold", sku: "DI-RM-415", mrp: 220 },
+    { id: "uvidsm-124", code: "UVIDSM124", name: "Flower Earrings Mold", sku: "DI-RM-416", mrp: 220 },
+    { id: "uvidsm-125", code: "UVIDSM125", name: "Cartoon Animal Earrings Mold", sku: "DI-RM-417", mrp: 220 },
+    { id: "uvidsm-126", code: "UVIDSM126", name: "Soft Petal Flower Candle Mold", sku: "DI-RM-430", mrp: 220 },
+    { id: "uvidsm-127", code: "UVIDSM127", name: "Soft Blossom Flower Candle Mold", sku: "DI-RM-431", mrp: 220 },
+    { id: "uvidsm-128", code: "UVIDSM128", name: "Line Petal Flower Candle Mold", sku: "DI-RM-432", mrp: 220 },
+    { id: "uvidsm-129", code: "UVIDSM129", name: "Sunflower Flower Candle Mold", sku: "DI-RM-433", mrp: 220 },
+    { id: "uvidsm-130", code: "UVIDSM130", name: "Floop Flower Candle Mold", sku: "DI-RM-426", mrp: 220 },
+    { id: "uvidsm-131", code: "UVIDSM131", name: "Petix Flower Candle Mold", sku: "DI-RM-427", mrp: 220 },
+    { id: "uvidsm-132", code: "UVIDSM132", name: "Tulira Bloom Flower Candle Mold", sku: "DI-RM-428", mrp: 220 },
+    { id: "uvidsm-133", code: "UVIDSM133", name: "Tulon Flower Candle Mold", sku: "DI-RM-429", mrp: 220 },
+    { id: "uvidsm-134", code: "UVIDSM134", name: "Loopa Flower Candle Mold", sku: "DI-RM-420", mrp: 220 },
+    { id: "uvidsm-135", code: "UVIDSM135", name: "Bublo Flower Candle Mold", sku: "DI-RM-421", mrp: 220 },
+    { id: "uvidsm-136", code: "UVIDSM136", name: "Petlo Flower Candle Mold", sku: "DI-RM-422", mrp: 220 },
+    { id: "uvidsm-137", code: "UVIDSM137", name: "Classic Deep Daisy Flower Candle Mold", sku: "DI-RM-423", mrp: 220 },
+    { id: "uvidsm-138", code: "UVIDSM138", name: "Bloomy Flower Candle Mold", sku: "DI-RM-424", mrp: 220 },
+    { id: "uvidsm-139", code: "UVIDSM139", name: "Flory Flower Candle Mold", sku: "DI-RM-425", mrp: 220 },
+    { id: "uvidsm-140", code: "UVIDSM140", name: "Flora Flower Candle Mold", sku: "DI-RM-418", mrp: 220 },
+    { id: "uvidsm-141", code: "UVIDSM141", name: "Swirta Flower Candle Mold", sku: "DI-RM-419", mrp: 220 },
+    { id: "uvidsm-147", code: "UVIDSM147", name: "Lace-edged Candle holder", sku: "DI-RM-0397", mrp: 660 },
+    { id: "uvidsm-148", code: "UVIDSM148", name: "Arabic Prayer Mold", sku: "DI-RM-0399", mrp: 560 },
+    { id: "uvidsm-149", code: "UVIDSM149", name: "Cross Mold", sku: "DI-RM-0398", mrp: 460 }
+  ];
+  var uvidSiliconeMouldDescription = "Choose from 22 silicone mould designs listed in the UVID catalogue. Each design has its own product photo, item code and SKU. Every option is priced at 30% off its catalogue MRP. See the photos for design and dimensions.";
+  var firstUvidSiliconeMould = UVID_SILICONE_MOULD_VARIANTS[0];
+  P.push({
+    id: UVID_SILICONE_MOULD_PARENT_ID, name: "UVID Silicone Moulds — Choose a Design", brand: "UVID Art and Craft Supplies", category: "candle-making",
+    price: Math.round(firstUvidSiliconeMould.mrp * 0.7), mrp: firstUvidSiliconeMould.mrp, rating: null, ratingCount: 0,
+    emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F", stock: UVID_SILICONE_MOULD_VARIANTS.length * 25, tags: ["new", "deal"],
+    localImage: "/assets/uvidsm-123.jpg",
+    highlights: ["Choose from 22 catalogue mould designs", "Each design has its own photo, item code and SKU", "30% off the catalogue MRP on every design"],
+    specs: { "Category": "Candle Making", "Available designs": "22", "Discount": "30% off each catalogue MRP" },
+    description: uvidSiliconeMouldDescription,
+    variantMeta: UVID_SILICONE_MOULD_VARIANTS.map(function (m) {
+      return { id: m.id, size: m.code, label: m.code + " · " + m.name, name: m.name, price: Math.round(m.mrp * 0.7), mrp: m.mrp, stock: 25 };
+    })
+  });
+  UVID_SILICONE_MOULD_VARIANTS.forEach(function (m) {
+    var price = Math.round(m.mrp * 0.7);
+    P.push({
+      id: m.id, name: m.name, brand: "UVID Art and Craft Supplies", category: "candle-making",
+      price: price, mrp: m.mrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F",
+      stock: 25, tags: ["vc-hidden", "deal"], parent: UVID_SILICONE_MOULD_PARENT_ID, variantLabel: m.code + " · " + m.name,
+      localImage: "/assets/" + m.id + ".jpg",
+      highlights: ["Silicone mould for candle making and creative projects", "Item code: " + m.code, "Catalogue SKU: " + m.sku],
+      specs: { "Item Code": m.code, "Catalogue SKU": m.sku, "MRP": "₹" + m.mrp, "Discount": "30%", "Price": "₹" + price },
+      description: uvidSiliconeMouldDescription
+    });
+  });
   var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
   var ROUND_MOULD_VARIANTS = [
     { id: "round-resin-mould-3-inch", label: "3 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
@@ -449,6 +503,25 @@
       if (!rec) continue;
       rec.parent = main.id;
       main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+    if (main.variants.length) {
+      main.img = main.variants[0].img;
+      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
+    }
+  })();
+
+  /* Wire catalogue codes, prices and photos to the silicone mould selector. */
+  (function () {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === UVID_SILICONE_MOULD_PARENT_ID) main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      rec.parent = main.id;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, name: vm.name, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
     }
     if (main.variants.length) {
       main.img = main.variants[0].img;

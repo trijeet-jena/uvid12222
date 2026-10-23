@@ -578,6 +578,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status { padding: 12px; border-radius: var(--rad-sm); background: #fff3e7; color: #87501f !important; font-weight: 700; }
 .upi-wait__status--error { background: #fff0ef; color: var(--red) !important; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
+.proof-upload { display: grid; gap: 7px; margin: 18px 0 8px; padding: 16px; border: 1px dashed var(--brand); border-radius: var(--rad-sm); background: var(--paper-2); text-align: left; cursor: pointer; }
+.proof-upload span { color: var(--ink-2); font-size: 13px; }
+.proof-upload input { width: 100%; margin-top: 4px; font: inherit; }
+.proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
+.proof-message { min-height: 20px; color: var(--ink-2); font-size: 13px; }
 
 /* ---------------- orders ---------------- */
 .orderspage { max-width: 860px; }
@@ -1419,6 +1424,60 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       specs: variant.specs, description: candleSculptedDescription
     });
   });
+
+  /* One candle-making product page for the 22 UVID silicone mould catalogue
+     options. Each option keeps its catalogue code, SKU, MRP, price and photo. */
+  var UVID_SILICONE_MOULD_PARENT_ID = "uvid-silicone-moulds";
+  var UVID_SILICONE_MOULD_VARIANTS = [
+    { id: "uvidsm-123", code: "UVIDSM123", name: "Classic Geometric Earrings Mold", sku: "DI-RM-415", mrp: 220 },
+    { id: "uvidsm-124", code: "UVIDSM124", name: "Flower Earrings Mold", sku: "DI-RM-416", mrp: 220 },
+    { id: "uvidsm-125", code: "UVIDSM125", name: "Cartoon Animal Earrings Mold", sku: "DI-RM-417", mrp: 220 },
+    { id: "uvidsm-126", code: "UVIDSM126", name: "Soft Petal Flower Candle Mold", sku: "DI-RM-430", mrp: 220 },
+    { id: "uvidsm-127", code: "UVIDSM127", name: "Soft Blossom Flower Candle Mold", sku: "DI-RM-431", mrp: 220 },
+    { id: "uvidsm-128", code: "UVIDSM128", name: "Line Petal Flower Candle Mold", sku: "DI-RM-432", mrp: 220 },
+    { id: "uvidsm-129", code: "UVIDSM129", name: "Sunflower Flower Candle Mold", sku: "DI-RM-433", mrp: 220 },
+    { id: "uvidsm-130", code: "UVIDSM130", name: "Floop Flower Candle Mold", sku: "DI-RM-426", mrp: 220 },
+    { id: "uvidsm-131", code: "UVIDSM131", name: "Petix Flower Candle Mold", sku: "DI-RM-427", mrp: 220 },
+    { id: "uvidsm-132", code: "UVIDSM132", name: "Tulira Bloom Flower Candle Mold", sku: "DI-RM-428", mrp: 220 },
+    { id: "uvidsm-133", code: "UVIDSM133", name: "Tulon Flower Candle Mold", sku: "DI-RM-429", mrp: 220 },
+    { id: "uvidsm-134", code: "UVIDSM134", name: "Loopa Flower Candle Mold", sku: "DI-RM-420", mrp: 220 },
+    { id: "uvidsm-135", code: "UVIDSM135", name: "Bublo Flower Candle Mold", sku: "DI-RM-421", mrp: 220 },
+    { id: "uvidsm-136", code: "UVIDSM136", name: "Petlo Flower Candle Mold", sku: "DI-RM-422", mrp: 220 },
+    { id: "uvidsm-137", code: "UVIDSM137", name: "Classic Deep Daisy Flower Candle Mold", sku: "DI-RM-423", mrp: 220 },
+    { id: "uvidsm-138", code: "UVIDSM138", name: "Bloomy Flower Candle Mold", sku: "DI-RM-424", mrp: 220 },
+    { id: "uvidsm-139", code: "UVIDSM139", name: "Flory Flower Candle Mold", sku: "DI-RM-425", mrp: 220 },
+    { id: "uvidsm-140", code: "UVIDSM140", name: "Flora Flower Candle Mold", sku: "DI-RM-418", mrp: 220 },
+    { id: "uvidsm-141", code: "UVIDSM141", name: "Swirta Flower Candle Mold", sku: "DI-RM-419", mrp: 220 },
+    { id: "uvidsm-147", code: "UVIDSM147", name: "Lace-edged Candle holder", sku: "DI-RM-0397", mrp: 660 },
+    { id: "uvidsm-148", code: "UVIDSM148", name: "Arabic Prayer Mold", sku: "DI-RM-0399", mrp: 560 },
+    { id: "uvidsm-149", code: "UVIDSM149", name: "Cross Mold", sku: "DI-RM-0398", mrp: 460 }
+  ];
+  var uvidSiliconeMouldDescription = "Choose from 22 silicone mould designs listed in the UVID catalogue. Each design has its own product photo, item code and SKU. Every option is priced at 30% off its catalogue MRP. See the photos for design and dimensions.";
+  var firstUvidSiliconeMould = UVID_SILICONE_MOULD_VARIANTS[0];
+  P.push({
+    id: UVID_SILICONE_MOULD_PARENT_ID, name: "UVID Silicone Moulds — Choose a Design", brand: "UVID Art and Craft Supplies", category: "candle-making",
+    price: Math.round(firstUvidSiliconeMould.mrp * 0.7), mrp: firstUvidSiliconeMould.mrp, rating: null, ratingCount: 0,
+    emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F", stock: UVID_SILICONE_MOULD_VARIANTS.length * 25, tags: ["new", "deal"],
+    localImage: "/assets/uvidsm-123.jpg",
+    highlights: ["Choose from 22 catalogue mould designs", "Each design has its own photo, item code and SKU", "30% off the catalogue MRP on every design"],
+    specs: { "Category": "Candle Making", "Available designs": "22", "Discount": "30% off each catalogue MRP" },
+    description: uvidSiliconeMouldDescription,
+    variantMeta: UVID_SILICONE_MOULD_VARIANTS.map(function (m) {
+      return { id: m.id, size: m.code, label: m.code + " · " + m.name, name: m.name, price: Math.round(m.mrp * 0.7), mrp: m.mrp, stock: 25 };
+    })
+  });
+  UVID_SILICONE_MOULD_VARIANTS.forEach(function (m) {
+    var price = Math.round(m.mrp * 0.7);
+    P.push({
+      id: m.id, name: m.name, brand: "UVID Art and Craft Supplies", category: "candle-making",
+      price: price, mrp: m.mrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#F7F1E8", ink: "#A66B3F",
+      stock: 25, tags: ["vc-hidden", "deal"], parent: UVID_SILICONE_MOULD_PARENT_ID, variantLabel: m.code + " · " + m.name,
+      localImage: "/assets/" + m.id + ".jpg",
+      highlights: ["Silicone mould for candle making and creative projects", "Item code: " + m.code, "Catalogue SKU: " + m.sku],
+      specs: { "Item Code": m.code, "Catalogue SKU": m.sku, "MRP": "₹" + m.mrp, "Discount": "30%", "Price": "₹" + price },
+      description: uvidSiliconeMouldDescription
+    });
+  });
   var roundResinDescription = "Round resin mould for trays and creative resin projects. Available sizes: 3 inch, 4 inch, 6 inch, 8 inch and 18 inches. Choose your size above. Each size is ₹200, with 30 pieces available.";
   var ROUND_MOULD_VARIANTS = [
     { id: "round-resin-mould-3-inch", label: "3 inch", image: "/assets/resin-moulds/round-resin-mould.jpg" },
@@ -1554,6 +1613,25 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       if (!rec) continue;
       rec.parent = main.id;
       main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+    if (main.variants.length) {
+      main.img = main.variants[0].img;
+      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
+    }
+  })();
+
+  /* Wire catalogue codes, prices and photos to the silicone mould selector. */
+  (function () {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === UVID_SILICONE_MOULD_PARENT_ID) main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      rec.parent = main.id;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, name: vm.name, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
     }
     if (main.variants.length) {
       main.img = main.variants[0].img;
@@ -2084,12 +2162,12 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment" : "Pay on delivery")),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
-      status: cancelled ? "Cancelled" : (srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : STATUS_STAGES[si]),
+      status: cancelled ? "Cancelled" : STATUS_STAGES[si],
       stages: STATUS_STAGES,
-      stageIndex: cancelled ? 0 : (srv.status === "AWAITING_PAYMENT" ? -1 : si),
+      stageIndex: cancelled ? 0 : si,
       eta: srv.eta || null,
       address: address,
       user: state.user || "guest",
@@ -2697,7 +2775,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       p = D.findProduct(selectedVariant.id) || p;
     }
     var hasVariants = !!(mainP.variants && mainP.variants.length);
-    var variantHeading = hasVariants && mainP.id === "water-based-pigment" ? "Available colours" : hasVariants && mainP.id === "display-stands" ? "Available sizes and finishes" : hasVariants && mainP.variants.every(function (v) {
+    var variantHeading = hasVariants && mainP.variants.every(function (v) {
       return /^\d+(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?)$/i.test(String(v.label || v.size || "").trim());
     }) ? "Available sizes" : (mainP.category === "resin-moulds" || mainP.category === "candle-making" ? "Available designs" : "Available options");
     A.pushRecent && A.pushRecent(mainId);
@@ -2972,7 +3050,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: "Cart", href: "#/cart" }, { label: "Checkout" }]) +
       '<div class="checkoutpage">' +
-      '<div class="stepsbar"><span class="step step--done">🛒 Cart</span><i>→</i><span class="step step--on">📍 Address & payment</span><i>→</i><span class="step">✅ Order placed</span></div>' +
+      '<div class="stepsbar"><span class="step step--done">🛒 Cart</span><i>→</i><span class="step step--on">📍 Address & payment</span><i>→</i><span class="step">✅ Done</span></div>' +
       '<div class="checkoutgrid">' +
       '<section class="checkoutmain">' +
       '<div class="cbox card"><h2><span class="cbox__num">1</span> Delivery address</h2>' + addrBlock + '</div>' +
@@ -2993,7 +3071,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
       '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
-      '<p class="safe-note">After the final total is ready, pay by UPI and send UVID your order number. The store will confirm the payment after checking the transaction.</p>' +
+      '<p class="safe-note">Your order is confirmed only after UPI payment is verified.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -3041,7 +3119,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     function setQrReady(ready) {
       if (ready) {
         placeButton.disabled = false;
-        placeButton.textContent = "Continue to payment";
+        placeButton.textContent = "Place order · delivery confirmed next";
         qrSetup.textContent = "UPI QR is ready. The store will confirm delivery before you pay.";
         qrSetup.classList.add("upi-setup--ready");
       } else {
@@ -3070,7 +3148,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var order = A.state.orders.filter(function (o) { return o.id === orderId; })[0];
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
     if (order.status === "Cancelled") { view.innerHTML = emptyState("↩️", "Order cancelled", "This order is cancelled. Contact the store if you already transferred payment.", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
-    if (order.paymentConfirmed) { successHtml(order); return; }
 
     var isCod = String(order.payment).toLowerCase() === "cod";
     if (order._srv && isCod) { successHtml(order); return; }
@@ -3080,50 +3157,22 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
 
     if (!order.shippingFinalized) {
-      view.innerHTML = '<div class="paywait card upi-wait"><h1>Checkout saved · ' + esc(order.id) + '</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. Please wait for the final total before paying.</p>' +
+      view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
+        '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
+        '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
-        '<p>Scan this UPI QR and pay the exact amount below. After paying, share your order number with UVID so the store can verify the payment.</p>' +
+        '<p>Scan this UPI QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
-        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">After you pay, send the order number to UVID. The store will confirm your order after checking the UPI payment.</p>' +
-        '<button class="btn btn--primary btn--block" id="shareOrderNumber" type="button">Share order number</button>' +
+        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
+        '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     }
     var qr = $("#upiPaymentQr");
-    if (qr) {
-      qr.addEventListener("error", function () {
-        qr.hidden = true;
-        $("#upiPaymentQrError").hidden = false;
-      });
-    }
-    var shareButton = $("#shareOrderNumber");
-    if (shareButton) {
-      shareButton.addEventListener("click", function () {
-        var message = "Hello UVID Art and Craft, I have paid " + money(order.totals.total) + " for order " + order.id + ". Please verify the payment.";
-        if (navigator.share) {
-          navigator.share({ title: "UVID order " + order.id, text: message }).then(function () {
-            A.toast("Order details shared.", true);
-          }).catch(function (error) {
-            if (!error || error.name !== "AbortError") copyMessage();
-          });
-          return;
-        }
-        copyMessage();
-        function copyMessage() {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(message).then(function () {
-              A.toast("Order details copied. Paste them into your message to UVID.", true);
-            }).catch(function () { window.prompt("Copy this message and send it to UVID:", message); });
-          } else {
-            window.prompt("Copy this message and send it to UVID:", message);
-          }
-        }
-      });
-    }
+    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
       if (!statusEl) { clearInterval(paymentTimer); return; }
@@ -3136,7 +3185,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
             order.shippingFinalized = true;
             order.totals.shipping = Number(serverOrder.shipping) || 0;
             order.totals.total = Number(serverOrder.total_amount) || 0;
-            order.paymentStatus = "Awaiting payment";
+            order.paymentStatus = "Awaiting payment verification";
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
@@ -3144,8 +3193,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           }
           if (serverOrder.payment_status === "PAID") {
             order.paymentConfirmed = true;
-            order.status = "Placed";
-            order.stageIndex = 0;
             order.paymentStatus = "Paid ✓";
             order.processed = true;
             A.save();
@@ -3156,21 +3203,19 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           if (serverOrder.status === "CANCELLED") {
             order.status = "Cancelled";
             A.save();
-            if (statusEl) {
-              statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
-              statusEl.classList.add("upi-wait__status--error");
-            }
+            statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
+            statusEl.classList.add("upi-wait__status--error");
             clearInterval(paymentTimer);
             return;
           }
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
-          order.paymentStatus = order.shippingFinalized ? "Awaiting payment" : "Delivery charge awaiting store quote";
-          if (statusEl) statusEl.textContent = order.shippingFinalized ? "After you pay the exact total, send the order number to UVID. The store will verify the payment." : "Waiting for the store to confirm delivery.";
+          order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+          statusEl.textContent = order.shippingFinalized ? "Payment awaiting verification. The order is not confirmed yet." : "Waiting for the store to confirm delivery.";
           A.save();
         })
-        .catch(function () { if (statusEl) statusEl.textContent = "Still waiting for the store server. This page will check again."; });
+        .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
     }
     var paymentTimer = setInterval(checkPaymentStatus, 5000);
     checkPaymentStatus();
@@ -3317,11 +3362,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: "My orders", href: "#/orders" }, { label: o.id }]) +
       '<div class="odetail">' +
-      '<header class="odetail__head"><div><h1>Order ' + o.id + '</h1><p>' + (o.status === "Awaiting payment" ? "Checkout started " : "Placed ") + A.fmtDateTime(o.placedAt) + ' · ' + esc(String(o.payment).toUpperCase()) + ' · ' + esc(o.paymentStatus) + '</p></div>' +
+      '<header class="odetail__head"><div><h1>Order ' + o.id + '</h1><p>Placed ' + A.fmtDateTime(o.placedAt) + ' · ' + esc(String(o.payment).toUpperCase()) + ' · ' + esc(o.paymentStatus) + '</p></div>' +
       statusPill(o.status) + '</header>' +
       '<div class="odetail__grid">' +
       '<section class="card odetail__box"><h2>shipment timeline</h2>' + timeline +
-      '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Awaiting payment" ? "Pay after the store confirms the delivery charge, then send UVID your order number" : o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
+      '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
       '<section class="card odetail__box"><h2>items (' + o.qty + ')</h2><div class="minis">' + items + '</div>' +
       '<div class="odetail__ops">' +
       (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
@@ -3334,8 +3379,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<section class="card odetail__box"><h2>payment summary</h2>' +
       '<div class="prow"><span>Items total</span><b>' + money(o.totals.subtotal) + '</b></div>' +
       '<div class="prow"><span>Delivery</span><b>' + (o.shippingFinalized ? (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) : "Awaiting store quote") + '</b></div>' +
-      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.shippingFinalized ? "(awaiting payment)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
-      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">' + ("Pay " + money(o.totals.total) + " by UPI") + '</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. Pay after the store confirms the delivery charge, then send UVID your order number.</p>' : "")) +
+      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.shippingFinalized ? "(payment awaiting verification)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
+      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">Pay ' + money(o.totals.total) + ' by UPI</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. You can pay here when the final amount is ready.</p>' : "")) +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
   }
