@@ -577,13 +577,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status { padding: 12px; border-radius: var(--rad-sm); background: #fff3e7; color: #87501f !important; font-weight: 700; }
 .upi-wait__status--error { background: #fff0ef; color: var(--red) !important; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
-.proof-upload { display: grid; gap: 7px; margin: 18px 0 8px; padding: 16px; border: 1px dashed var(--brand); border-radius: var(--rad-sm); background: var(--paper-2); text-align: left; cursor: pointer; }
-.proof-upload span { color: var(--ink-2); font-size: 13px; }
-.proof-upload input { width: 100%; margin-top: 4px; font: inherit; }
-.proof-upload--pending { border-style: solid; cursor: not-allowed; opacity: .75; }
-.proof-upload--pending input { cursor: not-allowed; }
-.proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
-.proof-message { min-height: 20px; color: var(--ink-2); font-size: 13px; }
 
 /* ---------------- orders ---------------- */
 .orderspage { max-width: 860px; }
@@ -2089,11 +2082,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (srv.payment_status === "PROOF_SUBMITTED" ? "Screenshot received · awaiting verification" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Payment screenshot needed" : "Pay on delivery"))),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
-      proofSubmitted: srv.payment_status === "PROOF_SUBMITTED",
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
-      status: cancelled ? "Cancelled" : (srv.status === "AWAITING_PAYMENT" ? "Awaiting payment proof" : STATUS_STAGES[si]),
+      status: cancelled ? "Cancelled" : (srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : STATUS_STAGES[si]),
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : (srv.status === "AWAITING_PAYMENT" ? -1 : si),
       eta: srv.eta || null,
@@ -2991,7 +2983,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
       '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
-      '<p class="safe-note">Your order is placed after you upload the payment screenshot and press Done. UVID will verify the payment before processing it.</p>' +
+      '<p class="safe-note">After the final total is ready, pay by UPI and send UVID your order number. The store will confirm the payment after checking the transaction.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -3069,7 +3061,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
     if (order.status === "Cancelled") { view.innerHTML = emptyState("↩️", "Order cancelled", "This order is cancelled. Contact the store if you already transferred payment.", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
     if (order.paymentConfirmed) { successHtml(order); return; }
-    if (order.proofSubmitted && !order.paymentConfirmed) { proofSubmittedHtml(order); return; }
 
     var isCod = String(order.payment).toLowerCase() === "cod";
     if (order._srv && isCod) { successHtml(order); return; }
@@ -3080,101 +3071,47 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     if (!order.shippingFinalized) {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Checkout saved · ' + esc(order.id) + '</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. Your order is not placed yet. Please wait for the final total before paying.</p>' +
-        '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+        '<p>The store is checking your address and will add the delivery charge. Please wait for the final total before paying.</p>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
-        '<label class="proof-upload proof-upload--pending" for="paymentProofPending" aria-disabled="true"><b>Upload payment proof</b><span>This option will be enabled after the store confirms the delivery charge and final total. Pay the exact total before uploading.</span><input id="paymentProofPending" type="file" accept="image/jpeg,image/png,image/webp" disabled /></label>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
-        '<p>Scan this UPI QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+        '<p>Scan this UPI QR and pay the exact amount below. After paying, share your order number with UVID so the store can verify the payment.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
-        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">After paying, upload your payment screenshot. Your order is placed when you press Done.</p>' +
-        '<label class="proof-upload" for="paymentProofInput"><b>Upload payment screenshot</b><span>Choose a screenshot from your UPI app.</span><input id="paymentProofInput" type="file" accept="image/jpeg,image/png,image/webp" /></label>' +
-        '<img class="proof-preview" id="paymentProofPreview" alt="Selected payment screenshot preview" hidden />' +
-        '<p class="proof-message" id="paymentProofMessage" role="status">Select a screenshot to continue.</p>' +
-        '<button class="btn btn--primary btn--block" id="paymentProofDone" type="button" disabled>Done · place order</button>' +
-        '<p class="safe-note">The screenshot is sent securely to UVID for order verification. Payment is confirmed after the store checks its UPI account.</p>' +
+        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">After you pay, send the order number to UVID. The store will confirm your order after checking the UPI payment.</p>' +
+        '<button class="btn btn--primary btn--block" id="shareOrderNumber" type="button">Share order number</button>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     }
     var qr = $("#upiPaymentQr");
-    var qrReady = !!(qr.complete && qr.naturalWidth > 0);
-    var proofInput = $("#paymentProofInput");
-    var proofDone = $("#paymentProofDone");
-    if (proofDone) proofDone.disabled = !qrReady;
-    qr.addEventListener("load", function () {
-      qrReady = true;
-      if (proofDone && proofInput && proofInput.files && proofInput.files.length) proofDone.disabled = false;
-    });
-    qr.addEventListener("error", function () {
-      qrReady = false;
-      qr.hidden = true;
-      $("#upiPaymentQrError").hidden = false;
-      if (proofDone) proofDone.disabled = true;
-    });
-    if (proofInput && proofDone) {
-      var selectedProof = null;
-      var previewUrl = null;
-      proofInput.addEventListener("change", function () {
-        selectedProof = proofInput.files && proofInput.files[0] || null;
-        var message = $("#paymentProofMessage");
-        var preview = $("#paymentProofPreview");
-        if (!selectedProof) {
-          proofDone.disabled = true;
-          preview.hidden = true;
-          message.textContent = "Select a screenshot to continue.";
-          return;
-        }
-        if (!["image/jpeg", "image/png", "image/webp"].includes(selectedProof.type)) {
-          selectedProof = null;
-          proofInput.value = "";
-          proofDone.disabled = true;
-          preview.hidden = true;
-          message.textContent = "Choose a JPEG, PNG or WebP screenshot.";
-          return;
-        }
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        previewUrl = URL.createObjectURL(selectedProof);
-        preview.src = previewUrl;
-        preview.hidden = false;
-        proofDone.disabled = !qrReady;
-        message.textContent = qrReady ? "Screenshot selected. Press Done to place your order." : "The payment QR is unavailable. Contact the store before paying.";
+    if (qr) {
+      qr.addEventListener("error", function () {
+        qr.hidden = true;
+        $("#upiPaymentQrError").hidden = false;
       });
-      proofDone.addEventListener("click", function () {
-        if (!selectedProof || proofDone.disabled) return;
-        proofDone.disabled = true;
-        proofDone.textContent = "Uploading screenshot…";
-        var message = $("#paymentProofMessage");
-        message.textContent = "Compressing and securely uploading your screenshot…";
-        compressPaymentProof(selectedProof).then(function (image) {
-          return fetch("/api/orders/" + encodeURIComponent(order.id) + "/payment-proof", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ image: image })
+    }
+    var shareButton = $("#shareOrderNumber");
+    if (shareButton) {
+      shareButton.addEventListener("click", function () {
+        var message = "Hello UVID Art and Craft, I have paid " + money(order.totals.total) + " for order " + order.id + ". Please verify the payment.";
+        if (navigator.share) {
+          navigator.share({ title: "UVID order " + order.id, text: message }).then(function () {
+            A.toast("Order details shared.", true);
+          }).catch(function (error) {
+            if (!error || error.name !== "AbortError") copyMessage();
           });
-        }).then(function (res) {
-          return res.json().then(function (data) {
-            if (!res.ok) throw new Error(data.error || "Could not upload the payment screenshot.");
-            return data;
-          });
-        }).then(function (data) {
-          var saved = data.order || {};
-          order.status = "Placed";
-          order.stageIndex = 0;
-          order.proofSubmitted = true;
-          order.paymentStatus = "Screenshot received · awaiting verification";
-          order.shippingFinalized = Number(saved.shipping_finalized) !== 0;
-          order.totals.shipping = Number(saved.shipping) || 0;
-          order.totals.total = Number(saved.total_amount) || order.totals.total;
-          A.save();
-          proofSubmittedHtml(order);
-        }).catch(function (error) {
-          message.textContent = error.message || "Could not upload the screenshot. Please try again.";
-          proofDone.disabled = !qrReady;
-          proofDone.textContent = "Done · place order";
-        });
+          return;
+        }
+        copyMessage();
+        function copyMessage() {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(message).then(function () {
+              A.toast("Order details copied. Paste them into your message to UVID.", true);
+            }).catch(function () { window.prompt("Copy this message and send it to UVID:", message); });
+          } else {
+            window.prompt("Copy this message and send it to UVID:", message);
+          }
+        }
       });
     }
     function checkPaymentStatus() {
@@ -3189,7 +3126,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
             order.shippingFinalized = true;
             order.totals.shipping = Number(serverOrder.shipping) || 0;
             order.totals.total = Number(serverOrder.total_amount) || 0;
-            order.paymentStatus = "Payment screenshot needed";
+            order.paymentStatus = "Awaiting payment";
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
@@ -3197,6 +3134,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           }
           if (serverOrder.payment_status === "PAID") {
             order.paymentConfirmed = true;
+            order.status = "Placed";
+            order.stageIndex = 0;
             order.paymentStatus = "Paid ✓";
             order.processed = true;
             A.save();
@@ -3204,90 +3143,27 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
             successHtml(order);
             return;
           }
-          if (serverOrder.payment_status === "PROOF_SUBMITTED") {
-            order.status = "Placed";
-            order.stageIndex = 0;
-            order.proofSubmitted = true;
-            order.paymentStatus = "Screenshot received · awaiting verification";
-            order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
-            order.totals.shipping = Number(serverOrder.shipping) || 0;
-            order.totals.total = Number(serverOrder.total_amount) || order.totals.total;
-            A.save();
-            clearInterval(paymentTimer);
-            proofSubmittedHtml(order);
-            return;
-          }
           if (serverOrder.status === "CANCELLED") {
             order.status = "Cancelled";
             A.save();
-            statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
-            statusEl.classList.add("upi-wait__status--error");
+            if (statusEl) {
+              statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
+              statusEl.classList.add("upi-wait__status--error");
+            }
             clearInterval(paymentTimer);
             return;
           }
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
-          order.paymentStatus = order.shippingFinalized ? "Payment screenshot needed" : "Delivery charge awaiting store quote";
-          statusEl.textContent = order.shippingFinalized ? "Pay the exact total, upload your payment screenshot and press Done to place the order." : "Waiting for the store to confirm delivery.";
+          order.paymentStatus = order.shippingFinalized ? "Awaiting payment" : "Delivery charge awaiting store quote";
+          if (statusEl) statusEl.textContent = order.shippingFinalized ? "After you pay the exact total, send the order number to UVID. The store will verify the payment." : "Waiting for the store to confirm delivery.";
           A.save();
         })
-        .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
+        .catch(function () { if (statusEl) statusEl.textContent = "Still waiting for the store server. This page will check again."; });
     }
     var paymentTimer = setInterval(checkPaymentStatus, 5000);
     checkPaymentStatus();
-  }
-
-  function compressPaymentProof(file) {
-    return new Promise(function (resolve, reject) {
-      if (!file || !file.type || file.type.indexOf("image/") !== 0) { reject(new Error("Choose a payment screenshot image.")); return; }
-      var objectUrl = URL.createObjectURL(file);
-      var image = new Image();
-      image.onload = function () {
-        URL.revokeObjectURL(objectUrl);
-        var canvas = document.createElement("canvas");
-        var scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
-        var width = Math.max(1, Math.round(image.naturalWidth * scale));
-        var height = Math.max(1, Math.round(image.naturalHeight * scale));
-        var quality = 0.86;
-        var attempts = 0;
-        function encode() {
-          canvas.width = width;
-          canvas.height = height;
-          var context = canvas.getContext("2d", { alpha: false });
-          context.fillStyle = "#ffffff";
-          context.fillRect(0, 0, width, height);
-          context.drawImage(image, 0, 0, width, height);
-          canvas.toBlob(function (blob) {
-            if (!blob) { reject(new Error("Could not prepare this screenshot. Choose another image.")); return; }
-            if (blob.size > 1250000 && attempts < 6) {
-              attempts += 1;
-              if (quality > 0.56) quality -= 0.08;
-          else { width = Math.max(1, Math.round(width * 0.82)); height = Math.max(1, Math.round(height * 0.82)); quality = 0.78; }
-              encode();
-              return;
-            }
-            if (blob.size > 1400000) { reject(new Error("This screenshot is too large to upload. Please choose a smaller screenshot.")); return; }
-            var reader = new FileReader();
-            reader.onload = function () { resolve(reader.result); };
-            reader.onerror = function () { reject(new Error("Could not read the screenshot.")); };
-            reader.readAsDataURL(blob);
-          }, "image/jpeg", quality);
-        }
-        encode();
-      };
-      image.onerror = function () { URL.revokeObjectURL(objectUrl); reject(new Error("Could not open this screenshot image.")); };
-      image.src = objectUrl;
-    });
-  }
-
-  function proofSubmittedHtml(order) {
-    var eta = A.fmtDate(order.eta);
-    view.innerHTML = '<div class="success card"><div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
-      '<h1>Order ' + esc(order.id) + ' placed</h1>' +
-      '<p class="success__sub">Your payment screenshot was received. The store will verify the UPI payment before processing your order.</p>' +
-      '<div class="success__meta card-inset"><div><span>Order ID</span><b>' + esc(order.id) + '</b></div><div><span>Payment</span><b>Screenshot submitted · awaiting verification</b></div><div><span>Order total</span><b>' + money(order.totals.total) + '</b></div><div><span>Estimated delivery</span><b>' + eta + '</b></div></div>' +
-      '<div class="success__cta"><a class="btn btn--primary" href="#/orders/' + encodeURIComponent(order.id) + '">Track order</a><a class="btn btn--ghost" href="#/">Continue shopping</a></div></div>';
   }
 
   function successHtml(order) {
@@ -3431,11 +3307,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: "My orders", href: "#/orders" }, { label: o.id }]) +
       '<div class="odetail">' +
-      '<header class="odetail__head"><div><h1>Order ' + o.id + '</h1><p>' + (o.status === "Awaiting payment proof" ? "Checkout started " : "Placed ") + A.fmtDateTime(o.placedAt) + ' · ' + esc(String(o.payment).toUpperCase()) + ' · ' + esc(o.paymentStatus) + '</p></div>' +
+      '<header class="odetail__head"><div><h1>Order ' + o.id + '</h1><p>' + (o.status === "Awaiting payment" ? "Checkout started " : "Placed ") + A.fmtDateTime(o.placedAt) + ' · ' + esc(String(o.payment).toUpperCase()) + ' · ' + esc(o.paymentStatus) + '</p></div>' +
       statusPill(o.status) + '</header>' +
       '<div class="odetail__grid">' +
       '<section class="card odetail__box"><h2>shipment timeline</h2>' + timeline +
-      '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Awaiting payment proof" ? "Order will be placed after payment screenshot upload" : o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
+      '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Awaiting payment" ? "Pay after the store confirms the delivery charge, then send UVID your order number" : o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
       '<section class="card odetail__box"><h2>items (' + o.qty + ')</h2><div class="minis">' + items + '</div>' +
       '<div class="odetail__ops">' +
       (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
@@ -3448,8 +3324,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<section class="card odetail__box"><h2>payment summary</h2>' +
       '<div class="prow"><span>Items total</span><b>' + money(o.totals.subtotal) + '</b></div>' +
       '<div class="prow"><span>Delivery</span><b>' + (o.shippingFinalized ? (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) : "Awaiting store quote") + '</b></div>' +
-      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.proofSubmitted ? "(screenshot submitted · awaiting verification)" : o.shippingFinalized ? "(payment screenshot needed)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
-      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">' + (o.proofSubmitted ? "View payment status" : "Pay " + money(o.totals.total) + " by UPI") + '</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. Your order will be placed after you upload the screenshot and press Done.</p>' : "")) +
+      '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.shippingFinalized ? "(awaiting payment)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
+      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">' + ("Pay " + money(o.totals.total) + " by UPI") + '</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. Pay after the store confirms the delivery charge, then send UVID your order number.</p>' : "")) +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
   }

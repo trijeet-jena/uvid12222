@@ -203,8 +203,8 @@ function adminSetStatus(orderId, status) {
   if (!allowed.includes(v)) { const e = new Error("Invalid order status."); e.status = 400; throw e; }
   const o = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
   if (!o) { const e = new Error("Order not found."); e.status = 404; throw e; }
-  if (o.payment_method === "UPI" && o.payment_status !== "PAID" && !["PLACED", "CANCELLED"].includes(v)) {
-    const e = new Error("Confirm the UPI payment before packing or shipping this order."); e.status = 409; throw e;
+  if (o.payment_method === "UPI" && o.payment_status !== "PAID" && v !== "CANCELLED") {
+    const e = new Error("Confirm the UPI payment after checking the transaction before progressing this order."); e.status = 409; throw e;
   }
   if (v === "CANCELLED" && o.status !== "CANCELLED") return cancelOrder(orderId, { role: "ADMIN", id: o.customer_id });
   db.prepare("UPDATE orders SET status = ?, updated_at = ? WHERE id = ?").run(v, now(), orderId);
@@ -216,9 +216,7 @@ function adminConfirmPayment(orderId) {
   if (!o) { const e = new Error("Order not found."); e.status = 404; throw e; }
   if (o.payment_method !== "UPI") { const e = new Error("This order is not a UPI payment."); e.status = 409; throw e; }
   if (o.status === "CANCELLED") { const e = new Error("A cancelled order cannot be marked paid."); e.status = 409; throw e; }
-  if (o.payment_status !== "PAID") {
-    db.prepare("UPDATE orders SET payment_status = 'PAID', updated_at = ? WHERE id = ?").run(now(), orderId);
-  }
+  db.prepare("UPDATE orders SET payment_status = 'PAID', status = CASE WHEN status = 'AWAITING_PAYMENT' THEN 'PLACED' ELSE status END, updated_at = ? WHERE id = ?").run(now(), orderId);
   return getOrder(orderId, { role: "ADMIN", id: o.customer_id });
 }
 

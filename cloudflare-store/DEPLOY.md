@@ -38,8 +38,8 @@ Admin sign-in uses a one-time code sent only to the approved admin address.
 New orders send an email to that same address with the order ID, items, and
 payment status. A second email is sent after an admin confirms a UPI payment.
 At order creation, the email identifies the amount as an item subtotal when
-the delivery charge has not been set yet. UPI payments remain manually
-verified from the customer's screenshot in the admin panel.
+the delivery charge has not been set yet. Customers pay by UPI and share the
+order number; an admin checks the PhonePe account and confirms the payment.
 
 Create a Resend account, add a domain you control, and follow the DNS records
 Resend provides until the domain is verified. Create a sending-only API key.

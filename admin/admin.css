@@ -384,10 +384,6 @@ body.modal-open { overflow: hidden; }
 .invoice__meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 20px 0; border-bottom: 1px solid #e4e9e5; }
 .invoice__meta span, .invoice__parties span { display: block; color: #707a73; font-size: 12px; }
 .invoice__meta b { display: block; margin-top: 4px; font-size: 13px; text-transform: capitalize; }
-.invoice-proof { margin: 18px 0; padding: 14px; border: 1px solid #e1e7e2; border-radius: 10px; background: #f8faf8; }
-.invoice-proof h3 { margin: 0 0 10px; color: #2f8061; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
-.invoice-proof img { display: block; max-width: min(100%, 420px); max-height: 420px; border: 1px solid #e1e7e2; border-radius: 8px; object-fit: contain; background: #fff; }
-.invoice-proof small, .invoice-proof__empty { display: block; margin: 8px 0 0; color: #707a73; font-size: 12px; }
 .invoice__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 20px 0 24px; }
 .invoice__parties h3 { margin: 0 0 8px; color: #2f8061; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
 .invoice__parties b { display: block; margin-bottom: 4px; }
@@ -447,7 +443,6 @@ body.modal-open { overflow: hidden; }
   .invoice__top, .invoice__meta, .invoice__parties, .invoice__bottom { break-inside: avoid; page-break-inside: avoid; }
   .invoice__table thead { display: table-header-group; }
   .invoice__table tr { break-inside: avoid; page-break-inside: avoid; }
-  .invoice-proof { display: none; }
   .invoice__table th { color: #fff !important; background: #171717 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .invoice__image img { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
