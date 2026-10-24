@@ -200,6 +200,7 @@ img.login__mark, img.sidebar__mark { object-fit: contain; background: #fff; }
 /* ---------------- tables ---------------- */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.tbl { width: 100%; border-collapse: collapse; min-width: 640px; }
+.tbl td.customer-address { min-width: 200px; max-width: 340px; white-space: normal; overflow-wrap: anywhere; }
 .tbl th {
   text-align: left; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--muted); background: #fafbfa; padding: 11px 14px; border-bottom: 1px solid var(--line);

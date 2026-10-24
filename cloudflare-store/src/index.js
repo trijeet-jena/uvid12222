@@ -942,7 +942,22 @@ async function handleApi(request, env, user, url) {
     }
     await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,now(),orderId); return json({ok:true});
   }
-  if(path==="/api/admin/customers" && method==="GET") return adminOnly || json({customers:(await env.DB.prepare("SELECT id,name,email,mobile_number,created_at FROM users WHERE role='CUSTOMER' ORDER BY created_at DESC LIMIT 500").all()).results||[]});
+  if(path==="/api/admin/customers" && method==="GET") return adminOnly || json({customers:(await env.DB.prepare(`
+    SELECT u.id,
+      COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.name'),''),NULLIF(a.name,''),u.name) AS name,
+      u.email,
+      COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.phone'),''),NULLIF(u.mobile_number,''),a.phone) AS mobile_number,
+      COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.line'),''),a.line) AS address_line,
+      COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.city'),''),a.city) AS address_city,
+      COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.pin'),''),a.pin) AS address_pin,
+      (SELECT COUNT(*) FROM orders WHERE customer_id=u.id) AS orderCount,
+      (SELECT COALESCE(SUM(total_amount),0) FROM orders WHERE customer_id=u.id) AS spend,
+      u.created_at
+    FROM users u
+    LEFT JOIN customer_addresses a ON a.id=(SELECT id FROM customer_addresses WHERE customer_id=u.id ORDER BY created_at DESC,id DESC LIMIT 1)
+    LEFT JOIN orders o ON o.id=(SELECT id FROM orders WHERE customer_id=u.id ORDER BY created_at DESC,id DESC LIMIT 1)
+    WHERE u.role='CUSTOMER' ORDER BY u.created_at DESC
+  `).all()).results||[]});
   if(path==="/api/admin/audit" && method==="GET") return adminOnly || json({entries:(await env.DB.prepare("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?").bind(Math.min(100,Math.max(1,Number(url.searchParams.get("limit"))||25))).all()).results||[]});
   if(path==="/api/admin/seminar" && method==="GET") return adminOnly || json({seminar:await env.DB.prepare("SELECT * FROM seminar_details WHERE id=1").first(),registrations:(await env.DB.prepare("SELECT * FROM seminar_registrations ORDER BY created_at DESC LIMIT 500").all()).results||[]});
   if(path==="/api/admin/seminar/details" && method==="POST"){

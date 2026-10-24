@@ -61,6 +61,83 @@
     const d = toDate(s);
     return d ? d.toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "—";
   }
+  function xmlEscape(value) {
+    return String(value == null ? "" : value).replace(/[<>&"']/g, function (c) {
+      return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[c];
+    });
+  }
+  function makeStoredZip(files) {
+    const encoder = new TextEncoder();
+    const parts = [];
+    const central = [];
+    let offset = 0;
+    function crc32(bytes) {
+      let crc = 0xFFFFFFFF;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= bytes[i];
+        for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1));
+      }
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+    function write16(view, at, value) { view.setUint16(at, value, true); }
+    function write32(view, at, value) { view.setUint32(at, value, true); }
+    files.forEach(function (file) {
+      const name = encoder.encode(file.name);
+      const data = encoder.encode(file.content);
+      const checksum = crc32(data);
+      const local = new Uint8Array(30 + name.length + data.length);
+      const localView = new DataView(local.buffer);
+      write32(localView, 0, 0x04034B50); write16(localView, 4, 20); write16(localView, 6, 0);
+      write16(localView, 8, 0); write16(localView, 10, 0); write16(localView, 12, 0);
+      write32(localView, 14, checksum); write32(localView, 18, data.length); write32(localView, 22, data.length);
+      write16(localView, 26, name.length); write16(localView, 28, 0);
+      local.set(name, 30); local.set(data, 30 + name.length);
+      parts.push(local);
+
+      const directory = new Uint8Array(46 + name.length);
+      const directoryView = new DataView(directory.buffer);
+      write32(directoryView, 0, 0x02014B50); write16(directoryView, 4, 20); write16(directoryView, 6, 20);
+      write16(directoryView, 8, 0); write16(directoryView, 10, 0); write16(directoryView, 12, 0); write16(directoryView, 14, 0);
+      write32(directoryView, 16, checksum); write32(directoryView, 20, data.length); write32(directoryView, 24, data.length);
+      write16(directoryView, 28, name.length); write16(directoryView, 30, 0); write16(directoryView, 32, 0);
+      write16(directoryView, 34, 0); write16(directoryView, 36, 0); write32(directoryView, 38, 0); write32(directoryView, 42, offset);
+      directory.set(name, 46); central.push(directory);
+      offset += local.length;
+    });
+    const centralOffset = offset;
+    central.forEach(function (part) { parts.push(part); offset += part.length; });
+    const centralSize = offset - centralOffset;
+    const end = new Uint8Array(22);
+    const endView = new DataView(end.buffer);
+    write32(endView, 0, 0x06054B50); write16(endView, 4, 0); write16(endView, 6, 0);
+    write16(endView, 8, files.length); write16(endView, 10, files.length);
+    write32(endView, 12, centralSize); write32(endView, 16, centralOffset); write16(endView, 20, 0);
+    parts.push(end);
+    return new Blob(parts, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+  function customersWorkbook(customers) {
+    const rows = [["Customer Name", "Phone Number", "Gmail", "Address"]].concat(customers.map(function (c) {
+      return [c.name, c.mobile_number, c.email, [c.address_line, c.address_city, c.address_pin].filter(Boolean).join(", ")];
+    }));
+    const columns = ["A", "B", "C", "D"];
+    const sheetRows = rows.map(function (row, rowIndex) {
+      return '<row r="' + (rowIndex + 1) + '">' + row.map(function (value, columnIndex) {
+        return '<c r="' + columns[columnIndex] + (rowIndex + 1) + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(value) + "</t></is></c>";
+      }).join("") + "</row>";
+    }).join("");
+    const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '<cols><col min="1" max="1" width="26" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="32" customWidth="1"/><col min="4" max="4" width="48" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData><autoFilter ref="A1:D' + rows.length + '"/></worksheet>';
+    return makeStoredZip([
+      { name: "[Content_Types].xml", content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+      { name: "_rels/.rels", content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: "xl/workbook.xml", content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Customers" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: "xl/_rels/workbook.xml.rels", content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+      { name: "xl/worksheets/sheet1.xml", content: sheet }
+    ]);
+  }
   function slugify(s) {
     return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
   }
@@ -1401,18 +1478,30 @@
   VIEWS.customers = async function () {
     content.innerHTML = loadingCard();
     const data = await api("GET", "/api/admin/customers");
-    state.customers = data.customers;
+    state.customers = data.customers || [];
     content.innerHTML =
-      '<div class="page-head"><div><h3>Customers</h3><p>' + state.customers.length + " registered customers</p></div></div>" +
+      '<div class="page-head"><div><h3>Customers</h3><p>' + state.customers.length + " registered customers</p></div>" +
+      '<button class="btn btn--primary" id="exportCustomersBtn" type="button"><span data-ic="down"></span>Download Excel</button></div>' +
       '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr>' +
-      "<th>Name</th><th>Email</th><th>Mobile</th><th class=\"num\">Orders</th><th class=\"num\">Total spent</th><th>Joined</th>" +
+      "<th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th class=\"num\">Orders</th><th class=\"num\">Total spent</th><th>Joined</th>" +
       "</tr></thead><tbody>" +
       (state.customers.length ? state.customers.map(function (c) {
-        return "<tr><td><b>" + esc(c.name) + "</b></td><td>" + (c.email ? "<a href=\"mailto:" + esc(c.email) + "\">" + esc(c.email) + "</a>" : "—") + "</td><td>" + esc(c.mobile_number || "—") + "</td>" +
-          '<td class="num">' + c.orderCount + '</td><td class="num">' + money(c.spend) + "</td><td>" + esc(fmtDate(c.created_at)) + "</td></tr>";
-      }).join("") : '<tr><td colspan="6" class="empty"><b>No customers yet</b>Customers who sign in with email appear here.</td></tr>') +
+        const address = [c.address_line, c.address_city, c.address_pin].filter(Boolean).join(", ");
+        return "<tr><td><b>" + esc(c.name || "—") + "</b></td><td>" + (c.email ? "<a href=\"mailto:" + esc(c.email) + "\">" + esc(c.email) + "</a>" : "—") + "</td><td>" + esc(c.mobile_number || "—") + "</td><td class=\"customer-address\">" + esc(address || "—") + "</td>" +
+          '<td class="num">' + Number(c.orderCount || 0) + '</td><td class="num">' + money(c.spend) + "</td><td>" + esc(fmtDate(c.created_at)) + "</td></tr>";
+      }).join("") : '<tr><td colspan="7" class="empty"><b>No customers yet</b>Customers who sign in with email appear here.</td></tr>') +
       "</tbody></table></div></section>";
     renderIcons(content);
+    $("#exportCustomersBtn", content).addEventListener("click", function () {
+      if (!state.customers.length) { toast("There are no customer details to export yet.", false); return; }
+      const url = URL.createObjectURL(customersWorkbook(state.customers));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "uvid-customers-" + new Date().toISOString().slice(0, 10) + ".xlsx";
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      toast("Customer Excel sheet downloaded.", true);
+    });
   };
 
   /* ---------------- seminar: event details + registrations ---------------- */
