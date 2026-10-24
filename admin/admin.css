@@ -379,6 +379,8 @@ body.modal-open { overflow: hidden; }
 .invoice__seller-address { display: grid; gap: 2px; margin: 12px 0 0 66px; color: #58635c; font-size: 11px; font-style: normal; line-height: 1.45; }
 .invoice__heading { text-align: right; }
 .invoice__heading h2 { margin: 0; color: #2f8061; font-size: 25px; letter-spacing: 2px; }
+.invoice__gstin { margin: 0 0 7px; color: #68736d; font-size: 11px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.invoice__heading .invoice__gstin b { display: inline; margin: 0; color: #202b25; font-size: 12px; }
 .invoice__heading span { display: block; margin-top: 7px; color: #68736d; font-size: 12px; }
 .invoice__heading b { display: block; margin-top: 3px; color: #202b25; font-size: 16px; overflow-wrap: anywhere; }
 .invoice__meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 20px 0; border-bottom: 1px solid #e4e9e5; }
@@ -421,6 +423,8 @@ body.modal-open { overflow: hidden; }
   .invoice__brand strong { font-size: 16px; }
   .invoice__seller-address { margin-left: 52px; font-size: 10px; }
   .invoice__heading h2 { font-size: 20px; }
+  .invoice__gstin { font-size: 9px; }
+  .invoice__heading .invoice__gstin b { font-size: 10px; }
   .invoice__meta { grid-template-columns: 1fr 1fr; }
   .invoice__parties { grid-template-columns: 1fr; gap: 18px; }
   .invoice__bottom { display: block; }

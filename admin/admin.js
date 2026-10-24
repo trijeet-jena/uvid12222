@@ -1258,7 +1258,7 @@
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
-      '<div class="invoice__heading"><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
+      '<div class="invoice__heading"><div class="invoice__gstin">GSTIN: <b>29AFJPI2457R1ZO</b></div><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div></div>' +
@@ -1271,7 +1271,7 @@
         const imageUrl = invoiceImageUrl(item.image_url || item.imageUrl);
         const image = imageUrl ? '<img src="' + esc(imageUrl) + '" alt="' + esc(item.product_name || "Product") + '" loading="eager">' : '<span class="invoice__no-image">—</span>';
         return '<tr><td class="invoice__rownum">' + (index + 1) + '</td><td class="invoice__image">' + image + '</td><td class="invoice__product"><b>' + esc(item.product_name || "Product") + '</b>' +
-          (item.product_id ? '<small>SKU: ' + esc(item.product_id) + '</small>' : "") + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
+          (item.product_id ? '<small>Product ID: ' + esc(item.product_id) + '</small>' : "") + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
           '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num"><b>' + money(price * quantity) + '</b></td></tr>';
       }).join("") : '<tr><td colspan="6">No item details are available.</td></tr>') +
       '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
