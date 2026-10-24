@@ -191,6 +191,19 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   transition: background .15s ease, color .15s ease;
 }
 .hicon:hover { background: var(--paper-2); color: var(--ink); }
+.hactions > .hicon,
+.hactions > .category-menu .category-menu__toggle {
+  border: 1px solid #c9dfd1; background: #edf6f0; color: var(--green-d);
+  font-weight: 700; box-shadow: 0 2px 8px rgba(33, 95, 69, .08);
+}
+.hactions > .hicon:hover,
+.hactions > .category-menu .category-menu__toggle:hover {
+  border-color: var(--green); background: var(--green); color: #fff;
+}
+.hactions > .hicon:focus-visible,
+.hactions > .category-menu .category-menu__toggle:focus-visible {
+  outline: 3px solid rgba(46, 125, 91, .28); outline-offset: 2px;
+}
 .hicon__badge {
   position: absolute; top: -1px; right: 3px;
   min-width: 17px; height: 17px; border-radius: 99px;
