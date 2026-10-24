@@ -414,9 +414,10 @@
   function buildServerOrder(data, method, address) {
     var srv = data.order || {};
     var items = data.items || [];
-    var stageMap = { PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+    var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
     var cancelled = srv.status === "CANCELLED";
     var si = stageMap[srv.status] != null ? stageMap[srv.status] : 0;
+    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
     var subtotal = 0;
     var mapped = items.map(function (it) {
       var prod = window.PT.findProduct(it.productId);
@@ -448,7 +449,7 @@
       paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
-      status: cancelled ? "Cancelled" : STATUS_STAGES[si],
+      status: statusLabel,
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : si,
       eta: srv.eta || null,

@@ -116,7 +116,7 @@
   }
 
   function statusPill(status) {
-    var cls = { "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
+    var cls = { "Awaiting payment": "amber", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
     return '<span class="pill pill--' + cls + '">' + esc(status) + '</span>';
   }
 
@@ -959,6 +959,13 @@
   var orderSyncLastAt = {};
   var lastOrderSyncEmail = "";
 
+  function customerOrdersViewActive() {
+    var hash = (location.hash || "#").split("?");
+    var path = hash[0];
+    if (path === "#/orders" || path.indexOf("#/orders/") === 0) return true;
+    return path === "#/account" && /(?:^|&)tab=orders(?:&|$)/.test(hash[1] || "");
+  }
+
   function serverOrderToClient(serverOrder) {
     var address = {};
     try { address = JSON.parse(serverOrder.address_json || "{}"); } catch (_e) { address = {}; }
@@ -975,18 +982,17 @@
     }, serverOrder.payment_method, address);
   }
 
-  function syncServerOrders() {
+  function syncServerOrders(force) {
     if (!orderSyncTimer) orderSyncTimer = setInterval(function () {
-      var path = (location.hash || "#").split("?")[0];
-      if (path === "#/orders" || path.indexOf("#/orders/") === 0) syncServerOrders();
-    }, 15000);
+      if (customerOrdersViewActive() && document.visibilityState !== "hidden") syncServerOrders();
+    }, 10000);
     var email = String(A.state.user || "").trim().toLowerCase();
     if (!email) return;
     if (lastOrderSyncEmail !== email) {
       lastOrderSyncEmail = email;
       orderSyncLastAt[email] = 0;
     }
-    if (orderSyncPending[email] || Date.now() - (orderSyncLastAt[email] || 0) < 12000) return;
+    if (orderSyncPending[email] || (!force && Date.now() - (orderSyncLastAt[email] || 0) < 8000)) return;
     orderSyncPending[email] = true;
     orderSyncLastAt[email] = Date.now();
     fetch("/api/orders", { cache: "no-store", credentials: "same-origin" })
@@ -994,15 +1000,23 @@
       .then(function (data) {
         if (!data || !Array.isArray(data.orders) || String(A.state.user || "").trim().toLowerCase() !== email) return;
         var serverOrders = data.orders.map(serverOrderToClient);
+        var previousServerOrders = A.state.orders.filter(function (order) { return order._srv; });
+        var changed = JSON.stringify(previousServerOrders) !== JSON.stringify(serverOrders);
         var localOrders = A.state.orders.filter(function (order) { return !order._srv; });
         A.state.orders = serverOrders.concat(localOrders);
         A.save();
-        var path = (location.hash || "#").split("?")[0];
-        if (path === "#/orders" || path.indexOf("#/orders/") === 0) rerender();
+        if (changed && customerOrdersViewActive()) rerender();
       })
       .catch(function () { /* offline — keep this account's last known orders */ })
       .then(function () { delete orderSyncPending[email]; });
   }
+
+  function refreshCustomerOrders() {
+    if (customerOrdersViewActive() && document.visibilityState !== "hidden") syncServerOrders(true);
+  }
+
+  window.addEventListener("focus", refreshCustomerOrders);
+  document.addEventListener("visibilitychange", refreshCustomerOrders);
 
   function ordersPage() {
     if (!A.state.user) {
@@ -1100,6 +1114,7 @@
     var tab = query.tab || "profile";
     var user = A.state.user ? A.findUser(A.state.user) : null;
     if (!user) { A.openAuth("login", "Login to view your account."); view.innerHTML = emptyState("👋", "You’re not logged in", "Sign in with your Gmail address to see your profile, orders & addresses.", '<button class="btn btn--primary" data-openauth="login">Sign in with email</button>'); return; }
+    if (tab === "orders") syncServerOrders();
 
     var tabs = [
       { id: "profile", icon: "👤", label: "Profile" },
