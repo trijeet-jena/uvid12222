@@ -310,9 +310,10 @@ async function productRows(env, admin = false) {
 }
 async function categories(env) {
   const rows = (await env.DB.prepare(
-    `SELECT c.slug,c.name,c.emoji,c.blurb,c.image_url,c.sort_order,
-       (SELECT COUNT(*) FROM products p WHERE p.category=c.slug AND p.status!='ARCHIVED') AS count
-     FROM categories c ORDER BY c.sort_order,c.name`).all()).results || [];
+    `SELECT c.slug,c.name,c.emoji,c.blurb,c.image_url,c.sort_order,c.parent_slug AS parentSlug,
+       (SELECT COUNT(*) FROM products p WHERE p.status!='ARCHIVED' AND
+         (p.category=c.slug OR p.category IN (SELECT child.slug FROM categories child WHERE child.parent_slug=c.slug))) AS count
+     FROM categories c ORDER BY CASE WHEN c.parent_slug IS NULL THEN 0 ELSE 1 END,c.sort_order,c.name`).all()).results || [];
   if (rows.length) return rows;
   return (await env.DB.prepare("SELECT category AS slug,category AS name,COUNT(*) AS count FROM products WHERE status!='ARCHIVED' AND category!='uncategorized' GROUP BY category ORDER BY category").all()).results || [];
 }
@@ -759,23 +760,28 @@ async function handleApi(request, env, user, url) {
   if (path === "/api/admin/categories" && method === "POST") {
     if (adminOnly) return adminOnly; const b=await readBody(); const name=clean(b.name,40); if(name.length<2) return error("Category name must be 2–40 characters.");
     const slug=clean(b.slug,40).toLowerCase()||slugify(name);
-    try { await env.DB.prepare("INSERT INTO categories (slug,name,emoji,blurb,image_url,sort_order) VALUES (?,?,?,?,?,?)").bind(slug,name,clean(b.emoji,8)||null,clean(b.blurb,120)||null,clean(b.imageUrl,500)||null,Number(b.sortOrder)||100).run(); }
+    const parentSlug=clean(b.parentSlug,40).toLowerCase()||null;
+    if(parentSlug){const parent=await env.DB.prepare("SELECT slug,parent_slug FROM categories WHERE slug=?").bind(parentSlug).first();if(!parent)return error("Choose an existing main category as the parent.");if(parentSlug===slug||parent.parent_slug)return error("Subcategories can only be placed under a main category.");}
+    try { await env.DB.prepare("INSERT INTO categories (slug,name,emoji,blurb,image_url,sort_order,parent_slug) VALUES (?,?,?,?,?,?,?)").bind(slug,name,clean(b.emoji,8)||null,clean(b.blurb,120)||null,clean(b.imageUrl,500)||null,Number(b.sortOrder)||100,parentSlug).run(); }
     catch { return error("A category with this name already exists.",409); }
     return json({ok:true,category:await env.DB.prepare("SELECT * FROM categories WHERE slug=?").bind(slug).first()},201);
   }
   match = path.match(/^\/api\/admin\/categories\/([^/]+)$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly; const slug=decodeURIComponent(match[1]), b=await readBody();
+    const current=await env.DB.prepare("SELECT slug,parent_slug FROM categories WHERE slug=?").bind(slug).first();if(!current)return error("Category not found.",404);
     const cols={name:"name",emoji:"emoji",blurb:"blurb",imageUrl:"image_url",sortOrder:"sort_order"}; const sets=[],args=[];
     for(const [input,col] of Object.entries(cols)) if(b[input]!==undefined){sets.push(`${col}=?`);args.push(input==="sortOrder"?Number(b[input]):clean(b[input],input==="name"?40:500)||null);}
+    if(b.parentSlug!==undefined){const parentSlug=clean(b.parentSlug,40).toLowerCase()||null;if(parentSlug===slug)return error("A category cannot be its own parent.");if(parentSlug){const parent=await env.DB.prepare("SELECT slug,parent_slug FROM categories WHERE slug=?").bind(parentSlug).first();if(!parent)return error("Choose an existing main category as the parent.");if(parent.parent_slug)return error("Subcategories can only be placed under a main category.");}const children=await env.DB.prepare("SELECT COUNT(*) AS n FROM categories WHERE parent_slug=?").bind(slug).first();if(Number(children?.n||0)>0&&parentSlug)return error("Move or delete this category's subcategories before making it a subcategory.",409);sets.push("parent_slug=?");args.push(parentSlug);}
     if(!sets.length) return error("Nothing to update."); args.push(now(),slug);
     await env.DB.prepare(`UPDATE categories SET ${sets.join(",")},updated_at=? WHERE slug=?`).bind(...args).run();
     return json({ok:true,category:await env.DB.prepare("SELECT * FROM categories WHERE slug=?").bind(slug).first()});
   }
   if (match && method === "DELETE") {
     if (adminOnly) return adminOnly; const slug=decodeURIComponent(match[1]), b=await readBody().catch(()=>({}));
+    const childCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM categories WHERE parent_slug=?").bind(slug).first();if(Number(childCount?.n||0)>0)return error("Move or delete this category's subcategories before deleting it.",409);
     const used=await env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE category=? AND status!='ARCHIVED'").bind(slug).first();
-    if(Number(used?.n||0)>0){ if(!b.reassignTo) return error("Move the category's products first.",409); await env.DB.prepare("UPDATE products SET category=?,updated_at=? WHERE category=?").bind(clean(b.reassignTo,40),now(),slug).run(); }
+    if(Number(used?.n||0)>0){ if(!b.reassignTo) return error("Move the category's products first.",409);const target=clean(b.reassignTo,40).toLowerCase();if(!target||target===slug||!(await env.DB.prepare("SELECT slug FROM categories WHERE slug=?").bind(target).first()))return error("Choose another existing category for these products.");await env.DB.prepare("UPDATE products SET category=?,updated_at=? WHERE category=?").bind(target,now(),slug).run(); }
     await env.DB.prepare("DELETE FROM categories WHERE slug=?").bind(slug).run(); return json({ok:true,moved:Number(used?.n||0)});
   }
   if (path === "/api/admin/upload" && method === "POST") {

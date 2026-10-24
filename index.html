@@ -183,7 +183,12 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 }
 .category-menu__title { margin: 3px 9px 8px; color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .category-menu__item { display: block; min-height: 43px; padding: 10px; border-radius: var(--rad-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.category-menu__item--child { padding-left: 24px; color: var(--ink-3); font-size: 13px; font-weight: 500; }
 .category-menu__item:hover, .category-menu__item:focus-visible { outline: 0; background: var(--green-t); color: var(--green-d); }
+.subcategory-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
+.subcategory-nav__label { color: var(--ink-2); font-size: 13px; font-weight: 700; margin-right: 3px; }
+.subcategory-nav__link { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 13px; border: 1px solid #c9dfd1; border-radius: 999px; background: #edf6f0; color: var(--green-d); font-size: 13px; font-weight: 600; }
+.subcategory-nav__link:hover, .subcategory-nav__link:focus-visible { outline: 0; background: var(--green); border-color: var(--green); color: #fff; }
 .hicon {
   position: relative; display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 14px; border-radius: 999px; border: 0; background: transparent;
@@ -701,6 +706,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .drawer__brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .drawer__links { display: flex; flex-direction: column; gap: 2px; }
 .drawer__links a { padding: 12px 14px; border-radius: var(--rad-sm); font-weight: 600; font-size: 14.5px; color: var(--ink-2); }
+.drawer__links .category-menu__item--child { padding-left: 30px; font-size: 13.5px; color: var(--ink-3); }
 .drawer__links a:hover { background: var(--paper-2); color: var(--ink); }
 .drawer hr { border: 0; border-top: 1px dashed var(--line-2); margin: 14px 0; }
 
@@ -2156,9 +2162,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   function buildServerOrder(data, method, address) {
     var srv = data.order || {};
     var items = data.items || [];
-    var stageMap = { PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+    var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
     var cancelled = srv.status === "CANCELLED";
     var si = stageMap[srv.status] != null ? stageMap[srv.status] : 0;
+    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
     var subtotal = 0;
     var mapped = items.map(function (it) {
       var prod = window.PT.findProduct(it.productId);
@@ -2190,7 +2197,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
-      status: cancelled ? "Cancelled" : STATUS_STAGES[si],
+      status: statusLabel,
       stages: STATUS_STAGES,
       stageIndex: cancelled ? 0 : si,
       eta: srv.eta || null,
@@ -2472,7 +2479,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   function statusPill(status) {
-    var cls = { "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
+    var cls = { "Awaiting payment": "amber", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
     return '<span class="pill pill--' + cls + '">' + esc(status) + '</span>';
   }
 
@@ -2632,7 +2639,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var path = currentBase();
     if (path.indexOf("#/c/") === 0) {
       var slug = path.split("/")[2];
-      base = D.PRODUCTS.filter(function (p) { return p.category === slug && p.tags.indexOf("vc-hidden") === -1; });
+      var category = D.categoryBySlug(slug);
+      var childSlugs = category && !category.parentSlug
+        ? D.CATEGORIES.filter(function (c) { return c.parentSlug === slug; }).map(function (c) { return c.slug; })
+        : [];
+      base = D.PRODUCTS.filter(function (p) {
+        return (p.category === slug || childSlugs.indexOf(p.category) > -1) && p.tags.indexOf("vc-hidden") === -1;
+      });
     } else {
       base = q.q ? searchProducts(q.q) : D.PRODUCTS.slice();
       base = visibleBase(base);
@@ -2644,7 +2657,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var disc = q.disc ? parseInt(q.disc, 10) : 0;
 
     var out = base.filter(function (p) {
-      if (cats.length && cats.indexOf(p.category) === -1) return false;
+      var productCategory = D.categoryBySlug(p.category);
+      var productCategorySlugs = [p.category];
+      if (productCategory && productCategory.parentSlug) productCategorySlugs.push(productCategory.parentSlug);
+      if (cats.length && !cats.some(function (categorySlug) { return productCategorySlugs.indexOf(categorySlug) > -1; })) return false;
       if (brands.length && brands.indexOf(p.brand) === -1) return false;
       if (price === "u100" && p.price > 100) return false;
       if (price === "100-250" && !(p.price >= 100 && p.price <= 250)) return false;
@@ -2686,6 +2702,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var brands = Object.keys(brandCounts).sort();
     var catsIn = {};
     products.forEach(function (p) { catsIn[p.category] = (catsIn[p.category] || 0) + 1; });
+    D.CATEGORIES.forEach(function (category) {
+      if (!category.parentSlug) {
+        D.CATEGORIES.filter(function (child) { return child.parentSlug === category.slug; }).forEach(function (child) {
+          catsIn[category.slug] = (catsIn[category.slug] || 0) + (catsIn[child.slug] || 0);
+        });
+      }
+    });
     var anyFilter = q.cat || q.brand || q.price || q.rating || q.disc;
 
     return '<aside class="filters" id="filterPanel">' +
@@ -2724,13 +2747,25 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail;
+    var title, crumbTrail, subcategoryLinks = "";
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
       if (!cat) { home(); return; }
       title = cat.label;
-      crumbTrail = [{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }];
+      var parentCategory = cat.parentSlug ? D.categoryBySlug(cat.parentSlug) : null;
+      crumbTrail = [{ label: "Home", href: "#/" }];
+      if (parentCategory) crumbTrail.push({ label: parentCategory.label, href: "#/c/" + parentCategory.slug });
+      crumbTrail.push({ label: cat.label, href: "#/c/" + cat.slug });
+      if (!parentCategory) {
+        var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
+        if (subcategories.length) {
+          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Browse subcategories:</span>' +
+            subcategories.map(function (child) {
+              return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
+            }).join("") + '</nav>';
+        }
+      }
     } else {
       title = q.q ? 'Results for “' + q.q + '”' : "All products";
       crumbTrail = [{ label: "Home", href: "#/" }, { label: q.q ? "Search" : "All products", href: "#/search" }];
@@ -2743,6 +2778,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     view.innerHTML =
       crumbs(crumbTrail) +
+      subcategoryLinks +
       '<div class="listing">' +
       filterPanel(items) +
       '<section class="results">' +
@@ -2820,9 +2856,14 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       return '<tr><th>' + esc(k) + '</th><td>' + esc(specSource[k]) + '</td></tr>';
     }).join("");
     var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
+    var productCrumbs = [{ label: "Home", href: "#/" }];
+    var parentCat = cat.parentSlug ? D.categoryBySlug(cat.parentSlug) : null;
+    if (parentCat) productCrumbs.push({ label: parentCat.label, href: "#/c/" + parentCat.slug });
+    productCrumbs.push({ label: cat.label, href: cat.slug ? "#/c/" + cat.slug : "#/search" });
+    productCrumbs.push({ label: variantLabel });
 
     view.innerHTML =
-      crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: cat.slug ? "#/c/" + cat.slug : "#/search" }, { label: variantLabel }]) +
+      crumbs(productCrumbs) +
       '<div class="pdp">' +
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
@@ -3315,6 +3356,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   var orderSyncLastAt = {};
   var lastOrderSyncEmail = "";
 
+  function customerOrdersViewActive() {
+    var hash = (location.hash || "#").split("?");
+    var path = hash[0];
+    if (path === "#/orders" || path.indexOf("#/orders/") === 0) return true;
+    return path === "#/account" && /(?:^|&)tab=orders(?:&|$)/.test(hash[1] || "");
+  }
+
   function serverOrderToClient(serverOrder) {
     var address = {};
     try { address = JSON.parse(serverOrder.address_json || "{}"); } catch (_e) { address = {}; }
@@ -3331,18 +3379,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }, serverOrder.payment_method, address);
   }
 
-  function syncServerOrders() {
+  function syncServerOrders(force) {
     if (!orderSyncTimer) orderSyncTimer = setInterval(function () {
-      var path = (location.hash || "#").split("?")[0];
-      if (path === "#/orders" || path.indexOf("#/orders/") === 0) syncServerOrders();
-    }, 15000);
+      if (customerOrdersViewActive() && document.visibilityState !== "hidden") syncServerOrders();
+    }, 10000);
     var email = String(A.state.user || "").trim().toLowerCase();
     if (!email) return;
     if (lastOrderSyncEmail !== email) {
       lastOrderSyncEmail = email;
       orderSyncLastAt[email] = 0;
     }
-    if (orderSyncPending[email] || Date.now() - (orderSyncLastAt[email] || 0) < 12000) return;
+    if (orderSyncPending[email] || (!force && Date.now() - (orderSyncLastAt[email] || 0) < 8000)) return;
     orderSyncPending[email] = true;
     orderSyncLastAt[email] = Date.now();
     fetch("/api/orders", { cache: "no-store", credentials: "same-origin" })
@@ -3350,15 +3397,23 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       .then(function (data) {
         if (!data || !Array.isArray(data.orders) || String(A.state.user || "").trim().toLowerCase() !== email) return;
         var serverOrders = data.orders.map(serverOrderToClient);
+        var previousServerOrders = A.state.orders.filter(function (order) { return order._srv; });
+        var changed = JSON.stringify(previousServerOrders) !== JSON.stringify(serverOrders);
         var localOrders = A.state.orders.filter(function (order) { return !order._srv; });
         A.state.orders = serverOrders.concat(localOrders);
         A.save();
-        var path = (location.hash || "#").split("?")[0];
-        if (path === "#/orders" || path.indexOf("#/orders/") === 0) rerender();
+        if (changed && customerOrdersViewActive()) rerender();
       })
       .catch(function () { /* offline — keep this account's last known orders */ })
       .then(function () { delete orderSyncPending[email]; });
   }
+
+  function refreshCustomerOrders() {
+    if (customerOrdersViewActive() && document.visibilityState !== "hidden") syncServerOrders(true);
+  }
+
+  window.addEventListener("focus", refreshCustomerOrders);
+  document.addEventListener("visibilitychange", refreshCustomerOrders);
 
   function ordersPage() {
     if (!A.state.user) {
@@ -3456,6 +3511,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var tab = query.tab || "profile";
     var user = A.state.user ? A.findUser(A.state.user) : null;
     if (!user) { A.openAuth("login", "Login to view your account."); view.innerHTML = emptyState("👋", "You’re not logged in", "Sign in with your Gmail address to see your profile, orders & addresses.", '<button class="btn btn--primary" data-openauth="login">Sign in with email</button>'); return; }
+    if (tab === "orders") syncServerOrders();
 
     var tabs = [
       { id: "profile", icon: "👤", label: "Profile" },
@@ -3737,10 +3793,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   function renderHeaderCategories() {
-    var html = (D.CATEGORIES || []).map(function (category) {
+    var categories = D.CATEGORIES || [];
+    function categoryLink(category, child) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
+      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + (child ? '↳ ' : '') + label + '</a>';
+    }
+    var html = categories.filter(function (category) {
+      return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
+    }).map(function (parent) {
+      return categoryLink(parent, false) + categories.filter(function (child) { return child.parentSlug === parent.slug; })
+        .map(function (child) { return categoryLink(child, true); }).join("");
     }).join("");
     ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
       var container = document.getElementById(id);
@@ -4011,11 +4074,12 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       }
     }
 
-    /* categories: API rows are {slug, name, emoji, blurb, count} */
+    /* categories: API rows include an optional parentSlug for subcategories */
     var cats = (rawCategories || []).map(function (c) {
       return {
         slug: c.slug,
         label: c.name || c.slug,
+        parentSlug: c.parentSlug || c.parent_slug || null,
         emoji: c.emoji || "🗂️",
         blurb: c.blurb || "",
         count: c.count || 0

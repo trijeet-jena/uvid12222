@@ -102,11 +102,12 @@
       }
     }
 
-    /* categories: API rows are {slug, name, emoji, blurb, count} */
+    /* categories: API rows include an optional parentSlug for subcategories */
     var cats = (rawCategories || []).map(function (c) {
       return {
         slug: c.slug,
         label: c.name || c.slug,
+        parentSlug: c.parentSlug || c.parent_slug || null,
         emoji: c.emoji || "🗂️",
         blurb: c.blurb || "",
         count: c.count || 0

@@ -64,6 +64,38 @@
   function slugify(s) {
     return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
   }
+  function categoryBySlug(slug) {
+    return state.categories.find(function (category) { return category.slug === slug; }) || null;
+  }
+  function categoryLabel(slug) {
+    const category = categoryBySlug(slug);
+    if (!category) return slug || "—";
+    const parent = category.parentSlug ? categoryBySlug(category.parentSlug) : null;
+    return parent ? parent.name + " / " + category.name : category.name;
+  }
+  function categoryTree() {
+    const categories = state.categories || [];
+    const ordered = [];
+    categories.filter(function (category) {
+      return !category.parentSlug || !categoryBySlug(category.parentSlug);
+    }).forEach(function (parent) {
+      ordered.push(parent);
+      categories.filter(function (category) { return category.parentSlug === parent.slug; })
+        .forEach(function (child) { ordered.push(child); });
+    });
+    categories.forEach(function (category) {
+      if (ordered.indexOf(category) === -1) ordered.push(category);
+    });
+    return ordered;
+  }
+  function categoryOptionLabel(category) {
+    return category.parentSlug ? "↳ " + categoryLabel(category.slug) : category.name;
+  }
+  function categoryMatches(productSlug, selectedSlug) {
+    if (!selectedSlug || productSlug === selectedSlug) return true;
+    const selected = categoryBySlug(selectedSlug);
+    return !!selected && !selected.parentSlug && !!categoryBySlug(productSlug) && categoryBySlug(productSlug).parentSlug === selectedSlug;
+  }
 
   /* ---------------- elements ---------------- */
   const loginView = $("#loginView"), appView = $("#appView"), content = $("#content");
@@ -475,8 +507,8 @@
       '<section class="panel"><div class="panel__head"><div class="filters">' +
       '<input id="prodSearch" type="search" placeholder="Search products…" value="' + esc(state.filters.q) + '" aria-label="Search products">' +
       '<select id="prodCat" aria-label="Category"><option value="">All categories</option>' +
-      state.categories.map(function (c) {
-        return '<option value="' + esc(c.slug) + '"' + (state.filters.cat === c.slug ? " selected" : "") + ">" + esc(c.name) + "</option>";
+      categoryTree().map(function (c) {
+        return '<option value="' + esc(c.slug) + '"' + (state.filters.cat === c.slug ? " selected" : "") + ">" + esc(categoryOptionLabel(c)) + "</option>";
       }).join("") + "</select>" +
       '<select id="prodStatus" aria-label="Status"><option value="">Any status</option>' +
       ["live", "active", "out", "inactive"].map(function (v) {
@@ -501,7 +533,7 @@
     return state.products.filter(function (p) {
       if (p.parent) return false; /* size variants are edited inside their parent */
       if (q && (p.productName + " " + p.id + " " + p.description).toLowerCase().indexOf(q) === -1) return false;
-      if (f.cat && p.category !== f.cat) return false;
+      if (f.cat && !categoryMatches(p.category, f.cat)) return false;
       if (f.status === "live" && p.status === "ARCHIVED") return false;
       if (f.status === "active" && !(p.status !== "ARCHIVED" && effStock(p) > 0)) return false;
       if (f.status === "out" && (p.status === "ARCHIVED" || effStock(p) > 0)) return false;
@@ -526,7 +558,7 @@
       const off = p.mrp != null && p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
       return "<tr>" +
         '<td><div class="pcell">' + pImg(p) + "<div><b>" + esc(p.productName) + "</b><small>" + esc(p.id) + (k.length ? " · " + k.length + " variants" : "") + "</small></div></div></td>" +
-        "<td>" + esc(p.category) + "</td>" +
+        "<td>" + esc(categoryLabel(p.category)) + "</td>" +
         '<td class="num"><b>' + money(p.price) + "</b>" + (off ? ' <s style="color:var(--muted);font-size:12.5px">' + money(p.mrp) + "</s> <small style=\"color:var(--tang)\">-" + off + "%</small>" : "") + "</td>" +
         '<td class="num">' + stock + "</td>" +
         "<td>" + pBadge(p) + "</td>" +
@@ -637,8 +669,8 @@
       (editing ? "<small>IDs can't change after creation.</small>" : "") + "</label>" +
       '<label class="fld"><span>Category <i>*</i></span><select name="category" required>' +
       '<option value="">Choose…</option>' +
-      state.categories.map(function (c) {
-        return '<option value="' + esc(c.slug) + '"' + (editing && p.category === c.slug ? " selected" : "") + ">" + esc(c.name) + "</option>";
+      categoryTree().map(function (c) {
+        return '<option value="' + esc(c.slug) + '"' + (editing && p.category === c.slug ? " selected" : "") + ">" + esc(categoryOptionLabel(c)) + "</option>";
       }).join("") + "</select></label>" +
       '<label class="fld"><span>Status</span><select name="status">' +
       '<option value="ACTIVE"' + (!inactive ? " selected" : "") + ">Active</option>" +
@@ -1031,21 +1063,21 @@
       content.innerHTML = loadingCard();
       await loadState("categories");
     }
-    const counts = {};
-    state.products.forEach(function (p) { if (!p.parent && p.status !== "ARCHIVED") counts[p.category] = (counts[p.category] || 0) + 1; });
     content.innerHTML =
-      '<div class="page-head"><div><h3>Categories</h3><p>Products show up under their category on the storefront automatically.</p></div>' +
-      '<button class="btn btn--primary" id="addCatBtn">' + ICONS.plus + " Add category</button></div>" +
+      '<div class="page-head"><div><h3>Categories</h3><p>Create main categories and nest subcategories under them. Assign products to either level.</p></div>' +
+      '<button class="btn btn--primary" id="addCatBtn">' + ICONS.plus + " Add category / subcategory</button></div>" +
       '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr>' +
-      "<th>Category</th><th>Slug</th><th>Products</th><th style=\"text-align:right\">Actions</th></tr></thead><tbody>" +
-      (state.categories.length ? state.categories.map(function (c) {
-        return "<tr><td><b>" + esc(c.emoji || "📁") + " " + esc(c.name) + "</b>" + (c.blurb ? "<br><small>" + esc(c.blurb) + "</small>" : "") + "</td>" +
-          "<td><code>" + esc(c.slug) + "</code></td><td>" + (counts[c.slug] || 0) + "</td>" +
+      "<th>Category</th><th>Parent category</th><th>Slug</th><th>Products</th><th style=\"text-align:right\">Actions</th></tr></thead><tbody>" +
+      (state.categories.length ? categoryTree().map(function (c) {
+        const parent = c.parentSlug ? categoryBySlug(c.parentSlug) : null;
+        return "<tr><td><b>" + esc(c.emoji || (parent ? "↳" : "📁")) + " " + esc(c.name) + "</b>" + (c.blurb ? "<br><small>" + esc(c.blurb) + "</small>" : "") + "</td>" +
+          "<td>" + esc(parent ? parent.name : "— Main category —") + "</td><td><code>" + esc(c.slug) + "</code></td><td>" + Number(c.count || 0) + "</td>" +
           '<td><div class="row-actions">' +
           '<button class="btn btn--ghost btn--sm" data-cact="edit" data-slug="' + esc(c.slug) + '">Edit</button>' +
+          (parent ? "" : '<button class="btn btn--ghost btn--sm" data-cact="add-child" data-slug="' + esc(c.slug) + '">Add subcategory</button>') +
           '<button class="btn btn--ghost btn--sm" data-cact="del" data-slug="' + esc(c.slug) + '" style="color:var(--red)">Delete</button>' +
           "</div></td></tr>";
-      }).join("") : '<tr><td colspan="4" class="empty"><b>No categories yet</b>Add the first one.</td></tr>') +
+      }).join("") : '<tr><td colspan="5" class="empty"><b>No categories yet</b>Add the first one.</td></tr>') +
       "</tbody></table></div></section>";
     renderIcons(content);
     $("#addCatBtn").addEventListener("click", function () { openCategoryModal(null); });
@@ -1058,7 +1090,12 @@
     if (!cat) return;
     try {
       if (btn.dataset.cact === "edit") openCategoryModal(cat);
+      else if (btn.dataset.cact === "add-child") openCategoryModal(null, cat.slug);
       else if (btn.dataset.cact === "del") {
+        if (state.categories.some(function (category) { return category.parentSlug === cat.slug; })) {
+          toast("Move or delete this category's subcategories first.", false);
+          return;
+        }
         const ok = await confirmDialog('Delete category "' + cat.name + '"?', { yes: "Delete category" });
         if (!ok) return;
         await deleteCategory(cat.slug);
@@ -1073,6 +1110,7 @@
       await api("DELETE", "/api/admin/categories/" + encodeURIComponent(slug));
     } catch (e) {
       if (e.status !== 409) throw e;
+      if (/subcategories/i.test(e.message || "")) throw e;
       const others = state.categories.filter(function (c) { return c.slug !== slug; });
       if (!others.length) { toast("Move its products to a new category first.", false); throw e; }
       const moved = await promptReassign("This category still has products. Move them to:", others);
@@ -1088,7 +1126,7 @@
         '<div class="modal__head"><h3>Move products first</h3><button class="iconbtn" data-close>' + ICONS.x + "</button></div>" +
         '<div class="modal__body"><p class="confirm-msg">' + esc(msg) + "</p>" +
         '<label class="fld" style="margin-top:14px"><span>Move to category</span><select id="reassignSel">' +
-        others.map(function (c) { return '<option value="' + esc(c.slug) + '">' + esc(c.name) + "</option>"; }).join("") +
+        categoryTree().filter(function (c) { return others.indexOf(c) !== -1; }).map(function (c) { return '<option value="' + esc(c.slug) + '">' + esc(categoryOptionLabel(c)) + "</option>"; }).join("") +
         "</select></label></div>" +
         '<div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button>' +
         '<button class="btn btn--primary" data-yes>Move &amp; delete</button></div>');
@@ -1100,15 +1138,23 @@
       });
     });
   }
-  function openCategoryModal(cat) {
+  function openCategoryModal(cat, selectedParentSlug) {
     const editing = !!cat;
+    const parentSlug = editing ? (cat.parentSlug || "") : (selectedParentSlug || "");
+    const hasChildren = editing && state.categories.some(function (category) { return category.parentSlug === cat.slug; });
+    const parentOptions = state.categories.filter(function (category) {
+      return !category.parentSlug && (!editing || category.slug !== cat.slug);
+    });
     const back = openModal(
-      '<div class="modal__head"><h3>' + (editing ? "Edit category" : "Add category") + "</h3>" +
+      '<div class="modal__head"><h3>' + (editing ? "Edit category" : selectedParentSlug ? "Add subcategory" : "Add main category") + "</h3>" +
       '<button class="iconbtn" data-close>' + ICONS.x + "</button></div>" +
       '<form id="cForm" novalidate><div class="modal__body">' +
       '<p class="form-error" id="cErr" hidden></p>' +
       '<label class="fld"><span>Name <i>*</i></span><input name="name" maxlength="40" required value="' + esc(editing ? cat.name : "") + '"></label>' +
       '<label class="fld"><span>URL slug</span><input name="slug" placeholder="auto from name" value="' + esc(editing ? cat.slug : "") + '"' + (editing ? " disabled" : "") + "></label>" +
+      '<label class="fld"><span>Parent category</span><select name="parentSlug"' + (hasChildren ? " disabled" : "") + '><option value="">None — create a main category</option>' +
+      parentOptions.map(function (parent) { return '<option value="' + esc(parent.slug) + '"' + (parentSlug === parent.slug ? " selected" : "") + ">" + esc(parent.name) + "</option>"; }).join("") +
+      "</select><small>Choose a main category to create a subcategory under it. Subcategories stay one level deep.</small></label>" +
       '<label class="fld"><span>Emoji</span><input name="emoji" maxlength="8" placeholder="🗂️" value="' + esc(editing && cat.emoji ? cat.emoji : "") + '"></label>' +
       '<label class="fld"><span>Blurb (one line)</span><input name="blurb" maxlength="120" placeholder="Short line shown on the storefront" value="' + esc(editing && cat.blurb ? cat.blurb : "") + '"></label>' +
       "</div>" +
@@ -1121,6 +1167,7 @@
       if (name.length < 2) { err.textContent = "Category name must be at least 2 characters."; err.hidden = false; return; }
       const payload = {
         name: name,
+        parentSlug: $("#cForm [name=parentSlug]", back).value || null,
         emoji: $("#cForm [name=emoji]", back).value.trim() || null,
         blurb: $("#cForm [name=blurb]", back).value.trim() || null,
       };
@@ -1132,7 +1179,7 @@
           await api("POST", "/api/admin/categories", payload);
         }
         undo(); closeModal();
-        toast(editing ? "Category updated" : "Category added", true);
+        toast(editing ? "Category updated" : payload.parentSlug ? "Subcategory added" : "Main category added", true);
         await repaint(VIEWS.categories);
       } catch (ex) { undo(); err.textContent = ex.message; err.hidden = false; }
     });

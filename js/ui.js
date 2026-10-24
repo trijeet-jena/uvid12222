@@ -276,7 +276,13 @@
     var path = currentBase();
     if (path.indexOf("#/c/") === 0) {
       var slug = path.split("/")[2];
-      base = D.PRODUCTS.filter(function (p) { return p.category === slug && p.tags.indexOf("vc-hidden") === -1; });
+      var category = D.categoryBySlug(slug);
+      var childSlugs = category && !category.parentSlug
+        ? D.CATEGORIES.filter(function (c) { return c.parentSlug === slug; }).map(function (c) { return c.slug; })
+        : [];
+      base = D.PRODUCTS.filter(function (p) {
+        return (p.category === slug || childSlugs.indexOf(p.category) > -1) && p.tags.indexOf("vc-hidden") === -1;
+      });
     } else {
       base = q.q ? searchProducts(q.q) : D.PRODUCTS.slice();
       base = visibleBase(base);
@@ -288,7 +294,10 @@
     var disc = q.disc ? parseInt(q.disc, 10) : 0;
 
     var out = base.filter(function (p) {
-      if (cats.length && cats.indexOf(p.category) === -1) return false;
+      var productCategory = D.categoryBySlug(p.category);
+      var productCategorySlugs = [p.category];
+      if (productCategory && productCategory.parentSlug) productCategorySlugs.push(productCategory.parentSlug);
+      if (cats.length && !cats.some(function (categorySlug) { return productCategorySlugs.indexOf(categorySlug) > -1; })) return false;
       if (brands.length && brands.indexOf(p.brand) === -1) return false;
       if (price === "u100" && p.price > 100) return false;
       if (price === "100-250" && !(p.price >= 100 && p.price <= 250)) return false;
@@ -330,6 +339,13 @@
     var brands = Object.keys(brandCounts).sort();
     var catsIn = {};
     products.forEach(function (p) { catsIn[p.category] = (catsIn[p.category] || 0) + 1; });
+    D.CATEGORIES.forEach(function (category) {
+      if (!category.parentSlug) {
+        D.CATEGORIES.filter(function (child) { return child.parentSlug === category.slug; }).forEach(function (child) {
+          catsIn[category.slug] = (catsIn[category.slug] || 0) + (catsIn[child.slug] || 0);
+        });
+      }
+    });
     var anyFilter = q.cat || q.brand || q.price || q.rating || q.disc;
 
     return '<aside class="filters" id="filterPanel">' +
@@ -368,13 +384,25 @@
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail;
+    var title, crumbTrail, subcategoryLinks = "";
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
       if (!cat) { home(); return; }
       title = cat.label;
-      crumbTrail = [{ label: "Home", href: "#/" }, { label: cat.label, href: "#/c/" + cat.slug }];
+      var parentCategory = cat.parentSlug ? D.categoryBySlug(cat.parentSlug) : null;
+      crumbTrail = [{ label: "Home", href: "#/" }];
+      if (parentCategory) crumbTrail.push({ label: parentCategory.label, href: "#/c/" + parentCategory.slug });
+      crumbTrail.push({ label: cat.label, href: "#/c/" + cat.slug });
+      if (!parentCategory) {
+        var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
+        if (subcategories.length) {
+          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Browse subcategories:</span>' +
+            subcategories.map(function (child) {
+              return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
+            }).join("") + '</nav>';
+        }
+      }
     } else {
       title = q.q ? 'Results for “' + q.q + '”' : "All products";
       crumbTrail = [{ label: "Home", href: "#/" }, { label: q.q ? "Search" : "All products", href: "#/search" }];
@@ -387,6 +415,7 @@
 
     view.innerHTML =
       crumbs(crumbTrail) +
+      subcategoryLinks +
       '<div class="listing">' +
       filterPanel(items) +
       '<section class="results">' +
@@ -464,9 +493,14 @@
       return '<tr><th>' + esc(k) + '</th><td>' + esc(specSource[k]) + '</td></tr>';
     }).join("");
     var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
+    var productCrumbs = [{ label: "Home", href: "#/" }];
+    var parentCat = cat.parentSlug ? D.categoryBySlug(cat.parentSlug) : null;
+    if (parentCat) productCrumbs.push({ label: parentCat.label, href: "#/c/" + parentCat.slug });
+    productCrumbs.push({ label: cat.label, href: cat.slug ? "#/c/" + cat.slug : "#/search" });
+    productCrumbs.push({ label: variantLabel });
 
     view.innerHTML =
-      crumbs([{ label: "Home", href: "#/" }, { label: cat.label, href: cat.slug ? "#/c/" + cat.slug : "#/search" }, { label: variantLabel }]) +
+      crumbs(productCrumbs) +
       '<div class="pdp">' +
       '<section class="pdp__gallery card">' +
       '<div class="pdp__imgwrap"><img id="pdpImg" src="' + p.img + '" alt="' + esc(variantLabel) + '" /></div>' +
@@ -1396,10 +1430,17 @@
   }
 
   function renderHeaderCategories() {
-    var html = (D.CATEGORIES || []).map(function (category) {
+    var categories = D.CATEGORIES || [];
+    function categoryLink(category, child) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
+      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + (child ? '↳ ' : '') + label + '</a>';
+    }
+    var html = categories.filter(function (category) {
+      return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
+    }).map(function (parent) {
+      return categoryLink(parent, false) + categories.filter(function (child) { return child.parentSlug === parent.slug; })
+        .map(function (child) { return categoryLink(child, true); }).join("");
     }).join("");
     ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
       var container = document.getElementById(id);
