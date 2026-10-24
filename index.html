@@ -1301,6 +1301,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   });
   /* Candle mould photos are shipped as repository assets. Each collection is
      one editable catalog parent with five individually priced/stocked designs. */
+  var candleMouldPrice = 380, candleMouldMrp = 420;
   var CANDLE_MOULD_COLLECTIONS = [
     {
       id: "candle-rose-moulds", name: "Rose Candle Mould Collection",
@@ -1349,8 +1350,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       id: "candle-whimsical-moulds", name: "Whimsical Candle Mould Collection",
       image: "/assets/candle-moulds/honey-bear-pillar-zl943.jpeg", emoji: "🕯️", bg: "#FFF7E7", ink: "#8A5A22",
       localOnly: true,
-      description: "Create playful, character-inspired candles with this whimsical collection. ZL-943 is the featured design; choose from six additional mould designs. Each selectable design is ₹200, with 30 pieces available.",
-      specs: { "Featured model": "ZL-943", "Featured candle height": "100 mm", "Price": "₹200 per selected design", "Stock": "30 pieces per selected design" },
+      description: "Create playful, character-inspired candles with this whimsical collection. ZL-943 is the featured design; choose from six additional mould designs. Each selectable design is ₹380 (MRP ₹420), with 30 pieces available.",
+      specs: { "Featured model": "ZL-943", "Featured candle height": "100 mm", "Price": "₹380 per selected design (MRP ₹420)", "Stock": "30 pieces per selected design" },
       variants: [
         { id: "candle-whimsical-moulds-zl900", label: "ZL900 · Portrait", image: "/assets/candle-moulds/portrait-candle-zl900.jpeg", specs: { "Model": "ZL900", "Mould dimensions": "113 × 85 mm (150 g)", "Finished candle": "101 × 75 mm (146 g)" } },
         { id: "candle-whimsical-moulds-zl895", label: "ZL895 · Owl", image: "/assets/candle-moulds/owl-candle-zl895.jpeg", specs: { "Model": "ZL895", "Mould dimensions": "83 × 83 mm (110 g)", "Finished candle": "74 × 71 mm (117 g)" } },
@@ -1362,22 +1363,22 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
   ];
   CANDLE_MOULD_COLLECTIONS.forEach(function (group) {
-    var description = group.description || ("Browse " + group.variants.length + " selectable decorative candle mould designs in the " + group.name.toLowerCase() + ". View the featured mould and finished candle, then choose an available design. Each design is ₹200, with 30 pieces in stock per design.");
+    var description = group.description || ("Browse " + group.variants.length + " selectable decorative candle mould designs in the " + group.name.toLowerCase() + ". View the featured mould and finished candle, then choose an available design. Each design is ₹380 (MRP ₹420), with 30 pieces in stock per design.");
     P.push({
       id: group.id, name: group.name, brand: "UVID", category: "candle-making",
-      price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink,
+      price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink,
       stock: group.variants.length * 30, tags: ["new"], localImage: group.image, localOnly: group.localOnly === true,
-      highlights: group.highlights || [(group.variants.length + 1) + " collection photos", "₹200 per selected design", "30 pieces in stock per design"],
-      specs: Object.assign({ "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" }, group.specs || {}),
+      highlights: group.highlights || [(group.variants.length + 1) + " collection photos", "₹380 per selected design · MRP ₹420", "30 pieces in stock per design"],
+      specs: Object.assign({ "Category": "Candle Making", "Price": "₹380 per design (MRP ₹420)", "Stock": "30 per design" }, group.specs || {}),
       description: description,
-      variantMeta: group.variants.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
+      variantMeta: group.variants.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: candleMouldPrice, mrp: candleMouldMrp, stock: 30 }; })
     });
     group.variants.forEach(function (variant) {
       P.push({
         id: variant.id, name: group.name + " — " + variant.label, brand: "UVID", category: "candle-making",
-        price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink, stock: 30,
+        price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0, emoji: group.emoji, bg: group.bg, ink: group.ink, stock: 30,
         tags: ["vc-hidden"], parent: group.id, variantLabel: variant.label, localImage: variant.image, localOnly: group.localOnly === true,
-        highlights: ["Decorative candle mould for handmade candle projects", variant.label, "₹200 each · 30 in stock"],
+        highlights: ["Decorative candle mould for handmade candle projects", variant.label, "₹380 each · MRP ₹420 · 30 in stock"],
         specs: variant.specs, description: description
       });
     });
@@ -1390,23 +1391,23 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { id: "candle-twist-moulds-zl55", label: "ZL-55 · Deep Twist", image: "/assets/candle-moulds/deep-twist-zl55.jpeg", specs: { "Design": "Deep sculpted twist", "Model": "ZL-55", "Mould size": "75 × 76 × 130 mm" } },
     { id: "candle-twist-moulds-zl57b", label: "ZL-57B · Short Wave", image: "/assets/candle-moulds/short-wave-zl57b.jpeg", specs: { "Design": "Short wave pillar", "Model": "ZL57B", "Mould size": "7.5 × 7 cm" } }
   ];
-  var candleTwistDescription = "Make sculptural candles with six selectable twisted and wave-pillar mould designs. Choose a model to view its mould and finished-candle photo. Each design is ₹200, with 30 pieces in stock per design.";
+  var candleTwistDescription = "Make sculptural candles with six selectable twisted and wave-pillar mould designs. Choose a model to view its mould and finished-candle photo. Each design is ₹380 (MRP ₹420), with 30 pieces in stock per design.";
   P.push({
     id: "candle-twist-moulds", name: "Twisted Pillar Candle Mould Collection", brand: "UVID", category: "candle-making",
-    price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#FFF3F7", ink: "#A54B70",
+    price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#FFF3F7", ink: "#A54B70",
     stock: CANDLE_TWIST_VARIANTS.length * 30, tags: ["new"], localImage: "/assets/candle-moulds/spiral-pillar-zl57a.jpeg",
-    highlights: ["Six wave and twist designs", "₹200 per selected design", "30 pieces in stock per design"],
-    specs: { "Category": "Candle Making", "Price": "₹200 per design", "Stock": "30 per design" },
+    highlights: ["Six wave and twist designs", "₹380 per selected design · MRP ₹420", "30 pieces in stock per design"],
+    specs: { "Category": "Candle Making", "Price": "₹380 per design (MRP ₹420)", "Stock": "30 per design" },
     description: candleTwistDescription,
-    variantMeta: CANDLE_TWIST_VARIANTS.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
+    variantMeta: CANDLE_TWIST_VARIANTS.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: candleMouldPrice, mrp: candleMouldMrp, stock: 30 }; })
   });
   CANDLE_TWIST_VARIANTS.forEach(function (variant) {
     P.push({
       id: variant.id, name: "Twisted Pillar Candle Mould Collection — " + variant.label,
-      brand: "UVID", category: "candle-making", price: 200, mrp: 200, rating: null, ratingCount: 0,
+      brand: "UVID", category: "candle-making", price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0,
       emoji: "🕯️", bg: "#FFF3F7", ink: "#A54B70", stock: 30, tags: ["vc-hidden"],
       parent: "candle-twist-moulds", variantLabel: variant.label, localImage: variant.image,
-      highlights: ["Twisted pillar candle mould for handmade candles", variant.label, "₹200 each · 30 in stock"],
+      highlights: ["Twisted pillar candle mould for handmade candles", variant.label, "₹380 each · MRP ₹420 · 30 in stock"],
       specs: variant.specs, description: candleTwistDescription
     });
   });
@@ -1423,23 +1424,23 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { id: "candle-sculpted-pillar-zl396", label: "ZL-396 · Lily Relief", image: "/assets/candle-moulds/lily-relief-pillar-zl396.jpeg", specs: { "Design": "Lily relief pillar", "Model": "ZL-396", "Mould size": "59 × 117 mm", "Finished candle": "52 × 110 mm" } },
     { id: "candle-sculpted-pillar-zl399", label: "ZL-399 · Lavender Sprig", image: "/assets/candle-moulds/lavender-sprig-pillar-zl399.jpeg", specs: { "Design": "Lavender sprig pillar", "Model": "ZL-399", "Mould size": "71 × 107 mm", "Finished candle": "61 × 99 mm" } }
   ];
-  var candleSculptedDescription = "Choose from eleven decorative silicone mould designs for making sculpted pillar candles. Each model has its own design and dimensions shown in the photos. Select a model above; each mould is ₹200, with 30 pieces available per model.";
+  var candleSculptedDescription = "Choose from eleven decorative silicone mould designs for making sculpted pillar candles. Each model has its own design and dimensions shown in the photos. Select a model above; each mould is ₹380 (MRP ₹420), with 30 pieces available per model.";
   P.push({
     id: "candle-sculpted-pillar-moulds", name: "Sculpted Pillar Candle Mould Collection", brand: "UVID", category: "candle-making",
-    price: 200, mrp: 200, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#FFF8F3", ink: "#80533F", localOnly: true,
+    price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0, emoji: "🕯️", bg: "#FFF8F3", ink: "#80533F", localOnly: true,
     stock: CANDLE_SCULPTED_VARIANTS.length * 30, tags: ["new"], localImage: CANDLE_SCULPTED_VARIANTS[0].image,
-    highlights: ["11 sculpted pillar designs to choose from", "₹200 per selected model", "30 pieces in stock per model"],
-    specs: { "Category": "Candle Making", "Models": "ZL-513, ZL-400, ZL-397, ZL-240, ZL-234, ZL-237, ZL-236, ZL-239, ZL-392, ZL-396 and ZL-399", "Price": "₹200 per model", "Stock": "30 per model" },
+    highlights: ["11 sculpted pillar designs to choose from", "₹380 per selected model · MRP ₹420", "30 pieces in stock per model"],
+    specs: { "Category": "Candle Making", "Models": "ZL-513, ZL-400, ZL-397, ZL-240, ZL-234, ZL-237, ZL-236, ZL-239, ZL-392, ZL-396 and ZL-399", "Price": "₹380 per model (MRP ₹420)", "Stock": "30 per model" },
     description: candleSculptedDescription,
-    variantMeta: CANDLE_SCULPTED_VARIANTS.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: 200, stock: 30 }; })
+    variantMeta: CANDLE_SCULPTED_VARIANTS.map(function (variant) { return { id: variant.id, size: variant.label, label: variant.label, price: candleMouldPrice, mrp: candleMouldMrp, stock: 30 }; })
   });
   CANDLE_SCULPTED_VARIANTS.forEach(function (variant) {
     P.push({
       id: variant.id, name: "Sculpted Pillar Candle Mould Collection — " + variant.label,
-      brand: "UVID", category: "candle-making", price: 200, mrp: 200, rating: null, ratingCount: 0,
+      brand: "UVID", category: "candle-making", price: candleMouldPrice, mrp: candleMouldMrp, rating: null, ratingCount: 0,
       emoji: "🕯️", bg: "#FFF8F3", ink: "#80533F", stock: 30, tags: ["vc-hidden"], localOnly: true,
       parent: "candle-sculpted-pillar-moulds", variantLabel: variant.label, localImage: variant.image,
-      highlights: ["Silicone mould for decorative handmade pillar candles", variant.label, "₹200 each · 30 in stock"],
+      highlights: ["Silicone mould for decorative handmade pillar candles", variant.label, "₹380 each · MRP ₹420 · 30 in stock"],
       specs: variant.specs, description: candleSculptedDescription
     });
   });
