@@ -46,7 +46,7 @@ Resend provides until the domain is verified. Create a sending-only API key.
 Use a sender address on that verified domain. If you control the DNS for
 `uvidartandcraftsupplies.com`, one option is
 `UVID Admin <orders@uvidartandcraftsupplies.com>`. Otherwise choose a domain
-you control. The admin inbox can remain `uvidartandcraft@gmail.com`.
+you control. The admin inbox is `ishwaraj22dec@gmail.com`.
 
 Now add the admin email and email service settings as encrypted Cloudflare
 secrets. Run each command and enter the value when Wrangler prompts:
@@ -59,7 +59,7 @@ npx wrangler --config wrangler.toml secret put EMAIL_FROM
 npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
-Set `ADMIN_EMAIL` to `uvidartandcraft@gmail.com`. Set `EMAIL_FROM` to the exact
+Set `ADMIN_EMAIL` to `ishwaraj22dec@gmail.com`. Set `EMAIL_FROM` to the exact
 sender address shown as verified in Resend. Keep the existing `SESSION_SECRET`
 value if one is already configured; changing it signs out existing customer
 and admin sessions. If it is not configured, set it to a random value at least

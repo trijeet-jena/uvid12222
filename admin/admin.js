@@ -1274,7 +1274,7 @@
       try {
         await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/email", {});
         undo();
-        toast(order.payment_status === "PAID" ? "Payment confirmation email sent to uvidartandcraft@gmail.com." : "Order email sent to uvidartandcraft@gmail.com.", true);
+        toast(order.payment_status === "PAID" ? "Payment confirmation email sent to ishwaraj22dec@gmail.com." : "Order email sent to ishwaraj22dec@gmail.com.", true);
       } catch (ex) {
         undo(); toast(ex.message || "Could not send the order email.", false);
       }
@@ -1288,7 +1288,7 @@
         const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
         const phoneSent = Boolean(result.notification && result.notification.sent);
         const message = "UPI payment confirmed. " + (emailSent
-          ? "Email alert sent to uvidartandcraft@gmail.com."
+          ? "Email alert sent to ishwaraj22dec@gmail.com."
           : "Email alert could not be sent; check the email service setup.") + (phoneSent
           ? " Phone alert sent to " + result.notification.count + " device(s)."
           : "");

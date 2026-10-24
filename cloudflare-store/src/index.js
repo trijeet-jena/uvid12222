@@ -147,24 +147,66 @@ async function sendAdminOtpEmail(env, email, code) {
   });
 }
 
+function orderItemCodes(metaJson, variantLabel, productId) {
+  const specs = parseJson(metaJson, {})?.specs || {};
+  const labelCode = clean(variantLabel, 120).split(/\s*[·|—]\s*/)[0];
+  const inferredCode = /^[A-Z][A-Z0-9_-]{2,}$/.test(labelCode) ? labelCode : "";
+  return {
+    productCode: clean(specs["Item Code"] || specs["Product Code"] || specs.Code || inferredCode || productId, 120),
+    catalogueSku: clean(specs["Catalogue SKU"] || specs.SKU || "", 120),
+  };
+}
+
 async function sendOrderEmail(env, order, type, items = []) {
   const email = clean(env.ADMIN_EMAIL, 200).toLowerCase();
   if (!email) return { sent: false, reason: "not_configured" };
-  const amount = Number(order.total_amount || 0).toFixed(2);
-  const itemLines = items.map((item) => `${clean(item.variantLabel, 100) ? `${clean(item.variantLabel, 100)} — ` : ""}${clean(item.name, 160)} × ${Number(item.qty) || 0} — ₹${Number(item.priceAtPurchase || 0).toFixed(2)}`);
+  const address = parseJson(order.address_json, {}) || {};
+  const itemSubtotal = items.reduce((sum, item) => sum + (Number(item.priceAtPurchase) || 0) * (Number(item.qty) || 0), 0);
+  const amount = Number(order.total_amount || 0);
+  const discount = Number(order.discount || 0);
+  const shipping = Number(order.shipping || 0);
   const shippingPending = type === "placed" && Number(order.shipping_finalized) === 0;
   const paymentLabel = order.payment_status === "PAID" ? "Paid" : "Awaiting payment";
-  const subject = type === "paid" ? `Payment confirmed for ${order.id}` : `New order ${order.id} placed`;
-  const statusText = type === "paid" ? `Paid: ₹${amount}` : (shippingPending
-    ? `Items subtotal: ₹${amount}. Payment status: ${paymentLabel}. Delivery charge is pending; the final total may change.`
-    : `Order amount: ₹${amount}. Payment status: ${paymentLabel}.`);
+  const subject = type === "paid" ? `Payment confirmed for ${order.id}` : `New order ${order.id} — order details`;
+  const statusText = shippingPending
+    ? `Items subtotal: ₹${itemSubtotal.toFixed(2)}. Delivery charge is awaiting the store quote; the final total is not set yet. Payment status: ${paymentLabel}.`
+    : `${type === "paid" ? "Payment confirmed" : "Order total"}: ₹${amount.toFixed(2)}. Payment status: ${paymentLabel}.`;
+  const customer = order.customer_id ? await env.DB.prepare("SELECT name,email,mobile_number FROM users WHERE id=?").bind(order.customer_id).first() : null;
+  const buyerName = clean(order.customer_name || customer?.name || address.name || "Customer", 160);
+  const buyerEmail = clean(order.customer_email || customer?.email || address.email || "", 200);
+  const buyerPhone = clean(order.customer_mobile_number || customer?.mobile_number || address.phone || "", 60);
+  const addressText = [address.line, address.line2, address.landmark, address.city, address.state, address.pin ? `PIN ${address.pin}` : "", address.country]
+    .map((part) => clean(part, 240)).filter(Boolean).join(", ");
+  const itemLines = items.map((item) => {
+    const code = clean(item.productCode || item.productId || "—", 120);
+    const sku = clean(item.catalogueSku, 120);
+    const name = clean(item.name, 160) || "Product";
+    const variant = clean(item.variantLabel, 160);
+    const qty = Number(item.qty) || 0;
+    const price = Number(item.priceAtPurchase) || 0;
+    return `Code: ${code}${sku ? ` | Catalogue SKU: ${sku}` : ""} | ${name}${variant && !variant.startsWith(code) ? ` (${variant})` : ""} | Qty: ${qty} | Unit: ₹${price.toFixed(2)} | Line total: ₹${(price * qty).toFixed(2)}`;
+  });
   const text = [
-    type === "paid" ? `Payment confirmed. Order ID: ${order.id}.` : `A customer placed an order. Order ID: ${order.id}.`,
+    type === "paid" ? `Payment confirmed for order ${order.id}.` : `A customer placed an order. Order ID: ${order.id}.`,
+    `Customer: ${buyerName}${buyerEmail ? ` | ${buyerEmail}` : ""}${buyerPhone ? ` | ${buyerPhone}` : ""}`,
+    addressText ? `Delivery address: ${addressText}` : "",
     statusText,
     itemLines.length ? `Items:\n${itemLines.join("\n")}` : "",
+    `Items subtotal: ₹${itemSubtotal.toFixed(2)}`,
+    discount ? `Discount: −₹${discount.toFixed(2)}` : "",
+    shippingPending ? "Delivery: Awaiting store quote" : `Delivery: ${shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}`,
+    shippingPending ? "Final payable total: pending delivery quote" : `Final total: ₹${amount.toFixed(2)}`,
   ].filter(Boolean).join("\n\n");
-  const rows = items.map((item) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${item.variantLabel ? `<b>${escapeHtml(clean(item.variantLabel, 100))}</b><br>` : ""}${escapeHtml(clean(item.name, 160))}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center">${Number(item.qty) || 0}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">₹${Number(item.priceAtPurchase || 0).toFixed(2)}</td></tr>`).join("");
-  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:600px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "New order placed"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${escapeHtml(statusText)}</p>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:6px 10px">Item</th><th>Qty</th><th style="text-align:right">Price</th></tr></thead><tbody>${rows}</tbody></table>` : ""}<p style="color:#666;font-size:13px">UVID Art &amp; Craft Supplies</p></div>`;
+  const rows = items.map((item) => {
+    const code = clean(item.productCode || item.productId || "—", 120);
+    const sku = clean(item.catalogueSku, 120);
+    const name = clean(item.name, 160) || "Product";
+    const variant = clean(item.variantLabel, 160);
+    const qty = Number(item.qty) || 0;
+    const price = Number(item.priceAtPurchase) || 0;
+    return `<tr><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(code)}${sku ? `<br><small>SKU: ${escapeHtml(sku)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(name)}${variant && !variant.startsWith(code) ? `<br><small>${escapeHtml(variant)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:center">${qty}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${price.toFixed(2)}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${(price * qty).toFixed(2)}</td></tr>`;
+  }).join("");
+  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:760px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "New customer order"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${escapeHtml(statusText)}</p><h3>Customer</h3><p>${escapeHtml(buyerName)}${buyerEmail ? `<br>${escapeHtml(buyerEmail)}` : ""}${buyerPhone ? `<br>${escapeHtml(buyerPhone)}` : ""}${addressText ? `<br>${escapeHtml(addressText)}` : ""}</p><h3>Order invoice details</h3>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product code / SKU</th><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product</th><th style="padding:7px 8px;background:#f2f5f2">Qty</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Unit price</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Line total</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No item details available.</p>"}<table style="margin:14px 0 0 auto;border-collapse:collapse;min-width:260px"><tr><td style="padding:4px 8px">Items subtotal</td><td style="padding:4px 8px;text-align:right">₹${itemSubtotal.toFixed(2)}</td></tr>${discount ? `<tr><td style="padding:4px 8px">Discount</td><td style="padding:4px 8px;text-align:right">−₹${discount.toFixed(2)}</td></tr>` : ""}<tr><td style="padding:4px 8px">Delivery</td><td style="padding:4px 8px;text-align:right">${shippingPending ? "Awaiting store quote" : shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</td></tr><tr><td style="border-top:2px solid #2f8061;padding:9px 8px;font-weight:bold">${shippingPending ? "Final total pending" : "Final total"}</td><td style="border-top:2px solid #2f8061;padding:9px 8px;text-align:right;font-weight:bold">${shippingPending ? "Pending delivery quote" : `₹${amount.toFixed(2)}`}</td></tr></table><p style="color:#666;font-size:13px;margin-top:24px">UVID Art &amp; Craft Supplies</p></div>`;
   return sendTransactionalEmail(env, { to: email, subject, text, html });
 }
 
@@ -534,17 +576,22 @@ async function placeOrder(env, user, body) {
   const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);
   if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) throw new Error("Could not allocate an order number.");
   const id = "UVID" + String(orderNumber).padStart(3, "0");
-  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({ productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url })) };
+  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({
+    ...orderItemCodes(l.p.meta_json, l.p.variant_label, l.p.id),
+    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url,
+  })) };
 }
 
 async function orderEmailItems(env, orderId) {
   const rows = (await env.DB.prepare(`
     SELECT oi.product_id,oi.product_name,COALESCE(oi.variant_label,p.variant_label) AS variant_label,
-      oi.quantity,oi.price_at_purchase
+      oi.quantity,oi.price_at_purchase,p.meta_json
     FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id
     WHERE oi.order_id=? ORDER BY oi.id
   `).bind(orderId).all()).results || [];
   return rows.map((item) => ({
+    ...orderItemCodes(item.meta_json, item.variant_label, item.product_id),
+    productId: item.product_id,
     variantLabel: item.variant_label,
     name: item.product_name,
     qty: item.quantity,
@@ -990,7 +1037,8 @@ export default {
       if (path.startsWith("/api/images/") || path.startsWith("/uploads/")) {
         const response=await serveImage(request,env,path); if(response) return response;
       }
-      const token=cookieValue(request,COOKIE); const user=await verifySession(env,token);
+      const token=cookieValue(request,COOKIE); let user=await verifySession(env,token);
+      if (user?.role === "ADMIN" && clean(user.email, 200).toLowerCase() !== clean(env.ADMIN_EMAIL, 200).toLowerCase()) user=null;
       if (path.startsWith("/api/")) {
         if (!env.SESSION_SECRET) return error("Set the SESSION_SECRET Worker secret before using the store API.",503);
         return await handleApi(request,env,user,url);
