@@ -196,7 +196,7 @@
     refresh();
     connectEvents();
     /* keep two separately opened portals in sync when SSE is blocked */
-    setInterval(refresh, 30000);
+    setInterval(refresh, 900000);
     document.addEventListener("focusout", function () {
       if (paintPending) setTimeout(paint, 0);
     });

@@ -31,7 +31,9 @@
     { slug: "school",    label: "School Essentials",emoji: "✏️", blurb: "Geometry, labels & kits" },
     { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" },
     { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" },
-    { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" }
+    { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
+    { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
+    { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" }
   ];
 
   /* ---------- products ---------- */
@@ -405,6 +407,43 @@
     });
   });
 
+  var bouquetNetDescription = "Decorative translucent net with pearl-trimmed edges for wrapping and presenting flower bouquets.";
+  var bouquetNetVariants = [
+    { id: "bouquet-net-mg2513a-lavender", code: "MG2513A", colour: "Lavender", image: "/assets/bouquet-nets/mg2513a-lavender.jpeg" },
+    { id: "bouquet-net-mg2513b-pink", code: "MG2513B", colour: "Pink", image: "/assets/bouquet-nets/mg2513b-pink.jpeg" },
+    { id: "bouquet-net-mg2513c-light-pink", code: "MG2513C", colour: "Light Pink", image: "/assets/bouquet-nets/mg2513c-light-pink.jpeg" },
+    { id: "bouquet-net-mg2513d-red", code: "MG2513D", colour: "Red", image: "/assets/bouquet-nets/mg2513d-red.jpeg" },
+    { id: "bouquet-net-mg2513e-black", code: "MG2513E", colour: "Black", image: "/assets/bouquet-nets/mg2513e-black.jpeg" },
+    { id: "bouquet-net-mg2513f-white", code: "MG2513F", colour: "White", image: "/assets/bouquet-nets/mg2513f-white.jpeg" },
+    { id: "bouquet-net-mg2513g-light-green", code: "MG2513G", colour: "Light Green", image: "/assets/bouquet-nets/mg2513g-light-green.jpeg" },
+    { id: "bouquet-net-mg2513h-peach", code: "MG2513H", colour: "Peach", image: "/assets/bouquet-nets/mg2513h-peach.jpeg" },
+    { id: "bouquet-net-mg2513i-champagne", code: "MG2513I", colour: "Champagne", image: "/assets/bouquet-nets/mg2513i-champagne.jpeg" },
+    { id: "bouquet-net-mg2513k-sky-blue", code: "MG2513K", colour: "Sky Blue", image: "/assets/bouquet-nets/mg2513k-sky-blue.jpeg" }
+  ];
+  P.push({
+    id: "pearl-edged-bouquet-net", name: "Pearl-Edged Bouquet Net", brand: "UVID Art and Craft Supplies", category: "bouquet-nets",
+    price: 160, mrp: 250, rating: null, ratingCount: 0, emoji: "💐", bg: "#FFF3F8", ink: "#A54B70",
+    stock: bouquetNetVariants.length * 10, tags: ["new", "deal"], localOnly: true,
+    localImage: bouquetNetVariants[0].image,
+    highlights: ["Decorative pearl-edged bouquet wrapping net", "10 colour options with individual photos", "₹160 each · MRP ₹250"],
+    specs: { "Category": "Bouquet Nets", "Available colours": "10", "MRP": "₹250", "Offer price": "₹160" },
+    description: bouquetNetDescription,
+    variantMeta: bouquetNetVariants.map(function (variant) {
+      return { id: variant.id, size: variant.code, label: variant.code + " · " + variant.colour, price: 160, mrp: 250, stock: 10 };
+    })
+  });
+  bouquetNetVariants.forEach(function (variant) {
+    var label = variant.code + " · " + variant.colour;
+    P.push({
+      id: variant.id, name: "Pearl-Edged Bouquet Net — " + variant.colour, brand: "UVID Art and Craft Supplies", category: "bouquet-nets",
+      price: 160, mrp: 250, rating: null, ratingCount: 0, emoji: "💐", bg: "#FFF3F8", ink: "#A54B70", stock: 10,
+      tags: ["vc-hidden", "deal"], parent: "pearl-edged-bouquet-net", variantLabel: label, localImage: variant.image, localOnly: true,
+      highlights: ["Decorative pearl-edged bouquet wrapping net", "Colour: " + variant.colour, "₹160 each · MRP ₹250 · 10 in stock"],
+      specs: { "Model": variant.code, "Colour": variant.colour, "MRP": "₹250", "Offer price": "₹160" },
+      description: bouquetNetDescription
+    });
+  });
+
   /* attach generated art + derived fields.
      Real photos: window.UVID_IMG (from data/product-images.js) overrides SVG art
      when assets/<product-id>.jpg exists — built by tools/embed-images.js. */
@@ -416,6 +455,25 @@
     p.added = P.length - i;              // "newest" ordering
     p.popularity = p.ratingCount + p.discount * 7; // demo relevance score
   });
+
+  /* Wire the bouquet-net colour selector to each local product photo. */
+  (function () {
+    var main = null, i, j;
+    for (i = 0; i < P.length; i++) if (P[i].id === "pearl-edged-bouquet-net") main = P[i];
+    if (!main || !main.variantMeta) return;
+    main.variants = [];
+    for (i = 0; i < main.variantMeta.length; i++) {
+      var vm = main.variantMeta[i], rec = null;
+      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
+      if (!rec) continue;
+      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
+    }
+    if (main.variants.length) {
+      main.img = main.variants[0].img;
+      main.thumb = main.img;
+      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
+    }
+  })();
 
   /* wire the chopstick size variants: attach per-variant price/label/photo to
      the main product; main image defaults to the first variant (3 mm). */
