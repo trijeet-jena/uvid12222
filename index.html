@@ -607,6 +607,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status--success { background: #eaf6ef; color: #276c4c !important; }
 .payment-proof-check { display: flex; align-items: flex-start; gap: 12px; margin: 14px 0; padding: 15px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fffdf8; color: var(--ink); line-height: 1.5; cursor: pointer; }
 .payment-proof-check input { flex: 0 0 auto; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--brand); }
+.payment-proof-check--pending { cursor: not-allowed; opacity: .78; }
 .payment-proof-confirm { display: block; width: 100%; margin: 12px 0; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
 .proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
@@ -3348,6 +3349,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
         '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+        '<label class="payment-proof-check payment-proof-check--pending"><input type="checkbox" disabled aria-label="Payment confirmation available after delivery is finalized" /><span>After the store confirms the delivery charge and final total, pay by UPI and send your payment screenshot and order ID to +91 74061 55738 on WhatsApp. This checkbox will become available then; check it to show Confirm order.</span></label>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {

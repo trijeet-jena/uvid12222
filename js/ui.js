@@ -872,6 +872,7 @@
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
         '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+        '<label class="payment-proof-check payment-proof-check--pending"><input type="checkbox" disabled aria-label="Payment confirmation available after delivery is finalized" /><span>After the store confirms the delivery charge and final total, pay by UPI and send your payment screenshot and order ID to +91 74061 55738 on WhatsApp. This checkbox will become available then; check it to show Confirm order.</span></label>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {

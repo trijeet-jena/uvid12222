@@ -579,6 +579,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status--success { background: #eaf6ef; color: #276c4c !important; }
 .payment-proof-check { display: flex; align-items: flex-start; gap: 12px; margin: 14px 0; padding: 15px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fffdf8; color: var(--ink); line-height: 1.5; cursor: pointer; }
 .payment-proof-check input { flex: 0 0 auto; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--brand); }
+.payment-proof-check--pending { cursor: not-allowed; opacity: .78; }
 .payment-proof-confirm { display: block; width: 100%; margin: 12px 0; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
 .proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
