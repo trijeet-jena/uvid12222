@@ -34,7 +34,8 @@
     { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
     { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
     { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" },
-    { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" }
+    { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" },
+    { slug: "ribbons", label: "Ribbons", parentSlug: "pipe-cleaners", emoji: "🎀", blurb: "Hot-stamping ribbons for bouquets, gifts and craft projects" }
   ];
 
   /* ---------- products ---------- */
@@ -442,6 +443,33 @@
       tags: ["new", "deal"], localOnly: true, localImage: sheet.image,
       highlights: ["59 × 57 cm bouquet sheet", "Gold-tone edging · " + sheet.colour, "₹210 each · MRP ₹300 · 50 in stock"],
       specs: { "Model": sheet.code, "Colour": sheet.colour, "Size": "59 × 57 cm", "MRP": "₹300", "Offer price": "₹210", "Stock": "50 pieces" },
+      description: description
+    });
+  });
+
+  /* Hot-stamping ribbons are standalone colour products. MG2517D appeared
+     twice in the supplied images, so it is represented by one product. */
+  var ribbonProducts = [
+    { id: "ribbon-mg2517a-maroon", code: "MG2517A", colour: "Maroon", image: "/assets/ribbons/mg2517a-maroon.jpeg" },
+    { id: "ribbon-mg2517b-brown", code: "MG2517B", colour: "Brown", image: "/assets/ribbons/mg2517b-brown.jpeg" },
+    { id: "ribbon-mg2517c-green", code: "MG2517C", colour: "Green", image: "/assets/ribbons/mg2517c-green.jpeg" },
+    { id: "ribbon-mg2517d-navy-blue", code: "MG2517D", colour: "Navy Blue", image: "/assets/ribbons/mg2517d-navy-blue.jpeg" },
+    { id: "ribbon-mg2517f-pink", code: "MG2517F", colour: "Pink", image: "/assets/ribbons/mg2517f-pink.jpeg" },
+    { id: "ribbon-mg2517g-white", code: "MG2517G", colour: "White", image: "/assets/ribbons/mg2517g-white.jpeg" },
+    { id: "ribbon-mg2517h-light-grey", code: "MG2517H", colour: "Light Grey", image: "/assets/ribbons/mg2517h-light-grey.jpeg" },
+    { id: "ribbon-mg2517j-red", code: "MG2517J", colour: "Red", image: "/assets/ribbons/mg2517j-red.jpeg" },
+    { id: "ribbon-mg2517k-cream", code: "MG2517K", colour: "Cream", image: "/assets/ribbons/mg2517k-cream.jpeg" },
+    { id: "mg2517l", code: "MG2517L", colour: "Purple", image: "/assets/ribbons/mg2517l-purple.jpeg" }
+  ];
+  ribbonProducts.forEach(function (ribbon) {
+    var description = "Decorative hot-stamping ribbon with gold ‘LOVE IS ETERNAL’ lettering in " + ribbon.colour + ".";
+    var stock = ribbon.id === "mg2517l" ? 3 : 50;
+    P.push({
+      id: ribbon.id, name: ribbon.code + " Ribbon — " + ribbon.colour, brand: "UVID Art and Craft Supplies", category: "ribbons",
+      price: 105, mrp: 150, rating: null, ratingCount: 0, emoji: "🎀", bg: "#FFF8F2", ink: "#A9793E", stock: stock,
+      tags: ["new", "deal"], localOnly: true, localImage: ribbon.image,
+      highlights: ["Decorative hot-stamping ribbon", "Gold lettering · " + ribbon.colour, "₹105 each · MRP ₹150"],
+      specs: { "Model": ribbon.code, "Colour": ribbon.colour, "MRP": "₹150", "Offer price": "₹105" },
       description: description
     });
   });
