@@ -1180,7 +1180,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" },
     { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
     { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
-    { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" }
+    { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" },
+    { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" }
   ];
 
   /* ---------- products ---------- */
@@ -1551,6 +1552,44 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       tags: ["vc-hidden"], parent: "round-resin-mould", localImage: v.image,
       highlights: ["Round mould for resin projects", "Size: " + v.label, "₹200 each · 30 in stock"],
       specs: { "Design": "Round resin mould", "Size": v.label }, description: roundResinDescription
+    });
+  });
+
+  /* Bouquet sheets are individual, independently priced products. The photos
+     are served from Netlify assets and the same records are in the API catalog. */
+  var bouquetSheetProducts = [
+    { code: "MG2520A", colour: "Black", image: "/assets/bouquet-sheets/mg2520a-black.jpeg" },
+    { code: "MG2520B", colour: "Cream", image: "/assets/bouquet-sheets/mg2520b-cream.jpeg" },
+    { code: "MG2520C", colour: "Khaki", image: "/assets/bouquet-sheets/mg2520c-khaki.jpeg" },
+    { code: "MG2520D", colour: "Lavender", image: "/assets/bouquet-sheets/mg2520d-lavender.jpeg" },
+    { code: "MG2520E", colour: "Off White", image: "/assets/bouquet-sheets/mg2520e-off-white.jpeg" },
+    { code: "MG2520F", colour: "Red", image: "/assets/bouquet-sheets/mg2520f-red.jpeg" },
+    { code: "MG2520G", colour: "Maroon", image: "/assets/bouquet-sheets/mg2520g-maroon.jpeg" },
+    { code: "MG2520H", colour: "White", image: "/assets/bouquet-sheets/mg2520h-white.jpeg" },
+    { code: "MG2520I", colour: "Blue", image: "/assets/bouquet-sheets/mg2520i-blue.jpeg" },
+    { code: "MG2520J", colour: "Blush Pink", image: "/assets/bouquet-sheets/mg2520j-blush-pink.jpeg" },
+    { code: "MG2520K", colour: "Lavender", image: "/assets/bouquet-sheets/mg2520k-lavender.jpeg" },
+    { code: "MG2520L", colour: "Red", image: "/assets/bouquet-sheets/mg2520l-red.jpeg" },
+    { code: "MG2520M", colour: "Mint Green", image: "/assets/bouquet-sheets/mg2520m-mint-green.jpeg" },
+    { code: "MG2520N", colour: "Pink", image: "/assets/bouquet-sheets/mg2520n-pink.jpeg" },
+    { code: "MG2520P", colour: "Peach Pink", image: "/assets/bouquet-sheets/mg2520p-peach-pink.jpeg" },
+    { code: "MG2520Q", colour: "Ice Blue", image: "/assets/bouquet-sheets/mg2520q-ice-blue.jpeg" },
+    { code: "MG2520R", colour: "White", image: "/assets/bouquet-sheets/mg2520r-white.jpeg" },
+    { code: "MG2520S", colour: "Blue", image: "/assets/bouquet-sheets/mg2520s-blue.jpeg" },
+    { code: "MG2520A", colour: "Charcoal Grey", image: "/assets/bouquet-sheets/mg2520a-charcoal-grey.jpeg" },
+    { code: "MG2520T", colour: "Teal", image: "/assets/bouquet-sheets/mg2520t-teal.jpeg" }
+  ];
+  bouquetSheetProducts.forEach(function (sheet) {
+    var colourSlug = sheet.colour.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    var id = "bouquet-sheet-" + sheet.code.toLowerCase() + "-" + colourSlug;
+    var description = "59 × 57 cm bouquet sheet with gold-tone edging in " + sheet.colour + ".";
+    P.push({
+      id: id, name: sheet.code + " Bouquet Sheet — " + sheet.colour, brand: "UVID Art and Craft Supplies", category: "bouquet-sheets",
+      price: 210, mrp: 300, rating: null, ratingCount: 0, emoji: "💐", bg: "#FFF8F2", ink: "#A9793E", stock: 50,
+      tags: ["new", "deal"], localOnly: true, localImage: sheet.image,
+      highlights: ["59 × 57 cm bouquet sheet", "Gold-tone edging · " + sheet.colour, "₹210 each · MRP ₹300 · 50 in stock"],
+      specs: { "Model": sheet.code, "Colour": sheet.colour, "Size": "59 × 57 cm", "MRP": "₹300", "Offer price": "₹210", "Stock": "50 pieces" },
+      description: description
     });
   });
 
