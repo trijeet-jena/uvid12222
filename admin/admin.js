@@ -1269,7 +1269,7 @@
       await loadState("orders");
     }
     content.innerHTML =
-      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · UPI orders stay Awaiting payment until the final amount is paid and verified in PhonePe. Confirm &amp; place moves them to Placed; then update packing and delivery here.</p></div>" +
+      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · Customers confirm after sending payment proof and their order ID on WhatsApp. Verify the transfer in PhonePe before progressing an unpaid UPI order.</p></div>" +
       '<div class="filters"><select id="ordFilter" aria-label="Filter by status"><option value="">All statuses</option>' +
       ORDER_STATUSES.map(function (s) {
         return '<option value="' + s[0] + '"' + (state.orderFilter === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
@@ -1290,7 +1290,8 @@
     const addr = orderAddress(o);
     const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID" && o.status !== "CANCELLED";
     const quotePending = Number(o.shipping_finalized) === 0;
-    const paymentNote = awaitingUpi ? " · Payment pending" : "";
+    const proofReported = Boolean(o.payment_proof_sent_at);
+    const paymentNote = awaitingUpi ? " · Payment pending" + (proofReported ? " · WhatsApp proof reported" : "") : "";
     return '<tr data-orow="' + esc(o.id) + '">' +
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
@@ -1300,7 +1301,7 @@
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : 'Verify this exact total in PhonePe to place the order.') + '</small>' + (quotePending ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm payment &amp; place</button>') : "") + "</td>" +
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : proofReported ? 'Customer says they sent the proof on WhatsApp. Check it against this total in PhonePe.' : 'Waiting for the customer to send the proof on WhatsApp and confirm in the checkout page.') + '</small>' + (quotePending || !proofReported ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
@@ -1338,7 +1339,8 @@
       '<div class="invoice__heading"><div class="invoice__gstin">GSTIN: <b>29AFJPI2457R1ZO</b></div><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
-      '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div></div>' +
+      '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div>' +
+      '<div><span>WhatsApp payment proof</span><b>' + (order.payment_proof_sent_at ? 'Customer says sent · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not confirmed') + '</b></div></div>' +
       '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
@@ -1364,7 +1366,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm payment &amp; place order</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_sent_at ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1405,7 +1407,7 @@
     });
     const confirmButton = back.querySelector("[data-confirm-upi]");
     if (confirmButton) confirmButton.addEventListener("click", async function () {
-      const verified = await confirmDialog("Check this order's exact total in the PhonePe Business account. Confirming marks the payment as paid and moves an Awaiting payment order to Placed, so you can continue with packing and delivery.", { yes: "Confirm payment & place order", danger: false });
+      const verified = await confirmDialog("The customer has confirmed that they sent the payment screenshot and order ID on WhatsApp. Check the screenshot and exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
       if (!verified) return;
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
@@ -1441,7 +1443,7 @@
       const order = state.orders.find(function (item) { return String(item.id) === place.dataset.confirmPlace; });
       if (!order || order.status === "CANCELLED") return;
       if (Number(order.shipping_finalized) === 0) { toast("Set the delivery charge in the invoice before confirming payment.", false); return; }
-      const verified = await confirmDialog("Check this order's exact total in the PhonePe Business account. Confirming marks the payment as paid and moves it from Awaiting payment to Placed, so you can continue with packing and delivery.", { yes: "Confirm payment & place order", danger: false });
+      const verified = await confirmDialog("The customer has confirmed that they sent the payment screenshot and order ID on WhatsApp. Check the screenshot and exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
       if (!verified) return;
       const undo = busy(place, "Placing…");
       try {

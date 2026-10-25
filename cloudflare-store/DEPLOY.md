@@ -35,11 +35,13 @@ entered into Cloudflare.
 ## Email sign-in and order alerts
 
 Admin sign-in uses a one-time code sent only to the approved admin address.
-New orders send an email to that same address with the order ID, items, and
-payment status. A second email is sent after an admin confirms a UPI payment.
-At order creation, the email identifies the amount as an item subtotal when
-the delivery charge has not been set yet. Customers pay by UPI and share the
-order number; an admin checks the PhonePe account and confirms the payment.
+After the customer sends their payment screenshot and order ID to WhatsApp and
+checks the confirmation box, an email goes to that same address with the order
+ID, items, final amount, and a note that payment is still pending verification.
+A second email is sent after an admin verifies the UPI transfer. The screenshot
+is sent through WhatsApp; the website stores only the customer's confirmation
+timestamp. An admin checks the screenshot and transfer in PhonePe before
+marking the payment paid.
 
 Create a Resend account, add a domain you control, and follow the DNS records
 Resend provides until the domain is verified. Create a sending-only API key.

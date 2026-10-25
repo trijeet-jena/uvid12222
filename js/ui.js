@@ -775,7 +775,7 @@
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
       '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
-      '<p class="safe-note">Your order is confirmed only after UPI payment is verified.</p>' +
+      '<p class="safe-note">After paying, send your payment screenshot and order ID on WhatsApp, then confirm using the checkbox on the next screen. The store will verify payment before processing.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -823,7 +823,7 @@
     function setQrReady(ready) {
       if (ready) {
         placeButton.disabled = false;
-        placeButton.textContent = "Place order · delivery confirmed next";
+        placeButton.textContent = "Continue to payment";
         qrSetup.textContent = "UPI QR is ready. The store will confirm delivery before you pay.";
         qrSetup.classList.add("upi-setup--ready");
       } else {
@@ -867,16 +867,56 @@
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     } else {
+      var whatsappText = 'Hello UVID Art and Craft, I have paid ' + money(order.totals.total) + ' for order ' + order.id + '. I am sending my payment screenshot for verification.';
+      var whatsappHref = 'https://wa.me/917406155738?text=' + encodeURIComponent(whatsappText);
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
-        '<p>Scan this UPI QR and pay the exact amount below. Add the order number as the payment note if your UPI app allows it.</p>' +
+        '<p>Scan this UPI QR and pay the exact amount below. After paying, send your payment screenshot and order ID on WhatsApp to +91 74061 55738, then tick the box below to confirm your order. The store will verify your payment before processing.</p>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
+        (order.paymentProofSent ? '<p class="upi-wait__status upi-wait__status--success">Your order is placed. We recorded your WhatsApp payment confirmation; the store will verify your payment before processing the order.</p>' : '<label class="payment-proof-check"><input id="paymentProofSent" type="checkbox" /><span>After paying, send your payment screenshot and order ID to +91 74061 55738 on WhatsApp, then tick this box to confirm your order.</span></label>') +
         '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
-        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Payment awaiting verification. The order is not confirmed yet.</p>' +
-        '<p class="safe-note">After paying, keep this page open. UVID will show the success message after the payment is verified in PhonePe Business.</p>' +
+        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">' + (order.paymentProofSent ? 'Your order is placed. Payment is pending store verification.' : 'Order ID: ' + esc(order.id) + '. Attach the screenshot yourself in WhatsApp, along with this order ID.') + '</p>' +
+        '<div class="success__cta"><a class="btn btn--primary" href="' + whatsappHref + '" target="_blank" rel="noopener noreferrer">Send payment screenshot on WhatsApp</a>' +
+        '<a class="btn btn--ghost" href="https://wa.me/917406155738" target="_blank" rel="noopener noreferrer">WhatsApp +91 74061 55738</a></div>' +
+        (order.paymentProofSent ? '' : '<button class="btn btn--soft payment-proof-confirm" id="confirmPaymentProof" type="button" style="display:none">Confirm order</button>') +
         '<div class="success__cta"><a class="btn btn--ghost" href="#/orders/' + encodeURIComponent(order.id) + '">View order status</a><button class="btn btn--ghost" type="button" data-cancel="' + esc(order.id) + '">Cancel unpaid order</button></div></div>';
     }
     var qr = $("#upiPaymentQr");
-    qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    if (qr) qr.addEventListener("error", function () { qr.hidden = true; $("#upiPaymentQrError").hidden = false; });
+    var proofCheckbox = $("#paymentProofSent");
+    var confirmProofButton = $("#confirmPaymentProof");
+    if (proofCheckbox && confirmProofButton) {
+      proofCheckbox.addEventListener("change", function () {
+        confirmProofButton.style.display = proofCheckbox.checked ? "" : "none";
+      });
+      confirmProofButton.addEventListener("click", async function () {
+        if (!proofCheckbox.checked || confirmProofButton.disabled) return;
+        confirmProofButton.disabled = true;
+        confirmProofButton.textContent = "Saving confirmation…";
+        try {
+          var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/confirm-payment-proof", {
+            method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paymentProofSent: true })
+          });
+          var result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Could not save your confirmation.");
+          order.paymentProofSent = true;
+          order.status = "Placed";
+          order.stageIndex = 0;
+          order.paymentStatus = "Awaiting payment verification";
+          A.save();
+          clearInterval(paymentTimer);
+          paymentPage(order.id);
+        } catch (error) {
+          confirmProofButton.disabled = false;
+          confirmProofButton.textContent = "Confirm order";
+          var statusEl = $("#upiPaymentStatus");
+          if (statusEl) {
+            statusEl.textContent = error.message || "Could not save your confirmation. Please try again.";
+            statusEl.classList.add("upi-wait__status--error");
+          }
+        }
+      });
+    }
     function checkPaymentStatus() {
       var statusEl = $("#upiPaymentStatus");
       if (!statusEl) { clearInterval(paymentTimer); return; }
@@ -904,6 +944,16 @@
             successHtml(order);
             return;
           }
+          if (serverOrder.payment_proof_sent_at && !order.paymentProofSent) {
+            order.paymentProofSent = true;
+            order.status = "Placed";
+            order.stageIndex = 0;
+            order.paymentStatus = "Awaiting payment verification";
+            A.save();
+            clearInterval(paymentTimer);
+            paymentPage(order.id);
+            return;
+          }
           if (serverOrder.status === "CANCELLED") {
             order.status = "Cancelled";
             A.save();
@@ -916,7 +966,7 @@
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
           order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
-          statusEl.textContent = order.shippingFinalized ? "Payment awaiting verification. The order is not confirmed yet." : "Waiting for the store to confirm delivery.";
+          statusEl.textContent = order.shippingFinalized ? (order.paymentProofSent ? "Your WhatsApp confirmation is saved. Waiting for the store to verify your payment." : "After paying, send the payment screenshot and order ID " + order.id + " to UVID on WhatsApp at +91 74061 55738. Payment is confirmed after verification.") : "Waiting for the store to confirm delivery.";
           A.save();
         })
         .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });

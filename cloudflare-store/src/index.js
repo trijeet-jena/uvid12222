@@ -171,6 +171,9 @@ async function sendOrderEmail(env, order, type, items = []) {
   const statusText = shippingPending
     ? `Items subtotal: ₹${itemSubtotal.toFixed(2)}. Delivery charge is awaiting the store quote; the final total is not set yet. Payment status: ${paymentLabel}.`
     : `${type === "paid" ? "Payment confirmed" : "Order total"}: ₹${amount.toFixed(2)}. Payment status: ${paymentLabel}.`;
+  const proofNotice = type === "placed" && order.payment_proof_sent_at
+    ? "Customer confirmed sending the payment screenshot and order ID on WhatsApp. Verify the transfer in PhonePe before processing the order."
+    : "";
   const customer = order.customer_id ? await env.DB.prepare("SELECT name,email,mobile_number FROM users WHERE id=?").bind(order.customer_id).first() : null;
   const buyerName = clean(order.customer_name || customer?.name || address.name || "Customer", 160);
   const buyerEmail = clean(order.customer_email || customer?.email || address.email || "", 200);
@@ -191,6 +194,7 @@ async function sendOrderEmail(env, order, type, items = []) {
     `Customer: ${buyerName}${buyerEmail ? ` | ${buyerEmail}` : ""}${buyerPhone ? ` | ${buyerPhone}` : ""}`,
     addressText ? `Delivery address: ${addressText}` : "",
     statusText,
+    proofNotice,
     itemLines.length ? `Items:\n${itemLines.join("\n")}` : "",
     `Items subtotal: ₹${itemSubtotal.toFixed(2)}`,
     discount ? `Discount: −₹${discount.toFixed(2)}` : "",
@@ -206,7 +210,7 @@ async function sendOrderEmail(env, order, type, items = []) {
     const price = Number(item.priceAtPurchase) || 0;
     return `<tr><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(code)}${sku ? `<br><small>SKU: ${escapeHtml(sku)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(name)}${variant && !variant.startsWith(code) ? `<br><small>${escapeHtml(variant)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:center">${qty}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${price.toFixed(2)}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${(price * qty).toFixed(2)}</td></tr>`;
   }).join("");
-  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:760px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "New customer order"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${escapeHtml(statusText)}</p><h3>Customer</h3><p>${escapeHtml(buyerName)}${buyerEmail ? `<br>${escapeHtml(buyerEmail)}` : ""}${buyerPhone ? `<br>${escapeHtml(buyerPhone)}` : ""}${addressText ? `<br>${escapeHtml(addressText)}` : ""}</p><h3>Order invoice details</h3>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product code / SKU</th><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product</th><th style="padding:7px 8px;background:#f2f5f2">Qty</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Unit price</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Line total</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No item details available.</p>"}<table style="margin:14px 0 0 auto;border-collapse:collapse;min-width:260px"><tr><td style="padding:4px 8px">Items subtotal</td><td style="padding:4px 8px;text-align:right">₹${itemSubtotal.toFixed(2)}</td></tr>${discount ? `<tr><td style="padding:4px 8px">Discount</td><td style="padding:4px 8px;text-align:right">−₹${discount.toFixed(2)}</td></tr>` : ""}<tr><td style="padding:4px 8px">Delivery</td><td style="padding:4px 8px;text-align:right">${shippingPending ? "Awaiting store quote" : shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</td></tr><tr><td style="border-top:2px solid #2f8061;padding:9px 8px;font-weight:bold">${shippingPending ? "Final total pending" : "Final total"}</td><td style="border-top:2px solid #2f8061;padding:9px 8px;text-align:right;font-weight:bold">${shippingPending ? "Pending delivery quote" : `₹${amount.toFixed(2)}`}</td></tr></table><p style="color:#666;font-size:13px;margin-top:24px">UVID Art &amp; Craft Supplies</p></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:760px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "New customer order"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${escapeHtml(statusText)}</p>${proofNotice ? `<p><b>WhatsApp payment proof:</b> ${escapeHtml(proofNotice)}</p>` : ""}<h3>Customer</h3><p>${escapeHtml(buyerName)}${buyerEmail ? `<br>${escapeHtml(buyerEmail)}` : ""}${buyerPhone ? `<br>${escapeHtml(buyerPhone)}` : ""}${addressText ? `<br>${escapeHtml(addressText)}` : ""}</p><h3>Order invoice details</h3>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product code / SKU</th><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product</th><th style="padding:7px 8px;background:#f2f5f2">Qty</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Unit price</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Line total</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No item details available.</p>"}<table style="margin:14px 0 0 auto;border-collapse:collapse;min-width:260px"><tr><td style="padding:4px 8px">Items subtotal</td><td style="padding:4px 8px;text-align:right">₹${itemSubtotal.toFixed(2)}</td></tr>${discount ? `<tr><td style="padding:4px 8px">Discount</td><td style="padding:4px 8px;text-align:right">−₹${discount.toFixed(2)}</td></tr>` : ""}<tr><td style="padding:4px 8px">Delivery</td><td style="padding:4px 8px;text-align:right">${shippingPending ? "Awaiting store quote" : shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</td></tr><tr><td style="border-top:2px solid #2f8061;padding:9px 8px;font-weight:bold">${shippingPending ? "Final total pending" : "Final total"}</td><td style="border-top:2px solid #2f8061;padding:9px 8px;text-align:right;font-weight:bold">${shippingPending ? "Pending delivery quote" : `₹${amount.toFixed(2)}`}</td></tr></table><p style="color:#666;font-size:13px;margin-top:24px">UVID Art &amp; Craft Supplies</p></div>`;
   return sendTransactionalEmail(env, { to: email, subject, text, html });
 }
 
@@ -871,6 +875,7 @@ async function handleApi(request, env, user, url) {
     if (!order) return error("Order not found.",404);
     if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
+    if (order.payment_status !== "PAID" && !order.payment_proof_sent_at) return error("The customer has not confirmed sending the payment proof on WhatsApp yet.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
     const alreadyPaid = order.payment_status === "PAID";
@@ -970,11 +975,41 @@ async function handleApi(request, env, user, url) {
   if(path==="/api/orders" && method==="POST"){
     if(customerOnly) return customerOnly;
     const out=await placeOrder(env,user,await readBody());
-    const emailNotification=await sendOrderEmail(env,out.order,"placed",out.items);
-    if(!emailNotification.sent) console.warn("[ORDER EMAIL] New-order notification was not delivered.",emailNotification.reason);
-    return json({ok:true,...out,emailNotification},201);
+    return json({ok:true,...out},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
+  match=path.match(/^\/api\/orders\/([^/]+)\/confirm-payment-proof$/);
+  if(match && method==="POST"){
+    if(customerOnly) return customerOnly;
+    const id=decodeURIComponent(match[1]);
+    const b=await readBody();
+    if(b.paymentProofSent!==true) return error("Confirm that you sent your payment screenshot and order ID on WhatsApp.");
+    const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+    if(!order) return error("Order not found.",404);
+    if(order.payment_method!=="UPI") return error("This order is not a UPI payment.",409);
+    if(order.status==="CANCELLED") return error("A cancelled order cannot be confirmed.",409);
+    if(order.payment_status==="PAID") return error("This order is already confirmed as paid.",409);
+    const quote=await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
+    if(!quote || Number(quote.finalized)!==1) return error("Wait until the store confirms your final delivery charge before confirming the order.",409);
+    if(order.payment_proof_sent_at){
+      if(order.status!=="PLACED") return error("This order is already being processed.",409);
+      return json({ok:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+    }
+    if(order.status!=="AWAITING_PAYMENT") return error("This order can no longer be confirmed.",409);
+    const timestamp=now();
+    const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_proof_sent_at=?,updated_at=? WHERE id=? AND customer_id=? AND status='AWAITING_PAYMENT' AND payment_status!='PAID' AND payment_proof_sent_at IS NULL")
+      .bind(timestamp,timestamp,id,user.id).run();
+    if(!Number(updated.meta?.changes||0)){
+      const current=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+      if(current?.payment_proof_sent_at && current.status==="PLACED") return json({ok:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+      return error("This order changed before your confirmation could be saved. Refresh and try again.",409);
+    }
+    await audit(env,request,user,"order.whatsapp_payment_proof_confirmed",id,{paymentStatus:"PENDING"});
+    const savedOrder=(await orderList(env,user.id)).find((item)=>item.id===id);
+    const emailNotification=await sendOrderEmail(env,savedOrder,"placed",await orderEmailItems(env,id));
+    if(!emailNotification.sent) console.warn("[ORDER EMAIL] Confirmed-order notification was not delivered.",emailNotification.reason);
+    return json({ok:true,emailNotification,order:savedOrder});
+  }
   match=path.match(/^\/api\/orders\/([^/]+)(?:\/cancel)?$/);
   if(match && method==="POST" && path.endsWith("/cancel")){
     if(customerOnly) return customerOnly; const id=decodeURIComponent(match[1]);
