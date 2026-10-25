@@ -384,7 +384,7 @@
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail, subcategoryLinks = "";
+    var title, crumbTrail, subcategoryLinks = "", subcategoryLanding = false;
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
@@ -397,7 +397,8 @@
       if (!parentCategory) {
         var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
         if (subcategories.length) {
-          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Browse subcategories:</span>' +
+          subcategoryLanding = true;
+          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Choose a subcategory:</span>' +
             subcategories.map(function (child) {
               return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
             }).join("") + '</nav>';
@@ -412,6 +413,13 @@
     var sortSel = '<label class="sortbox">Sort <select id="sortSel">' +
       sortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (sort === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") +
       '</select></label>';
+
+    if (subcategoryLanding) {
+      view.innerHTML = crumbs(crumbTrail) +
+        '<section class="subcategory-landing"><header class="results__head"><div><h1>' + esc(title) + '</h1><p>Select a subcategory to browse its products.</p></div></header>' +
+        subcategoryLinks + '</section>';
+      return;
+    }
 
     view.innerHTML =
       crumbs(crumbTrail) +
@@ -1482,16 +1490,15 @@
 
   function renderHeaderCategories() {
     var categories = D.CATEGORIES || [];
-    function categoryLink(category, child) {
+    function categoryLink(category) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + (child ? '↳ ' : '') + label + '</a>';
+      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
     }
     var html = categories.filter(function (category) {
       return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
     }).map(function (parent) {
-      return categoryLink(parent, false) + categories.filter(function (child) { return child.parentSlug === parent.slug; })
-        .map(function (child) { return categoryLink(child, true); }).join("");
+      return categoryLink(parent, false);
     }).join("");
     ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
       var container = document.getElementById(id);

@@ -1181,7 +1181,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
     { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
     { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" },
-    { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" }
+    { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" },
+    { slug: "ribbons", label: "Ribbons", parentSlug: "pipe-cleaners", emoji: "🎀", blurb: "Hot-stamping ribbons for bouquets, gifts and craft projects" }
   ];
 
   /* ---------- products ---------- */
@@ -1593,8 +1594,35 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     });
   });
 
+  /* Hot-stamping ribbons are standalone colour products. MG2517D appeared
+     twice in the supplied images, so it is represented by one product. */
+  var ribbonProducts = [
+    { id: "ribbon-mg2517a-maroon", code: "MG2517A", colour: "Maroon", image: "/assets/ribbons/mg2517a-maroon.jpeg" },
+    { id: "ribbon-mg2517b-brown", code: "MG2517B", colour: "Brown", image: "/assets/ribbons/mg2517b-brown.jpeg" },
+    { id: "ribbon-mg2517c-green", code: "MG2517C", colour: "Green", image: "/assets/ribbons/mg2517c-green.jpeg" },
+    { id: "ribbon-mg2517d-navy-blue", code: "MG2517D", colour: "Navy Blue", image: "/assets/ribbons/mg2517d-navy-blue.jpeg" },
+    { id: "ribbon-mg2517f-pink", code: "MG2517F", colour: "Pink", image: "/assets/ribbons/mg2517f-pink.jpeg" },
+    { id: "ribbon-mg2517g-white", code: "MG2517G", colour: "White", image: "/assets/ribbons/mg2517g-white.jpeg" },
+    { id: "ribbon-mg2517h-light-grey", code: "MG2517H", colour: "Light Grey", image: "/assets/ribbons/mg2517h-light-grey.jpeg" },
+    { id: "ribbon-mg2517j-red", code: "MG2517J", colour: "Red", image: "/assets/ribbons/mg2517j-red.jpeg" },
+    { id: "ribbon-mg2517k-cream", code: "MG2517K", colour: "Cream", image: "/assets/ribbons/mg2517k-cream.jpeg" },
+    { id: "mg2517l", code: "MG2517L", colour: "Purple", image: "/assets/ribbons/mg2517l-purple.jpeg" }
+  ];
+  ribbonProducts.forEach(function (ribbon) {
+    var description = "Decorative hot-stamping ribbon with gold ‘LOVE IS ETERNAL’ lettering in " + ribbon.colour + ".";
+    var stock = ribbon.id === "mg2517l" ? 3 : 50;
+    P.push({
+      id: ribbon.id, name: ribbon.code + " Ribbon — " + ribbon.colour, brand: "UVID Art and Craft Supplies", category: "ribbons",
+      price: 105, mrp: 150, rating: null, ratingCount: 0, emoji: "🎀", bg: "#FFF8F2", ink: "#A9793E", stock: stock,
+      tags: ["new", "deal"], localOnly: true, localImage: ribbon.image,
+      highlights: ["Decorative hot-stamping ribbon", "Gold lettering · " + ribbon.colour, "₹105 each · MRP ₹150"],
+      specs: { "Model": ribbon.code, "Colour": ribbon.colour, "MRP": "₹150", "Offer price": "₹105" },
+      description: description
+    });
+  });
+
   var bouquetNetDescription = "Decorative translucent net with pearl-trimmed edges for wrapping and presenting flower bouquets.";
-  var bouquetNetVariants = [
+  var bouquetNetProducts = [
     { id: "bouquet-net-mg2513a-lavender", code: "MG2513A", colour: "Lavender", image: "/assets/bouquet-nets/mg2513a-lavender.jpeg" },
     { id: "bouquet-net-mg2513b-pink", code: "MG2513B", colour: "Pink", image: "/assets/bouquet-nets/mg2513b-pink.jpeg" },
     { id: "bouquet-net-mg2513c-light-pink", code: "MG2513C", colour: "Light Pink", image: "/assets/bouquet-nets/mg2513c-light-pink.jpeg" },
@@ -1606,26 +1634,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { id: "bouquet-net-mg2513i-champagne", code: "MG2513I", colour: "Champagne", image: "/assets/bouquet-nets/mg2513i-champagne.jpeg" },
     { id: "bouquet-net-mg2513k-sky-blue", code: "MG2513K", colour: "Sky Blue", image: "/assets/bouquet-nets/mg2513k-sky-blue.jpeg" }
   ];
-  P.push({
-    id: "pearl-edged-bouquet-net", name: "Pearl-Edged Bouquet Net", brand: "UVID Art and Craft Supplies", category: "bouquet-nets",
-    price: 160, mrp: 250, rating: null, ratingCount: 0, emoji: "💐", bg: "#FFF3F8", ink: "#A54B70",
-    stock: bouquetNetVariants.length * 10, tags: ["new", "deal"], localOnly: true,
-    localImage: bouquetNetVariants[0].image,
-    highlights: ["Decorative pearl-edged bouquet wrapping net", "10 colour options with individual photos", "₹160 each · MRP ₹250"],
-    specs: { "Category": "Bouquet Nets", "Available colours": "10", "MRP": "₹250", "Offer price": "₹160" },
-    description: bouquetNetDescription,
-    variantMeta: bouquetNetVariants.map(function (variant) {
-      return { id: variant.id, size: variant.code, label: variant.code + " · " + variant.colour, price: 160, mrp: 250, stock: 10 };
-    })
-  });
-  bouquetNetVariants.forEach(function (variant) {
-    var label = variant.code + " · " + variant.colour;
+  bouquetNetProducts.forEach(function (product) {
     P.push({
-      id: variant.id, name: "Pearl-Edged Bouquet Net — " + variant.colour, brand: "UVID Art and Craft Supplies", category: "bouquet-nets",
+      id: product.id, name: product.code + " — Pearl-Edged Bouquet Net — " + product.colour, brand: "UVID Art and Craft Supplies", category: "bouquet-nets",
       price: 160, mrp: 250, rating: null, ratingCount: 0, emoji: "💐", bg: "#FFF3F8", ink: "#A54B70", stock: 10,
-      tags: ["vc-hidden", "deal"], parent: "pearl-edged-bouquet-net", variantLabel: label, localImage: variant.image, localOnly: true,
-      highlights: ["Decorative pearl-edged bouquet wrapping net", "Colour: " + variant.colour, "₹160 each · MRP ₹250 · 10 in stock"],
-      specs: { "Model": variant.code, "Colour": variant.colour, "MRP": "₹250", "Offer price": "₹160" },
+      tags: ["deal"], localImage: product.image, localOnly: true,
+      highlights: ["Decorative pearl-edged bouquet wrapping net", "Item code: " + product.code, "Colour: " + product.colour, "₹160 each · MRP ₹250 · 10 in stock"],
+      specs: { "Model": product.code, "Colour": product.colour, "MRP": "₹250", "Offer price": "₹160" },
       description: bouquetNetDescription
     });
   });
@@ -1641,25 +1656,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     p.added = P.length - i;              // "newest" ordering
     p.popularity = p.ratingCount + p.discount * 7; // demo relevance score
   });
-
-  /* Wire the bouquet-net colour selector to each local product photo. */
-  (function () {
-    var main = null, i, j;
-    for (i = 0; i < P.length; i++) if (P[i].id === "pearl-edged-bouquet-net") main = P[i];
-    if (!main || !main.variantMeta) return;
-    main.variants = [];
-    for (i = 0; i < main.variantMeta.length; i++) {
-      var vm = main.variantMeta[i], rec = null;
-      for (j = 0; j < P.length; j++) if (P[j].id === vm.id) rec = P[j];
-      if (!rec) continue;
-      main.variants.push({ id: rec.id, size: vm.size, label: vm.label, price: rec.price, mrp: rec.mrp, stock: rec.stock, img: rec.img });
-    }
-    if (main.variants.length) {
-      main.img = main.variants[0].img;
-      main.thumb = main.img;
-      main.stock = main.variants.reduce(function (total, variant) { return total + variant.stock; }, 0);
-    }
-  })();
 
   /* wire the chopstick size variants: attach per-variant price/label/photo to
      the main product; main image defaults to the first variant (3 mm). */
@@ -2864,7 +2860,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail, subcategoryLinks = "";
+    var title, crumbTrail, subcategoryLinks = "", subcategoryLanding = false;
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
@@ -2877,7 +2873,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       if (!parentCategory) {
         var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
         if (subcategories.length) {
-          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Browse subcategories:</span>' +
+          subcategoryLanding = true;
+          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Choose a subcategory:</span>' +
             subcategories.map(function (child) {
               return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
             }).join("") + '</nav>';
@@ -2892,6 +2889,13 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var sortSel = '<label class="sortbox">Sort <select id="sortSel">' +
       sortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (sort === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") +
       '</select></label>';
+
+    if (subcategoryLanding) {
+      view.innerHTML = crumbs(crumbTrail) +
+        '<section class="subcategory-landing"><header class="results__head"><div><h1>' + esc(title) + '</h1><p>Select a subcategory to browse its products.</p></div></header>' +
+        subcategoryLinks + '</section>';
+      return;
+    }
 
     view.innerHTML =
       crumbs(crumbTrail) +
@@ -3962,16 +3966,15 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
   function renderHeaderCategories() {
     var categories = D.CATEGORIES || [];
-    function categoryLink(category, child) {
+    function categoryLink(category) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + (child ? '↳ ' : '') + label + '</a>';
+      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
     }
     var html = categories.filter(function (category) {
       return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
     }).map(function (parent) {
-      return categoryLink(parent, false) + categories.filter(function (child) { return child.parentSlug === parent.slug; })
-        .map(function (child) { return categoryLink(child, true); }).join("");
+      return categoryLink(parent, false);
     }).join("");
     ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
       var container = document.getElementById(id);
