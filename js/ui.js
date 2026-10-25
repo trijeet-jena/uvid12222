@@ -384,7 +384,7 @@
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail, subcategoryLinks = "", subcategoryLanding = false;
+    var title, crumbTrail, subcategoryLinks = "";
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
@@ -397,11 +397,17 @@
       if (!parentCategory) {
         var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
         if (subcategories.length) {
-          subcategoryLanding = true;
-          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Choose a subcategory:</span>' +
-            subcategories.map(function (child) {
-              return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
-            }).join("") + '</nav>';
+          subcategoryLinks = '<section class="subcategory-section" aria-label="' + esc(cat.label) + ' subcategories">' +
+            '<header class="subcategory-section__head"><h2>Explore subcategories</h2><p>Browse a subcategory below, or see all products further down.</p></header>' +
+            '<div class="subcategory-grid">' + subcategories.map(function (child) {
+              var childProducts = D.visibleProducts.filter(function (product) { return product.category === child.slug; });
+              var imageProduct = childProducts[0];
+              var image = imageProduct
+                ? '<img src="' + esc(imageProduct.img) + '" alt="' + esc(child.label) + ' product photo" loading="lazy" decoding="async">'
+                : '<span class="subcategory-card__fallback" aria-hidden="true">' + esc(child.emoji || "🧶") + '</span>';
+              return '<a class="subcategory-card" href="#/c/' + esc(child.slug) + '">' + image +
+                '<span class="subcategory-card__body"><b>' + esc(child.label) + '</b><small>' + childProducts.length + ' product' + (childProducts.length === 1 ? '' : 's') + '</small><em>Browse subcategory →</em></span></a>';
+            }).join("") + '</div></section>';
         }
       }
     } else {
@@ -413,13 +419,6 @@
     var sortSel = '<label class="sortbox">Sort <select id="sortSel">' +
       sortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (sort === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") +
       '</select></label>';
-
-    if (subcategoryLanding) {
-      view.innerHTML = crumbs(crumbTrail) +
-        '<section class="subcategory-landing"><header class="results__head"><div><h1>' + esc(title) + '</h1><p>Select a subcategory to browse its products.</p></div></header>' +
-        subcategoryLinks + '</section>';
-      return;
-    }
 
     view.innerHTML =
       crumbs(crumbTrail) +

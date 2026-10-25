@@ -185,10 +185,19 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .category-menu__item { display: block; min-height: 43px; padding: 10px; border-radius: var(--rad-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
 .category-menu__item--child { padding-left: 24px; color: var(--ink-3); font-size: 13px; font-weight: 500; }
 .category-menu__item:hover, .category-menu__item:focus-visible { outline: 0; background: var(--green-t); color: var(--green-d); }
-.subcategory-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
-.subcategory-nav__label { color: var(--ink-2); font-size: 13px; font-weight: 700; margin-right: 3px; }
-.subcategory-nav__link { display: inline-flex; align-items: center; min-height: 34px; padding: 6px 13px; border: 1px solid #c9dfd1; border-radius: 999px; background: #edf6f0; color: var(--green-d); font-size: 13px; font-weight: 600; }
-.subcategory-nav__link:hover, .subcategory-nav__link:focus-visible { outline: 0; background: var(--green); border-color: var(--green); color: #fff; }
+.subcategory-section { margin: 0 0 26px; }
+.subcategory-section__head { margin: 0 0 12px; }
+.subcategory-section__head h2 { margin: 0; font-size: 1.2rem; }
+.subcategory-section__head p { margin: 3px 0 0; color: var(--ink-3); font-size: 13.5px; }
+.subcategory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.subcategory-card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--rad); background: #fff; box-shadow: var(--shadow); color: var(--ink); transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.subcategory-card:hover, .subcategory-card:focus-visible { transform: translateY(-3px); border-color: var(--line-2); box-shadow: var(--shadow-lg); outline: 0; }
+.subcategory-card > img, .subcategory-card__fallback { display: grid; width: 100%; aspect-ratio: 4 / 3; place-items: center; object-fit: cover; background: var(--paper-2); }
+.subcategory-card__fallback { font-size: 58px; }
+.subcategory-card__body { display: grid; gap: 2px; padding: 12px 14px 14px; }
+.subcategory-card__body b { font-size: 16px; }
+.subcategory-card__body small { color: var(--ink-3); font-size: 12px; }
+.subcategory-card__body em { margin-top: 5px; color: var(--green-d); font-size: 12.5px; font-style: normal; font-weight: 700; }
 .hicon {
   position: relative; display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 14px; border-radius: 999px; border: 0; background: transparent;
@@ -924,6 +933,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .footer__in { grid-template-columns: 1fr 1fr; gap: 22px; }
 }
 @media (max-width: 560px) {
+  .subcategory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .subcategory-card__body { padding: 10px; }
   .footer__in { grid-template-columns: 1fr; gap: 6px; padding-bottom: 12px; }
   .footer__col--brand { margin-bottom: 10px; }
 }
@@ -1179,7 +1190,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" },
     { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" },
     { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
-    { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
+    { slug: "pipe-cleaners", label: "Pipe Cleaners", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
     { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" },
     { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" },
     { slug: "ribbons", label: "Ribbons", parentSlug: "pipe-cleaners", emoji: "🎀", blurb: "Hot-stamping ribbons for bouquets, gifts and craft projects" }
@@ -2860,7 +2871,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var path = currentBase();
     var items = filteredProducts();
     var sort = q.sort || "relevance";
-    var title, crumbTrail, subcategoryLinks = "", subcategoryLanding = false;
+    var title, crumbTrail, subcategoryLinks = "";
 
     if (path.indexOf("#/c/") === 0) {
       var cat = D.categoryBySlug(path.split("/")[2]);
@@ -2873,11 +2884,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       if (!parentCategory) {
         var subcategories = D.CATEGORIES.filter(function (child) { return child.parentSlug === cat.slug; });
         if (subcategories.length) {
-          subcategoryLanding = true;
-          subcategoryLinks = '<nav class="subcategory-nav" aria-label="' + esc(cat.label) + ' subcategories"><span class="subcategory-nav__label">Choose a subcategory:</span>' +
-            subcategories.map(function (child) {
-              return '<a class="subcategory-nav__link" href="#/c/' + esc(child.slug) + '">' + esc(child.label) + (child.count ? ' <small>(' + Number(child.count) + ')</small>' : '') + '</a>';
-            }).join("") + '</nav>';
+          subcategoryLinks = '<section class="subcategory-section" aria-label="' + esc(cat.label) + ' subcategories">' +
+            '<header class="subcategory-section__head"><h2>Explore subcategories</h2><p>Browse a subcategory below, or see all products further down.</p></header>' +
+            '<div class="subcategory-grid">' + subcategories.map(function (child) {
+              var childProducts = D.visibleProducts.filter(function (product) { return product.category === child.slug; });
+              var imageProduct = childProducts[0];
+              var image = imageProduct
+                ? '<img src="' + esc(imageProduct.img) + '" alt="' + esc(child.label) + ' product photo" loading="lazy" decoding="async">'
+                : '<span class="subcategory-card__fallback" aria-hidden="true">' + esc(child.emoji || "🧶") + '</span>';
+              return '<a class="subcategory-card" href="#/c/' + esc(child.slug) + '">' + image +
+                '<span class="subcategory-card__body"><b>' + esc(child.label) + '</b><small>' + childProducts.length + ' product' + (childProducts.length === 1 ? '' : 's') + '</small><em>Browse subcategory →</em></span></a>';
+            }).join("") + '</div></section>';
         }
       }
     } else {
@@ -2889,13 +2906,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var sortSel = '<label class="sortbox">Sort <select id="sortSel">' +
       sortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (sort === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") +
       '</select></label>';
-
-    if (subcategoryLanding) {
-      view.innerHTML = crumbs(crumbTrail) +
-        '<section class="subcategory-landing"><header class="results__head"><div><h1>' + esc(title) + '</h1><p>Select a subcategory to browse its products.</p></div></header>' +
-        subcategoryLinks + '</section>';
-      return;
-    }
 
     view.innerHTML =
       crumbs(crumbTrail) +

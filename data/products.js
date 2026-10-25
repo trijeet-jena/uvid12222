@@ -32,7 +32,7 @@
     { slug: "planners",  label: "Planners",         emoji: "🗓️", blurb: "Plan the year, one page a day" },
     { slug: "resin-moulds", label: "Resin Moulds", emoji: "🌸", blurb: "Moulds for resin art and handmade projects" },
     { slug: "candle-making", label: "Candle Making", emoji: "🕯️", blurb: "Decorative moulds and supplies for handmade candles" },
-    { slug: "pipe-cleaners", label: "PIPE CLEANERS", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
+    { slug: "pipe-cleaners", label: "Pipe Cleaners", emoji: "🧶", blurb: "Pipe cleaners and bouquet wrapping supplies" },
     { slug: "bouquet-nets", label: "Bouquet Nets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Pearl-edged net wraps for flower bouquets" },
     { slug: "bouquet-sheets", label: "Bouquet Sheets", parentSlug: "pipe-cleaners", emoji: "💐", blurb: "Decorative colour sheets for wrapping bouquets" },
     { slug: "ribbons", label: "Ribbons", parentSlug: "pipe-cleaners", emoji: "🎀", blurb: "Hot-stamping ribbons for bouquets, gifts and craft projects" }
