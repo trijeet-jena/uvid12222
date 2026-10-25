@@ -3345,8 +3345,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
 
     if (!order.shippingFinalized) {
-      view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + ' received</h1>' +
+      view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + '</h1>' +
         '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
+        '<div class="upi-wait__amount"><span>Items subtotal · delivery charge pending</span><b>' + money(order.totals.subtotal) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         '<label class="payment-proof-check"><input id="paymentProofSent" type="checkbox" /><span>After the final total appears, pay by UPI and send your payment screenshot and order ID to +91 74061 55738 on WhatsApp. Then tick this box to show Confirm order.</span></label>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
@@ -3356,9 +3357,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       var whatsappHref = 'https://wa.me/917406155738?text=' + encodeURIComponent(whatsappText);
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
         '<p>Scan this UPI QR and pay the exact amount below. After paying, send your payment screenshot and order ID on WhatsApp to +91 74061 55738, then tick the box below to confirm your order. The store will verify your payment before processing.</p>' +
+        '<div class="upi-wait__amount"><span>Amount to pay</span><b>' + money(order.totals.total) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         (order.paymentProofSent ? '<p class="upi-wait__status upi-wait__status--success">Your order is placed. We recorded your WhatsApp payment confirmation; the store will verify your payment before processing the order.</p>' : '<label class="payment-proof-check"><input id="paymentProofSent" type="checkbox" /><span>After paying, send your payment screenshot and order ID to +91 74061 55738 on WhatsApp, then tick this box to confirm your order.</span></label>') +
-        '<div class="upi-wait__amount"><span>Order ' + esc(order.id) + '</span><b>' + money(order.totals.total) + '</b></div>' +
         '<p class="upi-wait__status" id="upiPaymentStatus" role="status">' + (order.paymentProofSent ? 'Your order is placed. Payment is pending store verification.' : 'Order ID: ' + esc(order.id) + '. Attach the screenshot yourself in WhatsApp, along with this order ID.') + '</p>' +
         '<div class="success__cta"><a class="btn btn--primary" href="' + whatsappHref + '" target="_blank" rel="noopener noreferrer">Send payment screenshot on WhatsApp</a></div>' +
         (order.paymentProofSent ? '' : '<button class="btn btn--soft payment-proof-confirm" id="confirmPaymentProof" type="button" style="display:none">Confirm order</button>') +
