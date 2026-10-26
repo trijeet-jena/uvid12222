@@ -1269,7 +1269,7 @@
       await loadState("orders");
     }
     content.innerHTML =
-      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · Customers confirm after sending payment proof and their order ID on WhatsApp. Verify the transfer in PhonePe before progressing an unpaid UPI order.</p></div>" +
+      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · Review uploaded payment proofs in each invoice and verify transfers in PhonePe before progressing an unpaid UPI order.</p></div>" +
       '<div class="filters"><select id="ordFilter" aria-label="Filter by status"><option value="">All statuses</option>' +
       ORDER_STATUSES.map(function (s) {
         return '<option value="' + s[0] + '"' + (state.orderFilter === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
@@ -1291,7 +1291,8 @@
     const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID" && o.status !== "CANCELLED";
     const quotePending = Number(o.shipping_finalized) === 0;
     const proofReported = Boolean(o.payment_proof_sent_at);
-    const paymentNote = awaitingUpi ? " · Payment pending" + (proofReported ? " · WhatsApp proof reported" : "") : "";
+    const proofUploaded = Boolean(o.payment_proof_file_name);
+    const paymentNote = awaitingUpi ? " · Payment pending" + (proofUploaded ? " · Payment proof uploaded" : proofReported ? " · Proof reported" : "") : "";
     return '<tr data-orow="' + esc(o.id) + '">' +
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
@@ -1301,7 +1302,7 @@
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : proofReported ? 'Customer says they sent the proof on WhatsApp. Check it against this total in PhonePe.' : 'Waiting for the customer to send the proof on WhatsApp and confirm in the checkout page.') + '</small>' + (quotePending || !proofReported ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : proofUploaded ? 'Payment proof uploaded (' + esc(o.payment_proof_file_name) + '). Review the invoice and verify in PhonePe.' : proofReported ? 'Proof was previously reported, but no file is uploaded yet.' : 'Waiting for the customer to upload payment proof after paying.') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
@@ -1333,6 +1334,14 @@
     const email = address.email || order.customer_email || "—";
     const phone = address.phone || order.customer_mobile_number || order.mobile_number || "—";
     const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.status === "AWAITING_PAYMENT" || String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting payment" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
+    const proofName = order.payment_proof_file_name ? String(order.payment_proof_file_name) : "";
+    const proofMime = String(order.payment_proof_mime || "").toLowerCase();
+    const proofUrl = proofName ? "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment-proof" : "";
+    const proofPreview = proofUrl && ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(proofMime)
+      ? '<img src="' + esc(proofUrl) + '" alt="Uploaded payment proof for order ' + esc(order.id) + '" loading="eager">'
+      : proofUrl && proofMime === "application/pdf"
+        ? '<iframe src="' + esc(proofUrl) + '" title="Payment proof PDF for order ' + esc(order.id) + '"></iframe>'
+        : "";
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
@@ -1340,9 +1349,10 @@
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div>' +
-      '<div><span>WhatsApp payment proof</span><b>' + (order.payment_proof_sent_at ? 'Customer says sent · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not confirmed') + '</b></div></div>' +
+      '<div><span>Payment proof</span><b>' + (proofName ? 'Uploaded · ' + esc(fmtDateTime(order.payment_proof_created_at || order.payment_proof_sent_at)) : order.payment_proof_sent_at ? 'Previously reported · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not uploaded') + '</b></div></div>' +
       '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
+      (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview">' + proofPreview + '</div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
       (items.length ? items.map(function (item, index) {
         const quantity = Number(item.quantity) || 0;
@@ -1366,7 +1376,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_sent_at ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1407,7 +1417,7 @@
     });
     const confirmButton = back.querySelector("[data-confirm-upi]");
     if (confirmButton) confirmButton.addEventListener("click", async function () {
-      const verified = await confirmDialog("The customer has confirmed that they sent the payment screenshot and order ID on WhatsApp. Check the screenshot and exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
+      const verified = await confirmDialog("Review the uploaded payment proof in this invoice and check the exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
       if (!verified) return;
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
@@ -1443,7 +1453,7 @@
       const order = state.orders.find(function (item) { return String(item.id) === place.dataset.confirmPlace; });
       if (!order || order.status === "CANCELLED") return;
       if (Number(order.shipping_finalized) === 0) { toast("Set the delivery charge in the invoice before confirming payment.", false); return; }
-      const verified = await confirmDialog("The customer has confirmed that they sent the payment screenshot and order ID on WhatsApp. Check the screenshot and exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
+      const verified = await confirmDialog("Review the uploaded payment proof in this invoice and check the exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
       if (!verified) return;
       const undo = busy(place, "Placing…");
       try {

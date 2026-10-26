@@ -390,6 +390,12 @@ body.modal-open { overflow: hidden; }
 .invoice__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 20px 0 24px; }
 .invoice__parties h3 { margin: 0 0 8px; color: #2f8061; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
 .invoice__parties b { display: block; margin-bottom: 4px; }
+.invoice__proof { margin: 0 0 22px; padding: 16px; border: 1px solid #dfe3e0; border-radius: 10px; background: #f8faf8; break-inside: avoid; page-break-inside: avoid; }
+.invoice__proof h3 { margin: 0 0 10px; color: #2f8061; font-size: 12px; letter-spacing: .5px; overflow-wrap: anywhere; }
+.invoice__proof p { margin: 0 0 10px; color: #667169; }
+.invoice__proof-preview img { display: block; width: auto; max-width: 100%; max-height: 620px; margin: 0 auto 12px; object-fit: contain; }
+.invoice__proof-preview iframe { display: block; width: 100%; height: 620px; margin: 0 0 12px; border: 1px solid #dfe3e0; background: #fff; }
+.invoice__proof > a { color: #245d46; font-weight: 700; overflow-wrap: anywhere; }
 .invoice__table-wrap { overflow-x: auto; }
 .invoice__table { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; }
 .invoice__table th { padding: 10px 7px; color: #fff; background: #171717; border: 1px solid #171717; font-size: 10px; letter-spacing: .35px; text-transform: uppercase; }
@@ -449,7 +455,7 @@ body.modal-open { overflow: hidden; }
   .modal__head, .modal__foot { display: none !important; }
   .invoice-modal__body, .modal__body { overflow: visible !important; padding: 0 !important; background: #fff !important; }
   .invoice { max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #111 !important; }
-  .invoice__top, .invoice__meta, .invoice__parties, .invoice__bottom { break-inside: avoid; page-break-inside: avoid; }
+  .invoice__top, .invoice__meta, .invoice__parties, .invoice__proof, .invoice__bottom { break-inside: avoid; page-break-inside: avoid; }
   .invoice__table thead { display: table-header-group; }
   .invoice__table tr { break-inside: avoid; page-break-inside: avoid; }
   .invoice__table th { color: #fff !important; background: #171717 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }

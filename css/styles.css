@@ -586,9 +586,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .upi-wait__status { padding: 12px; border-radius: var(--rad-sm); background: #fff3e7; color: #87501f !important; font-weight: 700; }
 .upi-wait__status--error { background: #fff0ef; color: var(--red) !important; }
 .upi-wait__status--success { background: #eaf6ef; color: #276c4c !important; }
-.payment-proof-check { display: flex; align-items: flex-start; gap: 12px; margin: 14px 0; padding: 15px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fffdf8; color: var(--ink); line-height: 1.5; cursor: pointer; }
-.payment-proof-check input { flex: 0 0 auto; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--brand); }
-.payment-proof-confirm { display: block; width: 100%; margin: 12px 0; }
+.payment-proof-upload { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fffdf8; }
+.payment-proof-upload label { display: grid; gap: 5px; color: var(--ink); }
+.payment-proof-upload label span { color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+.payment-proof-upload input[type="file"] { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--rad-sm); background: #fff; font: inherit; }
+.payment-proof-upload .upi-wait__status { margin: 0; }
 .payment-pending { display: block; margin-top: 4px; color: #87501f; }
 .proof-preview { display: block; max-width: 100%; max-height: 360px; margin: 12px auto; border: 1px solid var(--line); border-radius: var(--rad-sm); object-fit: contain; }
 .proof-message { min-height: 20px; color: var(--ink-2); font-size: 13px; }
