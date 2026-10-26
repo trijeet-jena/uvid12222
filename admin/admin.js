@@ -1467,8 +1467,16 @@
     }
     const t = e.target.closest("[data-invoice]");
     if (!t) return;
-    const order = state.orders.find(function (item) { return String(item.id) === t.dataset.invoice; });
-    if (order) openOrderInvoice(order);
+    const orderId = t.dataset.invoice;
+    const order = state.orders.find(function (item) { return String(item.id) === orderId; });
+    if (!order) return;
+    try {
+      await loadState("orders");
+      const latest = state.orders.find(function (item) { return String(item.id) === orderId; });
+      openOrderInvoice(latest || order);
+    } catch (_error) {
+      openOrderInvoice(order);
+    }
   });
   content.addEventListener("change", async function (e) {
     const sel = e.target.closest(".ostat");

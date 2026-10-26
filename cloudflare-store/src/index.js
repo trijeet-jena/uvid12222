@@ -1021,7 +1021,14 @@ async function handleApi(request, env, user, url) {
   if(path==="/api/orders" && method==="POST"){
     if(customerOnly) return customerOnly;
     const out=await placeOrder(env,user,await readBody());
-    return json({ok:true,...out},201);
+    let emailNotification={sent:false,reason:"notification_error"};
+    try {
+      emailNotification=await sendOrderEmail(env,out.order,"placed",await orderEmailItems(env,out.order.id));
+      if(!emailNotification.sent) console.warn("[ORDER EMAIL] New-order notification was not delivered.",emailNotification.reason);
+    } catch (cause) {
+      console.warn("[ORDER EMAIL] New-order notification could not be prepared.",cause?.name||"notification error");
+    }
+    return json({ok:true,...out,emailNotification},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
   match=path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
