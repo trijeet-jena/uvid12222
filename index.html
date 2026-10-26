@@ -3344,6 +3344,16 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
   /* ================= PAYMENT / SUCCESS ================= */
 
+  function paymentProofContent(order) {
+    if (order.paymentProofSent) {
+      return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
+        (order.shippingFinalized ? 'Payment proof uploaded. Your order is awaiting store verification.' : 'Payment proof uploaded. Waiting for the store to confirm the final delivery total.') + '</p>';
+    }
+    return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
+      (order.shippingFinalized ? 'Choose your screenshot or payment receipt in any file format (up to 1.4 MB).' : 'If you have already paid, choose your screenshot or payment receipt in any file format (up to 1.4 MB).') +
+      '</span></label><input id="paymentProofFile" name="paymentProofFile" type="file" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">Upload payment proof</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">Order ' + esc(order.id) + ' · upload a screenshot or payment receipt.</p></form>';
+  }
+
   function paymentPage(orderId) {
     var order = A.state.orders.filter(function (o) { return o.id === orderId; })[0];
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
@@ -3358,19 +3368,17 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     if (!order.shippingFinalized) {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + '</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. The UPI QR is shown below; please wait to pay until the final total appears.</p>' +
+        '<p>The store is checking your address and will add the delivery charge. Please wait to pay until the final total appears. If you have already paid, upload your payment proof below so it can be attached to this order.</p>' +
         '<div class="upi-wait__amount"><span>Items subtotal · delivery charge pending</span><b>' + money(order.totals.subtotal) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
-        '<p class="upi-wait__status" id="upiPaymentStatus" role="status">Waiting for the store to confirm delivery.</p>' +
+        paymentProofContent(order) +
         '</div>';
     } else {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
         '<p>Scan this UPI QR and pay the exact amount below. Then choose your payment proof file and upload it. The store will verify your payment before processing the order.</p>' +
         '<div class="upi-wait__amount"><span>Amount to pay</span><b>' + money(order.totals.total) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
-        (order.paymentProofSent
-          ? '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">Payment proof uploaded. Your order is awaiting store verification.</p>'
-          : '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>Choose your screenshot or payment receipt in any file format (up to 1.4 MB).</span></label><input id="paymentProofFile" name="paymentProofFile" type="file" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">Upload payment proof</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">Order ' + esc(order.id) + ' · attach a screenshot or payment receipt.</p></form>') +
+        paymentProofContent(order) +
         '</div>';
     }
     var qr = $("#upiPaymentQr");
@@ -3462,7 +3470,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
           order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
-          statusEl.textContent = order.shippingFinalized ? (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to verify your payment." : "After paying, upload your payment screenshot or receipt here. Payment is confirmed after store verification.") : "Waiting for the store to confirm delivery.";
+          statusEl.textContent = order.shippingFinalized
+            ? (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to verify your payment." : "After paying, upload your payment screenshot or receipt here. Payment is confirmed after store verification.")
+            : (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to confirm the final delivery total." : "Waiting for the store to confirm delivery.");
           A.save();
         })
         .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });

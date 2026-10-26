@@ -1036,8 +1036,6 @@ async function handleApi(request, env, user, url) {
     if(order.status==="CANCELLED") return error("A cancelled order cannot receive payment proof.",409);
     if(order.payment_status==="PAID") return error("This order is already paid.",409);
     if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer receive payment proof.",409);
-    const quote=await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
-    if(!quote || Number(quote.finalized)!==1) return error("Wait until the store confirms your final delivery charge before uploading payment proof.",409);
     const previous=await env.DB.prepare("SELECT order_id FROM order_payment_proofs WHERE order_id=?").bind(id).first();
     const timestamp=now();
     await env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,file_name,byte_size,data,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,file_name=excluded.file_name,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
