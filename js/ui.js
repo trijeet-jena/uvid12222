@@ -940,23 +940,37 @@
         .then(function (data) {
           var serverOrder = data && data.order;
           if (!serverOrder) return;
+          if (serverOrder.status === "CANCELLED") {
+            order.status = "Cancelled";
+            A.save();
+            clearInterval(paymentTimer);
+            paymentPage(order.id);
+            return;
+          }
+          var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+          var stageIndex = stageMap[serverOrder.status] != null ? stageMap[serverOrder.status] : 0;
+          var latestStatus = serverOrder.status === "AWAITING_PAYMENT" ? "Awaiting payment" : A.STATUS_STAGES[stageIndex];
+          var orderStatusChanged = order.status !== latestStatus;
+          order.status = latestStatus;
+          order.stageIndex = stageIndex;
           if (Number(serverOrder.shipping_finalized) !== 0 && !order.shippingFinalized) {
             order.shippingFinalized = true;
             order.totals.shipping = Number(serverOrder.shipping) || 0;
             order.totals.total = Number(serverOrder.total_amount) || 0;
-            order.paymentStatus = "Awaiting payment verification";
+            order.paymentStatus = serverOrder.payment_status === "PAID" ? "Paid ✓" : "Awaiting payment verification";
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
             return;
           }
           if (serverOrder.payment_status === "PAID") {
+            var wasPaymentConfirmed = order.paymentConfirmed;
             order.paymentConfirmed = true;
             order.paymentStatus = "Paid ✓";
             order.processed = true;
             A.save();
-            clearInterval(paymentTimer);
-            successHtml(order);
+            if (!wasPaymentConfirmed || orderStatusChanged) successHtml(order);
+            else statusEl.textContent = "Payment verified. Current order status: " + order.status + ".";
             return;
           }
           if (serverOrder.payment_proof_file_name && !order.paymentProofSent) {
@@ -967,14 +981,6 @@
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
-            return;
-          }
-          if (serverOrder.status === "CANCELLED") {
-            order.status = "Cancelled";
-            A.save();
-            statusEl.textContent = "This order was cancelled. Contact the store if you already transferred payment.";
-            statusEl.classList.add("upi-wait__status--error");
-            clearInterval(paymentTimer);
             return;
           }
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
@@ -1001,6 +1007,7 @@
       '<div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
       '<h1>Order ' + (isCod ? "confirmed!" : "successful!") + '</h1>' +
       '<p class="success__sub">' + (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.") + '</p>' +
+      '<p class="success__sub" id="upiPaymentStatus">Current order status: <b>' + esc(order.status || "Placed") + '</b>.</p>' +
       '<div class="success__meta card-inset">' +
       '<div><span>Order ID</span><b>' + order.id + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(String(order.payment).toUpperCase()) + ' · ' + esc(order.paymentStatus) + '</b></div>' +

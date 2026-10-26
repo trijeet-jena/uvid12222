@@ -1293,16 +1293,23 @@
     const proofReported = Boolean(o.payment_proof_sent_at);
     const proofUploaded = Boolean(o.payment_proof_file_name);
     const paymentNote = awaitingUpi ? " · Payment pending" + (proofUploaded ? " · Payment proof uploaded" : proofReported ? " · Proof reported" : "") : "";
+    const paymentInstruction = quotePending
+      ? "Set the delivery charge in the invoice first."
+      : proofUploaded
+        ? 'Proof uploaded. Verify the transfer in PhonePe, then click "Confirm verified payment" to unlock packing and shipping.'
+        : proofReported
+          ? "Wait for the customer to upload the payment proof, then verify the transfer in PhonePe."
+          : "Wait for the customer to pay and upload proof, then verify the transfer in PhonePe.";
     return '<tr data-orow="' + esc(o.id) + '">' +
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
       "<td>" + count + " item" + (count === 1 ? "" : "s") + "</td>" +
       '<td class="num"><b>' + (Number(o.shipping_finalized) === 0 ? 'Delivery pending' : money(o.total_amount)) + "</b>" + (o.discount ? '<br><small style="color:var(--brand)">−' + money(o.discount) + "</small>" : "") + "</td>" +
-      '<td><select class="ostat" data-oid="' + esc(o.id) + '" aria-label="Order status for ' + esc(o.id) + '">' +
+      '<td><select class="ostat" data-oid="' + esc(o.id) + '" aria-label="Order status for ' + esc(o.id) + '"' + (awaitingUpi ? ' disabled aria-describedby="order-payment-hold-' + esc(o.id) + '"' : '') + '>' +
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note">' + (quotePending ? 'Set the delivery charge in the invoice first.' : proofUploaded ? 'Payment proof uploaded (' + esc(o.payment_proof_file_name) + '). Review the invoice and verify in PhonePe.' : proofReported ? 'Proof was previously reported, but no file is uploaded yet.' : 'Waiting for the customer to upload payment proof after paying.') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
