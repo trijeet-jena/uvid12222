@@ -194,6 +194,7 @@
         headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         credentials: "same-origin",
+        cache: "no-store",
       });
     } catch (_e) {
       throw new Error(reachHelp());
@@ -1495,9 +1496,17 @@
       if (!ok) { await repaint(VIEWS.orders); return; }
     }
     try {
-      await api("PUT", "/api/admin/orders/" + encodeURIComponent(oid) + "/status", { status: status });
+      const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(oid) + "/status", { status: status });
+      const order = state.orders.find(function (item) { return String(item.id) === oid; });
+      if (order) {
+        order.status = result.status || status;
+        order.updated_at = result.updated_at || order.updated_at;
+      }
+      if (state.orderFilter && state.orderFilter !== (result.status || status)) {
+        state.orders = state.orders.filter(function (item) { return String(item.id) !== oid; });
+      }
       toast("Order " + oid + " → " + orderLabel(status), true);
-      await repaint(VIEWS.orders);
+      await repaint(function () { return VIEWS.orders(true); });
     } catch (ex) { toast(ex.message, false); await repaint(VIEWS.orders); }
   });
 

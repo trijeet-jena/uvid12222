@@ -984,14 +984,21 @@ async function handleApi(request, env, user, url) {
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
     if (!current) return error("Order not found.",404);
     if (current.payment_method === "UPI" && current.payment_status !== "PAID" && status !== "CANCELLED") return error("Confirm the UPI payment after checking the transaction before progressing this order.",409);
+    const timestamp=now();
+    const statusUpdate=env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,timestamp,orderId);
     if (status === "CANCELLED" && current.status !== "CANCELLED") {
       const items = (await env.DB.prepare("SELECT product_id,quantity FROM order_items WHERE order_id=?").bind(orderId).all()).results || [];
-      const batches = [env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),orderId)];
+      const batches = [statusUpdate];
       for (const item of items) batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?,status=CASE WHEN status='OUT_OF_STOCK' AND stock_quantity+?>0 THEN 'ACTIVE' ELSE status END,updated_at=? WHERE id=?").bind(item.quantity,item.quantity,now(),item.product_id));
-      await env.DB.batch(batches);
-      return json({ok:true});
+      const results=await env.DB.batch(batches);
+      if(Number(results[0]?.meta?.changes||0)!==1) return error("The order status was not saved. Refresh the order and try again.",409);
+      await audit(env,request,user,"order.status_changed",orderId,{status});
+      return json({ok:true,status,updated_at:timestamp});
     }
-    await env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,now(),orderId); return json({ok:true});
+    const saved=await statusUpdate.run();
+    if(Number(saved.meta?.changes||0)!==1) return error("The order status was not saved. Refresh the order and try again.",409);
+    await audit(env,request,user,"order.status_changed",orderId,{status});
+    return json({ok:true,status,updated_at:timestamp});
   }
   if(path==="/api/admin/customers" && method==="GET") return adminOnly || json({customers:(await env.DB.prepare(`
     SELECT u.id,
