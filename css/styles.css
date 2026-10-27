@@ -192,13 +192,22 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 }
 .header-whatsapp {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  min-height: 40px; padding: 7px 12px; border: 1px solid #b9dfc7; border-radius: 999px;
-  background: #eaf7ee; color: #14783a; font-size: 12.5px; font-weight: 700;
+  min-height: 36px; padding: 6px 9px; border: 1px solid #b9dfc7; border-radius: 999px;
+  background: #eaf7ee; color: #14783a; font-size: 11.5px; font-weight: 700;
   white-space: nowrap; transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 .header-whatsapp svg { flex: 0 0 auto; }
 .header-whatsapp:hover { background: #25d366; border-color: #25d366; color: #fff; }
 .header-whatsapp:focus-visible { outline: 3px solid rgba(37, 211, 102, .3); outline-offset: 2px; }
+.header-instagram {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 6px 9px; border: 1px solid #e7c3d8; border-radius: 999px;
+  background: #fff4f8; color: #a42d72; font-size: 11.5px; font-weight: 700;
+  white-space: nowrap; transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.header-instagram svg { flex: 0 0 auto; }
+.header-instagram:hover { background: #b6387e; border-color: #b6387e; color: #fff; }
+.header-instagram:focus-visible { outline: 3px solid rgba(182, 56, 126, .25); outline-offset: 2px; }
 .hicon__badge {
   position: absolute; top: -1px; right: 3px;
   min-width: 17px; height: 17px; border-radius: 99px;
@@ -803,6 +812,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .pdp { grid-template-columns: minmax(320px, 380px) 1fr; }
 }
 @media (max-width: 1023px) {
+  .header-instagram { width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 8px; border-radius: 50%; }
+  .header-instagram__label { display: none; }
   .hero { grid-template-columns: 1fr; padding: 30px 26px; }
   .hero__cards { min-height: 240px; }
   .listing { grid-template-columns: 1fr; }
@@ -842,8 +853,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
      drop the duplicate header icons so search gets the space */
   .hactions > .hicon { display: none; }
   .hactions > .category-menu { display: block; }
-  .header-whatsapp { width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 8px; border-radius: 50%; }
+  .hactions { gap: 3px; }
+  .header-whatsapp, .header-instagram { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 7px; border-radius: 50%; }
   .header-whatsapp__label { display: none; }
+  .header-instagram__label { display: none; }
   .category-menu__toggle { gap: 4px; padding: 8px 7px; font-size: 11px; }
   .category-menu__toggle .lbl { display: inline; }
   .category-menu__panel { right: -42px; }
