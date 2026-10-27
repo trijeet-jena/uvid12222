@@ -571,6 +571,55 @@ async function stats(env) {
     revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
+const REVENUE_ORDER_FILTER = "status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')";
+function indiaDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+}
+function addCalendarDays(day, amount) {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+}
+function indiaDayStartUtc(day) {
+  return new Date(`${day}T00:00:00Z`).getTime() - 330 * 60 * 1000;
+}
+function sqlUtcDate(timestamp) {
+  return new Date(timestamp).toISOString().slice(0, 19).replace("T", " ");
+}
+async function revenueReport(env, requestedMonth) {
+  const todayParts = indiaDateParts();
+  const today = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+  const currentMonth = today.slice(0, 7);
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(requestedMonth || "")) ? requestedMonth : currentMonth;
+  const monthDate = new Date(`${month}-01T00:00:00Z`);
+  const firstDay = `${month}-01`;
+  const nextMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+  const todayUtc = indiaDayStartUtc(today);
+  const tomorrowUtc = indiaDayStartUtc(addCalendarDays(today, 1));
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const weekStart = addCalendarDays(today, -((weekday + 6) % 7));
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const currentMonthDate = new Date(`${currentMonth}-01T00:00:00Z`);
+  const currentNextMonth = new Date(Date.UTC(currentMonthDate.getUTCFullYear(), currentMonthDate.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+  const range = (day) => indiaDayStartUtc(day);
+  const totals = await env.DB.prepare(`SELECT
+      COALESCE(SUM(CASE WHEN created_at>=? AND created_at<? THEN total_amount ELSE 0 END),0) AS today,
+      COALESCE(SUM(CASE WHEN created_at>=? AND created_at<? THEN total_amount ELSE 0 END),0) AS week,
+      COALESCE(SUM(CASE WHEN created_at>=? AND created_at<? THEN total_amount ELSE 0 END),0) AS month,
+      COALESCE(SUM(CASE WHEN created_at>=? AND created_at<? THEN total_amount ELSE 0 END),0) AS year
+    FROM orders WHERE ${REVENUE_ORDER_FILTER}`)
+    .bind(sqlUtcDate(todayUtc), sqlUtcDate(tomorrowUtc), sqlUtcDate(range(weekStart)), sqlUtcDate(tomorrowUtc), sqlUtcDate(range(yearStart)), sqlUtcDate(tomorrowUtc), sqlUtcDate(range(`${currentMonth}-01`)), sqlUtcDate(range(currentNextMonth))).first();
+  const daily = (await env.DB.prepare(`SELECT date(created_at,'+5 hours','+30 minutes') AS day,COALESCE(SUM(total_amount),0) AS amount
+    FROM orders WHERE ${REVENUE_ORDER_FILTER} AND created_at>=? AND created_at<?
+    GROUP BY date(created_at,'+5 hours','+30 minutes') ORDER BY day`)
+    .bind(sqlUtcDate(range(firstDay)), sqlUtcDate(range(nextMonth))).all()).results || [];
+  return {
+    month, today, weekStart, year: today.slice(0, 4),
+    totals: { today: Number(totals?.today || 0), week: Number(totals?.week || 0), month: Number(totals?.month || 0), year: Number(totals?.year || 0) },
+    daily: daily.map((row) => ({ day: row.day, amount: Number(row.amount || 0) })),
+  };
+}
 async function orderList(env, customerId = null, status = null, includeCustomerDetails = false) {
   const customerColumns = includeCustomerDetails ? ",u.name AS customer_name,u.email AS customer_email,u.mobile_number AS customer_mobile_number" : "";
   const customerJoin = includeCustomerDetails ? " LEFT JOIN users u ON u.id=o.customer_id" : "";
@@ -907,6 +956,7 @@ async function handleApi(request, env, user, url) {
     return json({ok:true,url:`/uploads/${id}`},201);
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
+  if (path === "/api/admin/revenue" && method === "GET") return adminOnly || json({ report: await revenueReport(env, url.searchParams.get("month")) });
   if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"),true)});
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment-proof$/);
   if (match && method === "GET") {

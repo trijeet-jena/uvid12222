@@ -15,6 +15,7 @@
     box: svg('<path d="M21 8.5l-9-5-9 5v7l9 5 9-5v-7z"/><path d="M3 8.5l9 5 9-5"/><path d="M12 13.5v9"/>'),
     tag: svg('<path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2A2 2 0 013 12V5a2 2 0 012-2h7a2 2 0 011.4.6l7.2 7.2a2 2 0 010 2.6z"/><circle cx="7.8" cy="7.8" r="1.4"/>'),
     receipt: svg('<path d="M6 3h12v18l-3-1.8L12 21l-3-1.8L6 21V3z"/><path d="M9.5 8h5"/><path d="M9.5 12h5"/>'),
+    chart: svg('<path d="M4 19.5h16"/><path d="M6.5 16V10"/><path d="M12 16V5"/><path d="M17.5 16v-4"/>'),
     users: svg('<circle cx="9" cy="8" r="3.6"/><path d="M2.8 20a6.4 6.4 0 0112.4 0"/><path d="M16.2 5.2a3.6 3.6 0 010 6.9"/><path d="M17.6 14.6A6.4 6.4 0 0121.4 20"/>'),
     clip: svg('<path d="M8 4h8v3a4 4 0 01-8 0V4z"/><path d="M8 5.5H5.5A2.5 2.5 0 008 10h1"/><path d="M16 5.5h2.5A2.5 2.5 0 0116 10h-1"/><rect x="5" y="3.5" width="14" height="17.5" rx="2.6"/>'),
     down: svg('<path d="M12 3.5v12"/><path d="M7.5 11.5L12 16l4.5-4.5"/><path d="M4.5 20h15"/>'),
@@ -286,6 +287,9 @@
     products: [],
     categories: [],
     stats: null,
+    revenueReport: null,
+    revenueMonth: "",
+    revenueSelectedDay: "",
     orders: [],
     customers: [],
     filters: { q: "", cat: "", status: "live" },
@@ -394,7 +398,7 @@
   /* ---------------- router ---------------- */
   const TITLES = {
     dashboard: "Dashboard", products: "Product management", categories: "Categories",
-    orders: "Orders", customers: "Customers", settings: "Settings",
+    orders: "Orders", revenue: "Revenue reports", customers: "Customers", settings: "Settings",
     seminar: "Seminar",
   };
   function currentRoute() {
@@ -468,7 +472,7 @@
       const ae = document.activeElement;
       if (ae && content.contains(ae) && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
       const route = state.route;
-      if (!["dashboard", "products", "categories", "orders"].includes(route)) return;
+      if (!["dashboard", "products", "categories", "orders", "revenue"].includes(route)) return;
       try {
         const before = liveSnapshot(route);
         await loadState(route);
@@ -484,6 +488,7 @@
     if (route === "categories") return JSON.stringify(state.categories);
     if (route === "orders") return JSON.stringify(state.orders);
     if (route === "dashboard") return JSON.stringify(state.stats);
+    if (route === "revenue") return JSON.stringify(state.revenueReport);
     return "";
   }
 
@@ -498,6 +503,11 @@
       state.orders = o.orders;
     } else if (route === "dashboard") {
       const s = await api("GET", "/api/admin/stats"); state.stats = s.stats;
+    } else if (route === "revenue") {
+      const suffix = state.revenueMonth ? "?month=" + encodeURIComponent(state.revenueMonth) : "";
+      const result = await api("GET", "/api/admin/revenue" + suffix);
+      state.revenueReport = result.report;
+      state.revenueMonth = result.report.month;
     }
   }
 
@@ -571,6 +581,73 @@
   function statCard(ic, tone, val, label) {
     return '<div class="stat"><span class="stat__ic ' + (tone || "") + '">' + ICONS[ic] + "</span><div><b>" + esc(String(val)) + "</b><span>" + esc(label) + "</span></div></div>";
   }
+
+  /* ---------------- revenue report ---------------- */
+  function shiftMonth(month, amount) {
+    const d = new Date(month + "-01T00:00:00Z");
+    d.setUTCMonth(d.getUTCMonth() + amount);
+    return d.toISOString().slice(0, 7);
+  }
+  function revenueMonthLabel(month) {
+    return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-01T00:00:00Z"));
+  }
+  function revenueDateLabel(day) {
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(day + "T00:00:00Z"));
+  }
+  VIEWS.revenue = async function (stateReady) {
+    if (!stateReady || !state.revenueReport) {
+      content.innerHTML = loadingCard();
+      await loadState("revenue");
+    }
+    const report = state.revenueReport;
+    const [year, month] = report.month.split("-").map(Number);
+    const firstDow = (new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 6) % 7;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const daily = Object.create(null);
+    report.daily.forEach(function (item) { daily[item.day] = Number(item.amount || 0); });
+    const monthToday = report.today.slice(0, 7) === report.month;
+    if (!state.revenueSelectedDay || state.revenueSelectedDay.slice(0, 7) !== report.month) {
+      state.revenueSelectedDay = monthToday ? report.today : report.month + "-01";
+    }
+    const selectedAmount = Number(daily[state.revenueSelectedDay] || 0);
+    const cells = [];
+    for (let blank = 0; blank < firstDow; blank += 1) cells.push('<div class="revenue-day revenue-day--blank" aria-hidden="true"></div>');
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = report.month + "-" + String(day).padStart(2, "0");
+      const amount = Number(daily[date] || 0);
+      const classes = ["revenue-day", date === state.revenueSelectedDay ? "is-selected" : "", date === report.today ? "is-today" : "", amount > 0 ? "has-revenue" : ""].filter(Boolean).join(" ");
+      cells.push('<button type="button" class="' + classes + '" data-revenue-day="' + date + '" aria-pressed="' + (date === state.revenueSelectedDay) + '"><span class="revenue-day__number">' + day + '</span><span class="revenue-day__amount">' + money(amount) + "</span></button>");
+    }
+    content.innerHTML =
+      '<div class="page-head"><div><h3>Revenue reports</h3><p>Daily totals use India Standard Time (IST) and the dashboard’s existing rule: cancelled orders and unpaid UPI orders are excluded.</p></div></div>' +
+      '<div class="stats revenue-stats">' +
+      statCard("rupee", "amber", money(report.totals.today), "Today") +
+      statCard("rupee", "", money(report.totals.week), "This week · from Monday") +
+      statCard("rupee", "tang", money(report.totals.month), "This month") +
+      statCard("rupee", "", money(report.totals.year), "This year · year to date") +
+      "</div>" +
+      '<section class="panel revenue-calendar"><div class="panel__head"><div><h4>' + esc(revenueMonthLabel(report.month)) + '</h4><small>Each date shows its revenue total</small></div><div class="revenue-month-nav"><button type="button" class="btn btn--ghost btn--sm" id="revenuePrevMonth" aria-label="Previous month">←</button><button type="button" class="btn btn--ghost btn--sm" id="revenueNextMonth" aria-label="Next month"' + (report.month >= report.today.slice(0, 7) ? " disabled" : "") + '>→</button></div></div>' +
+      '<div class="revenue-calendar__scroll"><div class="revenue-calendar__grid revenue-calendar__weekdays">' + ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(function (d) { return "<span>" + d + "</span>"; }).join("") + "</div>" +
+      '<div class="revenue-calendar__grid">' + cells.join("") + "</div></div>" +
+      '<div class="revenue-selected"><span>Revenue on ' + esc(revenueDateLabel(state.revenueSelectedDay)) + '</span><b>' + money(selectedAmount) + "</b></div></section>";
+    $("#revenuePrevMonth").addEventListener("click", async function () {
+      state.revenueMonth = shiftMonth(report.month, -1);
+      state.revenueSelectedDay = state.revenueMonth + "-01";
+      await repaint(function () { return VIEWS.revenue(); });
+    });
+    $("#revenueNextMonth").addEventListener("click", async function () {
+      state.revenueMonth = shiftMonth(report.month, 1);
+      state.revenueSelectedDay = state.revenueMonth + "-01";
+      await repaint(function () { return VIEWS.revenue(); });
+    });
+    $$("[data-revenue-day]", content).forEach(function (button) {
+      button.addEventListener("click", function () {
+        state.revenueSelectedDay = button.dataset.revenueDay;
+        VIEWS.revenue(true);
+      });
+    });
+    renderIcons(content);
+  };
 
   /* ---------------- products ---------------- */
   VIEWS.products = async function (stateReady) {
