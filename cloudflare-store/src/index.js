@@ -465,7 +465,9 @@ async function addProductImage(env, productId, body) {
   if (!(await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(productId).first())) throw Object.assign(new Error("Product not found."), { status: 404 });
   const variant = clean(body.variantKey || body.variant || "", 100) || null;
   const { bytes, mime } = decodeImage(body.image || body.dataUri);
-  const storage = supabaseConfig(env);
+  let storage = null;
+  try { storage = supabaseConfig(env); }
+  catch (cause) { if (bytes.length > D1_IMAGE_LIMIT) throw cause; }
   if (!storage && bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Connect Supabase Storage to upload photos larger than 1.4 MB."), { status: 413 });
   const sha = await hashBytes(bytes);
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM product_images WHERE product_id=?").bind(productId).first();
@@ -473,8 +475,16 @@ async function addProductImage(env, productId, body) {
   const dupe = await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? AND COALESCE(i.variant_key,'')=COALESCE(?,'') AND i.sha256=?").bind(productId, variant, sha).first();
   if (dupe) return imageView(dupe, env);
   const order = await env.DB.prepare("SELECT COALESCE(MAX(sort_order),-1)+1 AS n FROM product_images WHERE product_id=?").bind(productId).first();
-  const storagePath = storage ? `products/${crypto.randomUUID()}.${mimeExtension(mime)}` : null;
-  const imageUrl = storage ? await uploadSupabaseObject(env, storagePath, bytes, mime) : null;
+  let storagePath = storage ? `products/${crypto.randomUUID()}.${mimeExtension(mime)}` : null;
+  let imageUrl = null;
+  if (storage) {
+    try { imageUrl = await uploadSupabaseObject(env, storagePath, bytes, mime); }
+    catch (cause) {
+      if (bytes.length > D1_IMAGE_LIMIT) throw cause;
+      storage = null;
+      storagePath = null;
+    }
+  }
   try {
     await env.DB.prepare("INSERT OR IGNORE INTO image_blobs (sha256,mime,byte_size,data) VALUES (?,?,?,?)")
       .bind(sha, mime, storage ? 0 : bytes.length, storage ? new Uint8Array(0) : bytes).run();
@@ -828,18 +838,24 @@ async function handleApi(request, env, user, url) {
   if (path === "/api/admin/upload" && method === "POST") {
     if (adminOnly) return adminOnly;
     const b = await readBody(); const { bytes, mime } = decodeImage(b.image); const id = crypto.randomUUID();
-    const storage = supabaseConfig(env);
+    let storage = null;
+    try { storage = supabaseConfig(env); }
+    catch (cause) { if (bytes.length > D1_IMAGE_LIMIT) throw cause; }
     if (storage) {
       const storagePath = `uploads/${id}.${mimeExtension(mime)}`;
-      const imageUrl = await uploadSupabaseObject(env, storagePath, bytes, mime);
-      try {
-        await env.DB.prepare("INSERT INTO uploaded_image_objects (id,storage_path,mime,byte_size) VALUES (?,?,?,?)")
-          .bind(id, storagePath, mime, bytes.length).run();
-      } catch (cause) {
-        await deleteSupabaseObject(env, storagePath).catch(() => {});
-        throw cause;
+      let imageUrl = null;
+      try { imageUrl = await uploadSupabaseObject(env, storagePath, bytes, mime); }
+      catch (cause) { if (bytes.length > D1_IMAGE_LIMIT) throw cause; }
+      if (imageUrl) {
+        try {
+          await env.DB.prepare("INSERT INTO uploaded_image_objects (id,storage_path,mime,byte_size) VALUES (?,?,?,?)")
+            .bind(id, storagePath, mime, bytes.length).run();
+        } catch (cause) {
+          await deleteSupabaseObject(env, storagePath).catch(() => {});
+          throw cause;
+        }
+        return json({ ok: true, url: imageUrl }, 201);
       }
-      return json({ ok: true, url: imageUrl }, 201);
     }
     if (bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Connect Supabase Storage to upload photos larger than 1.4 MB."), { status: 413 });
     await env.DB.prepare("INSERT INTO uploaded_images (id,mime,byte_size,data) VALUES (?,?,?,?)").bind(id,mime,bytes.length,bytes).run();

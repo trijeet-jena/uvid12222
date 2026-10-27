@@ -4212,6 +4212,53 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     for (var i = 0; i < next.length; i++) arr.push(next[i]);
   }
 
+  function fallbackProductImage(raw) {
+    var key = String((raw && raw.id) || "").toLowerCase() + " " + String((raw && raw.productName) || "").toLowerCase();
+    if (/metal[- ]stand/.test(key)) {
+      if (/xcc8b/.test(key)) return "/assets/display-stands/8-inch-black.jpeg";
+      if (/xcc8g/.test(key)) return "/assets/display-stands/8-inch-gold.jpeg";
+      if (/xcc10b/.test(key)) return "/assets/display-stands/10-inch-black.jpeg";
+      if (/xaa6s/.test(key)) return "/assets/display-stands/6-inch-silver.jpeg";
+      if (/xaa4b/.test(key)) return "/assets/display-stands/4-5-inch-black.jpeg";
+      if (/xaa4rg/.test(key)) return "/assets/display-stands/4-5-inch-rose-gold.jpeg";
+      if (/xcc4g|4inch/.test(key)) return "/assets/display-stands/4-inch-gold.jpeg";
+      if (/3-inch/.test(key) && /black|xcc3b/.test(key)) return "/assets/display-stands/3-inch-black.jpeg";
+      if (/3-inch/.test(key) && /gold|xcc3g/.test(key)) return "/assets/display-stands/3-inch-gold.jpeg";
+      if (/3-inch/.test(key) && /rose|xcc3rg/.test(key)) return "/assets/display-stands/3-inch-rose-gold.jpeg";
+    }
+    return PT.art((raw && raw.emoji) || "📦", (raw && raw.bg) || "#EEF2FF", (raw && raw.ink) || "#4C5BD4");
+  }
+
+  function productForImage(image) {
+    var link = image.closest ? image.closest('a[href*="#/p/"]') : null;
+    var href = link ? link.getAttribute("href") : "";
+    var match = href.match(/#\/p\/([^?#/]+)/);
+    var id = match ? decodeURIComponent(match[1]) : "";
+    if (!id && image.id === "pdpImg") {
+      match = String(location.hash || "").match(/#\/p\/([^?#/]+)/);
+      id = match ? decodeURIComponent(match[1]) : "";
+    }
+    if (id && PT.findProduct) return PT.findProduct(id);
+    var label = String(image.alt || "").trim().toLowerCase();
+    if (label) {
+      for (var i = 0; i < PT.PRODUCTS.length; i++) {
+        if (String(PT.PRODUCTS[i].name || "").trim().toLowerCase() === label) return PT.PRODUCTS[i];
+      }
+    }
+    return null;
+  }
+
+  /* When the hosted image store is unavailable, keep product tiles usable and
+     show a local photo where one is bundled, otherwise show the product art. */
+  document.addEventListener("error", function (event) {
+    var image = event.target;
+    if (!image || image.tagName !== "IMG" || image.dataset.uvidFallbackUsed) return;
+    if (!image.closest || !image.closest(".pcard, .pdp__imgwrap, .cline__img, .mini, .sd, .mould-showcase__item")) return;
+    image.dataset.uvidFallbackUsed = "true";
+    var product = productForImage(image);
+    image.src = product && product.fallbackImg ? product.fallbackImg : PT.art("📦", "#F1EEE5", "#807968");
+  }, true);
+
   /* map one API product (server publicView) into the storefront shape */
   function toProduct(raw) {
     var price = Number(raw.price) || 0;
@@ -4229,6 +4276,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       : [];
     var img = raw.imageUrl || (gallery[0] && gallery[0].url) ||
       (PT.art ? PT.art(raw.emoji || "📦", raw.bg || "#EEF2FF", raw.ink || "#4C5BD4") : BLANK_IMG);
+    var fallbackImg = fallbackProductImage(raw);
 
     return {
       id: raw.id,
@@ -4250,6 +4298,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       parent: raw.parent || null,
       variantLabel: raw.variantLabel || null,
       img: img,
+      fallbackImg: fallbackImg,
       thumb: img,
       images: gallery,
       discount: discount,
