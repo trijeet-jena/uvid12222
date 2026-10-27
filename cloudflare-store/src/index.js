@@ -3,6 +3,7 @@
  */
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
+import { GOLD_STAND_NEUTRAL } from "./display-stand-fallbacks.js";
 
 const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
@@ -276,6 +277,9 @@ function unavailableSupabaseImage(value) {
 function fallbackProductImage(row, meta = parseMeta(row)) {
   const key = `${row.id || ""} ${row.product_name || row.productName || ""}`.toLowerCase();
   if (/metal[- ]stand/.test(key)) {
+    const codes = key.match(/x(?:cc|aa)\d{1,2}[a-z]{1,2}/g) || [];
+    const code = codes[codes.length - 1] || "";
+    if (code === "xcc12g" || code === "xcc10g") return GOLD_STAND_NEUTRAL;
     if (/xcc8b/.test(key)) return "/assets/display-stands/8-inch-black.jpeg";
     if (/xcc8g/.test(key)) return "/assets/display-stands/8-inch-gold.jpeg";
     if (/xcc10b/.test(key)) return "/assets/display-stands/10-inch-black.jpeg";
