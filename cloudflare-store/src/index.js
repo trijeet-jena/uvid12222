@@ -270,6 +270,34 @@ function versionedImageUrl(value) {
   if (/^\/uploads\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url)) return `${url.split("?")[0]}?v=2`;
   return value;
 }
+function unavailableSupabaseImage(value) {
+  return String(value || "").toLowerCase().includes("npykircmrlooyliztfwg.supabase.co");
+}
+function fallbackProductImage(row, meta = parseMeta(row)) {
+  const key = `${row.id || ""} ${row.product_name || row.productName || ""}`.toLowerCase();
+  if (/metal[- ]stand/.test(key)) {
+    if (/xcc8b/.test(key)) return "/assets/display-stands/8-inch-black.jpeg";
+    if (/xcc8g/.test(key)) return "/assets/display-stands/8-inch-gold.jpeg";
+    if (/xcc10b/.test(key)) return "/assets/display-stands/10-inch-black.jpeg";
+    if (/xaa6s/.test(key)) return "/assets/display-stands/6-inch-silver.jpeg";
+    if (/xaa4b/.test(key)) return "/assets/display-stands/4-5-inch-black.jpeg";
+    if (/xaa4rg/.test(key)) return "/assets/display-stands/4-5-inch-rose-gold.jpeg";
+    if (/xcc4g|4inch/.test(key)) return "/assets/display-stands/4-inch-gold.jpeg";
+    if (/3-inch/.test(key) && /black|xcc3b/.test(key)) return "/assets/display-stands/3-inch-black.jpeg";
+    if (/3-inch/.test(key) && /gold|xcc3g/.test(key)) return "/assets/display-stands/3-inch-gold.jpeg";
+    if (/3-inch/.test(key) && /rose|xcc3rg/.test(key)) return "/assets/display-stands/3-inch-rose-gold.jpeg";
+  }
+  const bg = /^#[0-9a-f]{3,8}$/i.test(meta.bg || "") ? meta.bg : "#F1EEE5";
+  const ink = /^#[0-9a-f]{3,8}$/i.test(meta.ink || "") ? meta.ink : "#807968";
+  const emoji = escapeHtml(clean(row.emoji, 8) || "📦");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640"><rect width="640" height="640" fill="${bg}"/><circle cx="320" cy="310" r="190" fill="#fff" fill-opacity=".62"/><text x="320" y="390" font-size="220" text-anchor="middle" fill="${ink}">${emoji}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+function resolvedProductImage(row, meta = parseMeta(row)) {
+  return unavailableSupabaseImage(row.image_url ?? row.imageUrl)
+    ? fallbackProductImage(row, meta)
+    : versionedImageUrl(row.image_url ?? row.imageUrl);
+}
 function imageView(row, env) {
   return { id: row.id, productId: row.product_id, variantKey: row.variant_key || null,
     url: row.storage_path ? supabaseObjectUrl(env, row.storage_path) : `/api/images/${row.id}?v=2`, mime: row.mime, byteSize: row.byte_size,
@@ -279,11 +307,23 @@ function productView(row, images = [], env) {
   const meta = parseMeta(row);
   const variants = parseJson(row.variants_json, null);
   const variantStock = Array.isArray(variants) ? variants.reduce((n, v) => n + (Number(v.stock) || 0), 0) : null;
+  const imageUrl = resolvedProductImage(row, meta);
+  const productImages = images.map((image) => {
+    const view = imageView(image, env);
+    if (unavailableSupabaseImage(view.url)) view.url = imageUrl;
+    return view;
+  });
+  const safeVariants = Array.isArray(variants) ? variants.map((variant) => {
+    const copy = { ...variant };
+    if (unavailableSupabaseImage(copy.imageUrl)) copy.imageUrl = imageUrl;
+    if (unavailableSupabaseImage(copy.img)) copy.img = imageUrl;
+    return copy;
+  }) : undefined;
   return {
     id: row.id, productName: row.product_name, category: row.category, description: row.description,
     price: row.price, mrp: row.mrp, stockQuantity: row.stock_quantity,
-    imageUrl: versionedImageUrl(row.image_url), images: images.map((image) => imageView(image, env)), emoji: row.emoji || null,
-    variantLabel: row.variant_label || null, variants: Array.isArray(variants) ? variants : undefined,
+    imageUrl, images: productImages, emoji: row.emoji || null,
+    variantLabel: row.variant_label || null, variants: safeVariants,
     status: row.status, inStock: row.status !== "OUT_OF_STOCK" && (variantStock === null ? row.stock_quantity > 0 : variantStock > 0),
     createdAt: row.created_at, updatedAt: row.updated_at,
     brand: meta.brand || null, rating: meta.rating ?? null, ratingCount: meta.ratingCount || 0,
@@ -516,7 +556,8 @@ async function stats(env) {
   const q = async (sql) => Number((await env.DB.prepare(sql).first())?.n || 0);
   const products = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED'");
   const outOfStock = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED' AND (status='OUT_OF_STOCK' OR stock_quantity=0)");
-  const recentProducts = (await env.DB.prepare("SELECT id,product_name,category,price,stock_quantity,status,image_url,updated_at FROM products WHERE status!='ARCHIVED' ORDER BY updated_at DESC,created_at DESC LIMIT 6").all()).results || [];
+  const recentProducts = (await env.DB.prepare("SELECT id,product_name,category,price,stock_quantity,status,image_url,updated_at,emoji,meta_json FROM products WHERE status!='ARCHIVED' ORDER BY updated_at DESC,created_at DESC LIMIT 6").all()).results || [];
+  for (const product of recentProducts) product.imageUrl = resolvedProductImage(product);
   const recentOrders = (await env.DB.prepare("SELECT o.id,o.total_amount,o.status,o.created_at,u.name AS customerName,u.mobile_number FROM orders o LEFT JOIN users u ON u.id=o.customer_id ORDER BY o.created_at DESC LIMIT 6").all()).results || [];
   return { products, inStock: products - outOfStock, outOfStock,
     lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'"),
