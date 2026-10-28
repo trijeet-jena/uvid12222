@@ -333,7 +333,7 @@ async function categories(env) {
        (SELECT COUNT(*) FROM products p WHERE p.status!='ARCHIVED' AND
          (p.category=c.slug OR p.category IN (SELECT child.slug FROM categories child WHERE child.parent_slug=c.slug))) AS count
      FROM categories c ORDER BY CASE WHEN c.parent_slug IS NULL THEN 0 ELSE 1 END,c.sort_order,c.name`).all()).results || [];
-  if (rows.length) return rows;
+  if (rows.length) return rows.map((row) => ({ ...row, image_url: resolvedProductImage(row, env) }));
   return (await env.DB.prepare("SELECT category AS slug,category AS name,COUNT(*) AS count FROM products WHERE status!='ARCHIVED' AND category!='uncategorized' GROUP BY category ORDER BY category").all()).results || [];
 }
 const slugify = (s) => clean(s, 120).toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "product";
@@ -602,7 +602,10 @@ async function orderList(env, customerId = null, status = null, includeCustomerD
   const ids = orders.map((o) => o.id);
   const rows = (await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(() => "?").join(",")}) ORDER BY id`).bind(...ids).all()).results || [];
   const byOrder = new Map(); for (const row of rows) { const a = byOrder.get(row.order_id) || []; a.push(row); byOrder.set(row.order_id, a); }
-  return orders.map((o) => ({ ...o, items: byOrder.get(o.id) || [] }));
+  return orders.map((o) => ({ ...o, items: (byOrder.get(o.id) || []).map((item) => ({
+    ...item,
+    image_url: resolvedProductImage({ image_url: item.image_url }, env),
+  })) }));
 }
 function validPushEndpoint(value) {
   try {
@@ -693,7 +696,7 @@ async function placeOrder(env, user, body) {
   const id = "UVID" + String(orderNumber).padStart(3, "0");
   return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({
     ...orderItemCodes(l.p.meta_json, l.p.variant_label, l.p.id),
-    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:l.p.image_url,
+    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:resolvedProductImage(l.p,env),
   })) };
 }
 
@@ -917,7 +920,7 @@ async function handleApi(request, env, user, url) {
           await deleteSupabaseObject(env, storagePath).catch(() => {});
           throw cause;
         }
-        return json({ ok: true, url: imageUrl }, 201);
+        return json({ ok: true, url: `/uploads/${id}?v=3` }, 201);
       }
     }
     if (bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Connect Supabase Storage to upload photos larger than 1.4 MB."), { status: 413 });
