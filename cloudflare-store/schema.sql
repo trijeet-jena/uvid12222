@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
 
+CREATE TABLE IF NOT EXISTS code_product_overrides (
+  product_id TEXT PRIMARY KEY,
+  price REAL NOT NULL CHECK (price >= 0),
+  stock_quantity INTEGER NOT NULL CHECK (stock_quantity >= 0),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   slug TEXT NOT NULL UNIQUE,

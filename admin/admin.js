@@ -711,18 +711,21 @@
       const k = kids(p);
       const stock = effStock(p);
       const off = p.mrp != null && p.mrp > p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0;
+      const actions = p.codeManaged
+        ? '<button class="btn btn--ghost btn--sm" data-act="edit" data-id="' + esc(p.id) + '">Edit</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="stock" data-id="' + esc(p.id) + '">Stock</button>' +
+          '<span class="badge badge--grey" title="Product details and photos are maintained in the site code">Code</span>'
+        : '<button class="btn btn--ghost btn--sm" data-act="edit" data-id="' + esc(p.id) + '">Edit</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="stock" data-id="' + esc(p.id) + '">Stock</button>' +
+          '<button class="btn btn--ghost btn--sm" data-act="toggle" data-id="' + esc(p.id) + '">' + (p.status === "ARCHIVED" ? "Activate" : "Deactivate") + "</button>" +
+          '<button class="btn btn--ghost btn--sm" data-act="del" data-id="' + esc(p.id) + '" style="color:var(--red)">Delete</button>';
       return "<tr>" +
-        '<td><div class="pcell">' + pImg(p) + "<div><b>" + esc(p.productName) + "</b><small>" + esc(p.id) + (k.length ? " · " + k.length + " variants" : "") + "</small></div></div></td>" +
+        '<td><div class="pcell">' + pImg(p) + "<div><b>" + esc(p.productName) + "</b><small>" + esc(p.id) + (p.codeManaged ? " · Code-managed" : k.length ? " · " + k.length + " variants" : "") + "</small></div></div></td>" +
         "<td>" + esc(categoryLabel(p.category)) + "</td>" +
         '<td class="num"><b>' + money(p.price) + "</b>" + (off ? ' <s style="color:var(--muted);font-size:12.5px">' + money(p.mrp) + "</s> <small style=\"color:var(--tang)\">-" + off + "%</small>" : "") + "</td>" +
         '<td class="num">' + stock + "</td>" +
         "<td>" + pBadge(p) + "</td>" +
-        '<td><div class="row-actions">' +
-        '<button class="btn btn--ghost btn--sm" data-act="edit" data-id="' + esc(p.id) + '">Edit</button>' +
-        '<button class="btn btn--ghost btn--sm" data-act="stock" data-id="' + esc(p.id) + '">Stock</button>' +
-        '<button class="btn btn--ghost btn--sm" data-act="toggle" data-id="' + esc(p.id) + '">' + (p.status === "ARCHIVED" ? "Activate" : "Deactivate") + "</button>" +
-        '<button class="btn btn--ghost btn--sm" data-act="del" data-id="' + esc(p.id) + '" style="color:var(--red)">Delete</button>' +
-        "</div></td></tr>";
+        '<td><div class="row-actions">' + actions + "</div></td></tr>";
     }).join("");
   }
 
@@ -732,7 +735,7 @@
     const p = state.products.find(function (x) { return x.id === btn.dataset.id; });
     if (!p) return;
     try {
-      if (btn.dataset.act === "edit") openProductModal(p);
+      if (btn.dataset.act === "edit") p.codeManaged ? openCodeProductModal(p) : openProductModal(p);
       else if (btn.dataset.act === "stock") openStockModal(p);
       else if (btn.dataset.act === "toggle") {
         if (p.status === "ARCHIVED") {
@@ -757,6 +760,31 @@
       }
     } catch (ex) { toast(ex.message, false); }
   });
+
+  function openCodeProductModal(p) {
+    const back = openModal(
+      '<div class="modal__head"><h3>Edit code-managed product</h3><button class="iconbtn" data-close aria-label="Close">' + ICONS.x + "</button></div>" +
+      '<form id="codeProductForm"><div class="modal__body">' +
+      '<div class="pcell" style="margin-bottom:16px">' + pImg(p, 64) + '<div><b>' + esc(p.productName) + '</b><small>' + esc(categoryLabel(p.category)) + ' · Details and photo are maintained in the site code</small></div></div>' +
+      '<div class="form-grid"><label class="fld"><span>Product price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required></label>' +
+      '<label class="fld"><span>Available stock</span><input id="codeStock" type="number" min="0" step="1" value="' + esc(p.stockQuantity) + '" required></label></div>' +
+      '<p class="form-error" id="codeProductErr" hidden></p></div>' +
+      '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-close>Cancel</button><button type="submit" class="btn btn--primary" id="codeProductSave">Save changes</button></div></form>'
+    );
+    $("#codeProductForm", back).addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const err = $("#codeProductErr", back); err.hidden = true;
+      const price = Number($("#codePrice", back).value);
+      const stockQuantity = Number($("#codeStock", back).value);
+      if (!Number.isFinite(price) || price < 0) { err.textContent = "Enter a valid product price."; err.hidden = false; return; }
+      if (!Number.isInteger(stockQuantity) || stockQuantity < 0) { err.textContent = "Stock must be a whole number 0 or higher."; err.hidden = false; return; }
+      const undo = busy($("#codeProductSave", back), "Saving…");
+      try {
+        await api("PUT", "/api/admin/products/" + encodeURIComponent(p.id), { price: price, stockQuantity: stockQuantity });
+        undo(); closeModal(); toast("Price and stock saved", true); await repaint(VIEWS.products);
+      } catch (ex) { undo(); err.textContent = ex.message || "Could not save the product."; err.hidden = false; }
+    });
+  }
 
   /* stock quick modal */
   function openStockModal(p) {

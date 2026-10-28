@@ -310,38 +310,60 @@ function productView(row, images = [], env) {
     bg: meta.bg || null, ink: meta.ink || null, parent: meta.parent || null,
   };
 }
-async function codeProductStockMap(env, ids = CODE_PRODUCTS.map((product) => product.id)) {
+async function codeProductStateMap(env, ids = CODE_PRODUCTS.map((product) => product.id)) {
   const selected = ids.filter((id) => CODE_PRODUCT_BY_ID.has(id));
   if (!selected.length) return new Map();
-  const soldRows = (await env.DB.prepare(`
+  const [soldResult, overrideResult] = await Promise.all([
+    env.DB.prepare(`
     SELECT oi.product_id,COALESCE(SUM(oi.quantity),0) AS sold
     FROM order_items oi JOIN orders o ON o.id=oi.order_id
     WHERE oi.product_id IN (${selected.map(() => "?").join(",")}) AND o.status!='CANCELLED'
     GROUP BY oi.product_id
-  `).bind(...selected).all()).results || [];
+  `).bind(...selected).all(),
+    env.DB.prepare(`SELECT product_id,price,stock_quantity FROM code_product_overrides WHERE product_id IN (${selected.map(() => "?").join(",")})`).bind(...selected).all(),
+  ]);
+  const soldRows = soldResult.results || [];
+  const overrideRows = overrideResult.results || [];
   const soldById = new Map(soldRows.map((row) => [row.product_id, Number(row.sold) || 0]));
-  return new Map(selected.map((id) => [id, Math.max(0, Number(CODE_PRODUCT_BY_ID.get(id).stockQuantity) - (soldById.get(id) || 0))]));
+  const overrideById = new Map(overrideRows.map((row) => [row.product_id, row]));
+  return new Map(selected.map((id) => {
+    const product = CODE_PRODUCT_BY_ID.get(id);
+    const override = overrideById.get(id);
+    const sold = soldById.get(id) || 0;
+    const stockBase = override?.stock_quantity == null ? Number(product.stockQuantity) : Number(override.stock_quantity);
+    return [id, {
+      price: override?.price == null ? Number(product.price) : Number(override.price),
+      stockQuantity: Math.max(0, stockBase - sold),
+      sold,
+    }];
+  }));
 }
-function codeProductView(product, stockQuantity) {
+function codeProductView(product, state, admin = false) {
+  const stockQuantity = Number(state?.stockQuantity) || 0;
+  const price = Number(state?.price ?? product.price);
   return {
     ...product,
+    price,
+    mrp: Math.max(Number(product.mrp) || price, price),
     stockQuantity,
     status: stockQuantity > 0 ? "ACTIVE" : "OUT_OF_STOCK",
     inStock: stockQuantity > 0,
+    ...(admin ? { codeManaged: true } : {}),
     variantLabel: null,
     variants: undefined,
     createdAt: null,
     updatedAt: null,
   };
 }
-function codeProductOrderRow(product, stockQuantity) {
+function codeProductOrderRow(product, state) {
+  const stockQuantity = Number(state?.stockQuantity) || 0;
   return {
     id: product.id,
     product_name: product.productName,
     category: product.category,
     description: product.description,
-    price: product.price,
-    mrp: product.mrp,
+    price: Number(state?.price ?? product.price),
+    mrp: Math.max(Number(product.mrp) || product.price, Number(state?.price ?? product.price)),
     stock_quantity: stockQuantity,
     image_url: product.imageUrl,
     emoji: product.emoji,
@@ -358,13 +380,38 @@ function codeProductOrderRow(product, stockQuantity) {
     codeManaged: true,
   };
 }
+async function updateCodeProduct(env, product, body, field = null) {
+  const allowed = field === "stock" ? ["stockQuantity"] : field === "price" ? ["price"] : ["price", "stockQuantity"];
+  if (Object.keys(body || {}).some((key) => !allowed.includes(key))) {
+    throw Object.assign(new Error("Code-managed products allow price and stock edits here; names, photos, and category stay in the site code."), { status: 400 });
+  }
+  const state = (await codeProductStateMap(env, [product.id])).get(product.id);
+  let price = Number(state?.price ?? product.price);
+  let available = Number(state?.stockQuantity ?? product.stockQuantity);
+  if (body.price !== undefined) {
+    const next = Number(body.price);
+    if (!Number.isFinite(next) || next < 0 || next > 10000000) throw Object.assign(new Error("Enter a valid product price."), { status: 400 });
+    price = Math.round(next * 100) / 100;
+  }
+  if (body.stockQuantity !== undefined) {
+    const next = Number(body.stockQuantity);
+    if (!Number.isInteger(next) || next < 0 || next > 1000000) throw Object.assign(new Error("Stock must be a whole number 0 or higher."), { status: 400 });
+    available = next;
+  }
+  const stockBaseline = available + Number(state?.sold || 0);
+  await env.DB.prepare(`
+    INSERT INTO code_product_overrides (product_id,price,stock_quantity,updated_at) VALUES (?,?,?,?)
+    ON CONFLICT(product_id) DO UPDATE SET price=excluded.price,stock_quantity=excluded.stock_quantity,updated_at=excluded.updated_at
+  `).bind(product.id, price, stockBaseline, now()).run();
+  return codeProductView(product, { price, stockQuantity: available }, true);
+}
 async function productRows(env, admin = false) {
   const sql = admin ? "SELECT * FROM products ORDER BY sort_order, product_name" : "SELECT * FROM products WHERE status IN ('ACTIVE','OUT_OF_STOCK') ORDER BY sort_order, product_name";
   const rows = (await env.DB.prepare(sql).all()).results || [];
   if (!rows.length) {
-    if (admin || !CODE_PRODUCTS.length) return [];
-    const stockById = await codeProductStockMap(env);
-    return CODE_PRODUCTS.map((product) => codeProductView(product, stockById.get(product.id) || 0));
+    if (!CODE_PRODUCTS.length) return [];
+    const stateById = await codeProductStateMap(env);
+    return CODE_PRODUCTS.map((product) => codeProductView(product, stateById.get(product.id), admin));
   }
   const ids = rows.map((r) => r.id);
   // D1 allows at most 100 bound parameters per query. Admin lists include
@@ -383,9 +430,9 @@ async function productRows(env, admin = false) {
     arr.push(im); byProduct.set(im.product_id, arr);
   }
   const products = rows.map((r) => productView(r, byProduct.get(r.id) || [], env));
-  if (admin || !CODE_PRODUCTS.length) return products;
-  const stockById = await codeProductStockMap(env);
-  return products.concat(CODE_PRODUCTS.map((product) => codeProductView(product, stockById.get(product.id) || 0)));
+  if (!CODE_PRODUCTS.length) return products;
+  const stateById = await codeProductStateMap(env);
+  return products.concat(CODE_PRODUCTS.map((product) => codeProductView(product, stateById.get(product.id), admin)));
 }
 async function categories(env) {
   const rows = (await env.DB.prepare(
@@ -409,7 +456,7 @@ const slugify = (s) => clean(s, 120).toLowerCase().replace(/[^a-z0-9\u0900-\u097
 async function uniqueProductId(env, base) {
   const cleanBase = String(base || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "product";
   let id = cleanBase, n = 2;
-  while (await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first()) id = `${cleanBase}-${n++}`;
+  while (CODE_PRODUCT_BY_ID.has(id) || await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first()) id = `${cleanBase}-${n++}`;
   return id;
 }
 function productInput(body, partial = false) {
@@ -457,8 +504,8 @@ async function getProduct(env, id) {
   if (!row) {
     const codeProduct = CODE_PRODUCT_BY_ID.get(id);
     if (!codeProduct) return null;
-    const stockById = await codeProductStockMap(env, [id]);
-    return codeProductView(codeProduct, stockById.get(id) || 0);
+    const stateById = await codeProductStateMap(env, [id]);
+    return codeProductView(codeProduct, stateById.get(id));
   }
   if (row.status === "ARCHIVED") return null;
   const images = (await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? ORDER BY i.sort_order,i.id").bind(id).all()).results || [];
@@ -601,13 +648,17 @@ async function updatePrimary(env, id) {
 }
 async function stats(env) {
   const q = async (sql) => Number((await env.DB.prepare(sql).first())?.n || 0);
-  const products = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED'");
-  const outOfStock = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED' AND (status='OUT_OF_STOCK' OR stock_quantity=0)");
+  const databaseProducts = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED'");
+  const databaseOutOfStock = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED' AND (status='OUT_OF_STOCK' OR stock_quantity=0)");
+  const codeState = await codeProductStateMap(env);
+  const codeOutOfStock = CODE_PRODUCTS.filter((product) => (codeState.get(product.id)?.stockQuantity || 0) <= 0).length;
+  const products = databaseProducts + CODE_PRODUCTS.length;
+  const outOfStock = databaseOutOfStock + codeOutOfStock;
   const recentProducts = (await env.DB.prepare("SELECT id,product_name,category,price,stock_quantity,status,image_url,updated_at,emoji,meta_json FROM products WHERE status!='ARCHIVED' ORDER BY updated_at DESC,created_at DESC LIMIT 6").all()).results || [];
   for (const product of recentProducts) product.imageUrl = resolvedProductImage(product, env);
   const recentOrders = (await env.DB.prepare("SELECT o.id,o.total_amount,o.status,o.created_at,u.name AS customerName,u.mobile_number FROM orders o LEFT JOIN users u ON u.id=o.customer_id ORDER BY o.created_at DESC LIMIT 6").all()).results || [];
   return { products, inStock: products - outOfStock, outOfStock,
-    lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'"),
+    lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'") + CODE_PRODUCTS.filter((product) => { const n = codeState.get(product.id)?.stockQuantity || 0; return n > 0 && n <= 5; }).length,
     inactive: await q("SELECT COUNT(*) n FROM products WHERE status='ARCHIVED'"),
     orders: await q("SELECT COUNT(*) n FROM orders"),
     openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('AWAITING_PAYMENT','PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
@@ -744,11 +795,11 @@ async function placeOrder(env, user, body) {
   }
   const products = (await env.DB.prepare(`SELECT * FROM products WHERE id IN (${[...wants.keys()].map(() => "?").join(",")})`).bind(...wants.keys()).all()).results || [];
   const byId = new Map(products.map((p) => [p.id,p]));
-  const codeStockById = await codeProductStockMap(env, [...wants.keys()]);
+  const codeStockById = await codeProductStateMap(env, [...wants.keys()]);
   let subtotal = 0; const lines = [];
   for (const [id, qty] of wants) {
     let p = byId.get(id);
-    if (!p && CODE_PRODUCT_BY_ID.has(id)) p = codeProductOrderRow(CODE_PRODUCT_BY_ID.get(id), codeStockById.get(id) || 0);
+    if (!p && CODE_PRODUCT_BY_ID.has(id)) p = codeProductOrderRow(CODE_PRODUCT_BY_ID.get(id), codeStockById.get(id));
     if (!p || p.status === "ARCHIVED") throw Object.assign(new Error("A cart item is no longer available."), { status: 409 });
     if (p.status === "OUT_OF_STOCK" || p.stock_quantity < qty) throw Object.assign(new Error(`${p.product_name} does not have enough stock.`), { status: 409 });
     subtotal += p.price * qty; lines.push({ p, qty });
@@ -934,10 +985,17 @@ async function handleApi(request, env, user, url) {
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly; const id = decodeURIComponent(match[1]); const b=await readBody();
     const update = match[2] === "stock" ? {stockQuantity:b.stockQuantity} : match[2] === "price" ? {price:b.price} : b;
+    const codeProduct = CODE_PRODUCT_BY_ID.get(id);
+    if (codeProduct) {
+      const product = await updateCodeProduct(env, codeProduct, update, match[2]);
+      await audit(env,request,user,"product.update",id,{fields:Object.keys(update),source:"code-managed"});
+      return json({ok:true,product});
+    }
     const p=await updateProduct(env,id,update); await audit(env,request,user,"product.update",id,{fields:Object.keys(update)}); return json({ok:true,product:p});
   }
   if (match && method === "DELETE" && !match[2]) {
     if (adminOnly) return adminOnly; const id=decodeURIComponent(match[1]);
+    if (CODE_PRODUCT_BY_ID.has(id)) return error("This code-managed product cannot be deleted from the admin panel.",409);
     const sold=await env.DB.prepare("SELECT COUNT(*) AS n FROM order_items WHERE product_id=?").bind(id).first();
     const exists = await env.DB.prepare("SELECT id FROM products WHERE id=?").bind(id).first();
     if (!exists) return error("Product not found.",404);
