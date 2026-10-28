@@ -1,8 +1,13 @@
 /* UVID Store API on Cloudflare Workers + D1.
- * Catalog data stays in D1; product image files are stored in Supabase Storage.
+ * Admin catalog data stays in D1; source-managed catalog items ship with this Worker.
+ * Uploaded product image files are stored in Supabase Storage.
  */
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
+import "./code-products.js";
+
+const CODE_PRODUCTS = globalThis.UVID_CODE_PRODUCTS || [];
+const CODE_PRODUCT_BY_ID = new Map(CODE_PRODUCTS.map((product) => [product.id, product]));
 
 const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
@@ -305,10 +310,62 @@ function productView(row, images = [], env) {
     bg: meta.bg || null, ink: meta.ink || null, parent: meta.parent || null,
   };
 }
+async function codeProductStockMap(env, ids = CODE_PRODUCTS.map((product) => product.id)) {
+  const selected = ids.filter((id) => CODE_PRODUCT_BY_ID.has(id));
+  if (!selected.length) return new Map();
+  const soldRows = (await env.DB.prepare(`
+    SELECT oi.product_id,COALESCE(SUM(oi.quantity),0) AS sold
+    FROM order_items oi JOIN orders o ON o.id=oi.order_id
+    WHERE oi.product_id IN (${selected.map(() => "?").join(",")}) AND o.status!='CANCELLED'
+    GROUP BY oi.product_id
+  `).bind(...selected).all()).results || [];
+  const soldById = new Map(soldRows.map((row) => [row.product_id, Number(row.sold) || 0]));
+  return new Map(selected.map((id) => [id, Math.max(0, Number(CODE_PRODUCT_BY_ID.get(id).stockQuantity) - (soldById.get(id) || 0))]));
+}
+function codeProductView(product, stockQuantity) {
+  return {
+    ...product,
+    stockQuantity,
+    status: stockQuantity > 0 ? "ACTIVE" : "OUT_OF_STOCK",
+    inStock: stockQuantity > 0,
+    variantLabel: null,
+    variants: undefined,
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+function codeProductOrderRow(product, stockQuantity) {
+  return {
+    id: product.id,
+    product_name: product.productName,
+    category: product.category,
+    description: product.description,
+    price: product.price,
+    mrp: product.mrp,
+    stock_quantity: stockQuantity,
+    image_url: product.imageUrl,
+    emoji: product.emoji,
+    variant_label: null,
+    status: stockQuantity > 0 ? "ACTIVE" : "OUT_OF_STOCK",
+    meta_json: JSON.stringify({
+      brand: product.brand,
+      highlights: product.highlights,
+      specs: product.specs,
+      tags: product.tags,
+      rating: null,
+      ratingCount: 0,
+    }),
+    codeManaged: true,
+  };
+}
 async function productRows(env, admin = false) {
   const sql = admin ? "SELECT * FROM products ORDER BY sort_order, product_name" : "SELECT * FROM products WHERE status IN ('ACTIVE','OUT_OF_STOCK') ORDER BY sort_order, product_name";
   const rows = (await env.DB.prepare(sql).all()).results || [];
-  if (!rows.length) return [];
+  if (!rows.length) {
+    if (admin || !CODE_PRODUCTS.length) return [];
+    const stockById = await codeProductStockMap(env);
+    return CODE_PRODUCTS.map((product) => codeProductView(product, stockById.get(product.id) || 0));
+  }
   const ids = rows.map((r) => r.id);
   // D1 allows at most 100 bound parameters per query. Admin lists include
   // archived products too, so keep this lookup below that limit as the
@@ -325,7 +382,10 @@ async function productRows(env, admin = false) {
     const arr = byProduct.get(im.product_id) || [];
     arr.push(im); byProduct.set(im.product_id, arr);
   }
-  return rows.map((r) => productView(r, byProduct.get(r.id) || [], env));
+  const products = rows.map((r) => productView(r, byProduct.get(r.id) || [], env));
+  if (admin || !CODE_PRODUCTS.length) return products;
+  const stockById = await codeProductStockMap(env);
+  return products.concat(CODE_PRODUCTS.map((product) => codeProductView(product, stockById.get(product.id) || 0)));
 }
 async function categories(env) {
   const rows = (await env.DB.prepare(
@@ -333,7 +393,15 @@ async function categories(env) {
        (SELECT COUNT(*) FROM products p WHERE p.status!='ARCHIVED' AND
          (p.category=c.slug OR p.category IN (SELECT child.slug FROM categories child WHERE child.parent_slug=c.slug))) AS count
      FROM categories c ORDER BY CASE WHEN c.parent_slug IS NULL THEN 0 ELSE 1 END,c.sort_order,c.name`).all()).results || [];
-  if (rows.length) return rows.map((row) => ({ ...row, image_url: resolvedProductImage(row, env) }));
+  if (rows.length) {
+    const codeCounts = new Map();
+    for (const product of CODE_PRODUCTS) codeCounts.set(product.category, (codeCounts.get(product.category) || 0) + 1);
+    return rows.map((row) => ({
+      ...row,
+      image_url: resolvedProductImage(row, env),
+      count: Number(row.count || 0) + (codeCounts.get(row.slug) || 0),
+    }));
+  }
   return (await env.DB.prepare("SELECT category AS slug,category AS name,COUNT(*) AS count FROM products WHERE status!='ARCHIVED' AND category!='uncategorized' GROUP BY category ORDER BY category").all()).results || [];
 }
 const slugify = (s) => clean(s, 120).toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "product";
@@ -386,7 +454,13 @@ function productInput(body, partial = false) {
 }
 async function getProduct(env, id) {
   const row = await env.DB.prepare("SELECT * FROM products WHERE id=?").bind(id).first();
-  if (!row || row.status === "ARCHIVED") return null;
+  if (!row) {
+    const codeProduct = CODE_PRODUCT_BY_ID.get(id);
+    if (!codeProduct) return null;
+    const stockById = await codeProductStockMap(env, [id]);
+    return codeProductView(codeProduct, stockById.get(id) || 0);
+  }
+  if (row.status === "ARCHIVED") return null;
   const images = (await env.DB.prepare("SELECT i.*,o.storage_path FROM product_images i LEFT JOIN product_image_objects o ON o.image_id=i.id WHERE i.product_id=? ORDER BY i.sort_order,i.id").bind(id).all()).results || [];
   return productView(row, images, env);
 }
@@ -670,9 +744,12 @@ async function placeOrder(env, user, body) {
   }
   const products = (await env.DB.prepare(`SELECT * FROM products WHERE id IN (${[...wants.keys()].map(() => "?").join(",")})`).bind(...wants.keys()).all()).results || [];
   const byId = new Map(products.map((p) => [p.id,p]));
+  const codeStockById = await codeProductStockMap(env, [...wants.keys()]);
   let subtotal = 0; const lines = [];
   for (const [id, qty] of wants) {
-    const p = byId.get(id); if (!p || p.status === "ARCHIVED") throw Object.assign(new Error("A cart item is no longer available."), { status: 409 });
+    let p = byId.get(id);
+    if (!p && CODE_PRODUCT_BY_ID.has(id)) p = codeProductOrderRow(CODE_PRODUCT_BY_ID.get(id), codeStockById.get(id) || 0);
+    if (!p || p.status === "ARCHIVED") throw Object.assign(new Error("A cart item is no longer available."), { status: 409 });
     if (p.status === "OUT_OF_STOCK" || p.stock_quantity < qty) throw Object.assign(new Error(`${p.product_name} does not have enough stock.`), { status: 409 });
     subtotal += p.price * qty; lines.push({ p, qty });
   }
@@ -688,7 +765,7 @@ async function placeOrder(env, user, body) {
   ];
   for (const line of lines) {
     batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.p.variant_label,line.qty,line.p.price,line.p.image_url));
-    batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
+    if (!line.p.codeManaged) batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
   const batchResults = await env.DB.batch(batches);
   const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);

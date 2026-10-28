@@ -14,7 +14,26 @@
   if (!PT || !Array.isArray(PT.PRODUCTS) || !Array.isArray(PT.CATEGORIES)) return;
   /* These products and photos are bundled with the storefront source. Keep a
      stable snapshot so API refreshes don't erase locally maintained entries. */
-  var bundledProducts = PT.PRODUCTS.filter(function (p) { return p.localOnly === true; });
+  var codeProducts = (window.UVID_CODE_PRODUCTS || []).map(toProduct);
+  var bundledProducts = PT.PRODUCTS.filter(function (p) { return p.localOnly === true; }).concat(codeProducts);
+  var codeCategoryCounts = Object.create(null);
+  var initialIds = Object.create(null);
+  PT.PRODUCTS.forEach(function (p) { initialIds[p.id] = true; });
+  codeProducts.forEach(function (p) {
+    codeCategoryCounts[p.category] = (codeCategoryCounts[p.category] || 0) + 1;
+    if (!initialIds[p.id]) {
+      PT.PRODUCTS.push(p);
+      PT.visibleProducts.push(p);
+      initialIds[p.id] = true;
+    }
+    if (!PT.categoryBySlug(p.category)) {
+      PT.CATEGORIES.push({ slug: p.category, label: p.category === "concrete-art" ? "CONCRETE ART" : p.category, emoji: "🧱", blurb: "Decorative concrete art pieces", count: codeCategoryCounts[p.category] });
+    }
+  });
+  Object.keys(codeCategoryCounts).forEach(function (slug) {
+    var category = PT.categoryBySlug(slug);
+    if (category) category.count = Math.max(Number(category.count) || 0, codeCategoryCounts[slug]);
+  });
 
   var booted = false;    /* true once the router has registered */
   var loading = false;   /* a refresh is in flight */
