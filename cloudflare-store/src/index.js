@@ -267,20 +267,30 @@ async function deleteSupabaseObject(env, path) {
 }
 function versionedImageUrl(value) {
   const url = String(value || "");
-  if (/^\/uploads\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url)) return `${url.split("?")[0]}?v=2`;
+  if (/^\/uploads\/[0-9a-f-]{36}(?:\?.*)?$/i.test(url)) return `${url.split("?")[0]}?v=3`;
   return value;
 }
-function resolvedProductImage(row) { return versionedImageUrl(row.image_url ?? row.imageUrl); }
+function resolvedProductImage(row, env) {
+  const value = row.image_url ?? row.imageUrl;
+  const raw = String(value || "");
+  try {
+    const image = new URL(raw);
+    const storageBase = new URL(String(env?.SUPABASE_URL || ""));
+    const managed = image.origin === storageBase.origin && image.pathname.match(/^\/storage\/v1\/object\/public\/([^/]+)\/uploads\/([0-9a-f-]{36})(?:\.[^/]+)?$/i);
+    if (managed && decodeURIComponent(managed[1]) === supabaseBucket(env)) return `/uploads/${managed[2]}?v=3`;
+  } catch { /* Keep non-managed and relative image URLs as supplied. */ }
+  return versionedImageUrl(value);
+}
 function imageView(row, env) {
   return { id: row.id, productId: row.product_id, variantKey: row.variant_key || null,
-    url: row.storage_path ? supabaseObjectUrl(env, row.storage_path) : `/api/images/${row.id}?v=2`, mime: row.mime, byteSize: row.byte_size,
+    url: `/api/images/${row.id}?v=3`, mime: row.mime, byteSize: row.byte_size,
     width: row.width || null, height: row.height || null, altText: row.alt_text || null, sortOrder: row.sort_order };
 }
 function productView(row, images = [], env) {
   const meta = parseMeta(row);
   const variants = parseJson(row.variants_json, null);
   const variantStock = Array.isArray(variants) ? variants.reduce((n, v) => n + (Number(v.stock) || 0), 0) : null;
-  const imageUrl = resolvedProductImage(row, meta);
+  const imageUrl = resolvedProductImage(row, env);
   const productImages = images.map((image) => imageView(image, env));
   return {
     id: row.id, productName: row.product_name, category: row.category, description: row.description,
@@ -520,7 +530,7 @@ async function stats(env) {
   const products = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED'");
   const outOfStock = await q("SELECT COUNT(*) n FROM products WHERE status!='ARCHIVED' AND (status='OUT_OF_STOCK' OR stock_quantity=0)");
   const recentProducts = (await env.DB.prepare("SELECT id,product_name,category,price,stock_quantity,status,image_url,updated_at,emoji,meta_json FROM products WHERE status!='ARCHIVED' ORDER BY updated_at DESC,created_at DESC LIMIT 6").all()).results || [];
-  for (const product of recentProducts) product.imageUrl = resolvedProductImage(product);
+  for (const product of recentProducts) product.imageUrl = resolvedProductImage(product, env);
   const recentOrders = (await env.DB.prepare("SELECT o.id,o.total_amount,o.status,o.created_at,u.name AS customerName,u.mobile_number FROM orders o LEFT JOIN users u ON u.id=o.customer_id ORDER BY o.created_at DESC LIMIT 6").all()).results || [];
   return { products, inStock: products - outOfStock, outOfStock,
     lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'"),
@@ -1188,28 +1198,60 @@ async function handleApi(request, env, user, url) {
   return error("Not found.",404);
 }
 
+async function fetchSupabaseImage(request, env, storagePath, mime) {
+  const url = supabaseObjectUrl(env, storagePath);
+  if (!url) return error("Image storage is not configured.", 503);
+  let stored;
+  try {
+    stored = await fetch(url, {
+      method: request.method === "HEAD" ? "HEAD" : "GET",
+      cf: { cacheEverything: true, cacheTtl: 86400 },
+    });
+  } catch (e) {
+    console.error("[UVID image storage] Image fetch failed", e?.message || e);
+    return error("The stored image is temporarily unavailable.", 502);
+  }
+  if (!stored.ok) {
+    if (stored.status === 404) return null;
+    console.error("[UVID image storage] Image fetch returned", stored.status);
+    return error("The stored image is temporarily unavailable.", 502);
+  }
+  const headers = {
+    "Content-Type": mime || stored.headers.get("Content-Type") || "application/octet-stream",
+    "Cache-Control": "public, max-age=86400, s-maxage=86400",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Disposition": "inline",
+  };
+  const length = stored.headers.get("Content-Length");
+  const etag = stored.headers.get("ETag");
+  if (length) headers["Content-Length"] = length;
+  if (etag) headers.ETag = etag;
+  return new Response(request.method === "HEAD" ? null : stored.body, { headers });
+}
+
 async function serveImage(request, env, path) {
   const imageMatch = path.match(/^\/api\/images\/(\d+)$/);
-  if (imageMatch && request.method === "GET") {
+  if (imageMatch && ["GET", "HEAD"].includes(request.method)) {
     const external = await env.DB.prepare("SELECT o.storage_path FROM product_image_objects o WHERE o.image_id=?").bind(Number(imageMatch[1])).first();
     if (external?.storage_path) {
-      const url = supabaseObjectUrl(env, external.storage_path);
-      return url ? Response.redirect(url, 302) : error("Image storage is not configured.",503);
+      const image = await env.DB.prepare("SELECT mime FROM product_images WHERE id=?").bind(Number(imageMatch[1])).first();
+      const response = await fetchSupabaseImage(request, env, external.storage_path, image?.mime);
+      if (response) return response;
     }
     const row = await env.DB.prepare("SELECT b.mime,b.data FROM product_images i JOIN image_blobs b ON b.sha256=i.sha256 WHERE i.id=?").bind(Number(imageMatch[1])).first();
     if (!row) return error("Image not found.",404);
-    return new Response(imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=300","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});
+    return new Response(request.method === "HEAD" ? null : imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=86400","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});
   }
   const upload = path.match(/^\/uploads\/([0-9a-f-]{36})$/i);
-  if (upload && request.method === "GET") {
-    const external = await env.DB.prepare("SELECT storage_path FROM uploaded_image_objects WHERE id=?").bind(upload[1]).first();
+  if (upload && ["GET", "HEAD"].includes(request.method)) {
+    const external = await env.DB.prepare("SELECT storage_path,mime FROM uploaded_image_objects WHERE id=?").bind(upload[1]).first();
     if (external?.storage_path) {
-      const url = supabaseObjectUrl(env, external.storage_path);
-      return url ? Response.redirect(url, 302) : error("Image storage is not configured.",503);
+      const response = await fetchSupabaseImage(request, env, external.storage_path, external.mime);
+      if (response) return response;
     }
     const row = await env.DB.prepare("SELECT mime,data FROM uploaded_images WHERE id=?").bind(upload[1]).first();
     if (!row) return error("Image not found.",404);
-    return new Response(imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=300","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});
+    return new Response(request.method === "HEAD" ? null : imageBytes(row.data),{headers:{"Content-Type":row.mime,"Cache-Control":"public,max-age=86400","X-Content-Type-Options":"nosniff","Content-Disposition":"inline"}});
   }
   return null;
 }
