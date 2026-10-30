@@ -462,6 +462,8 @@
       paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
       paymentProofSent: Boolean(srv.payment_proof_file_name),
+      paymentProofSubmitted: Boolean(srv.payment_proof_sent_at),
+      paymentProofFileName: srv.payment_proof_file_name || null,
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
       status: statusLabel,
       stages: STATUS_STAGES,

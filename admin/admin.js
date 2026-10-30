@@ -762,26 +762,45 @@
   });
 
   function openCodeProductModal(p) {
+    const codeMrp = Number(p.mrp) || Number(p.price) || 0;
+    const codeDiscount = codeMrp > Number(p.price) ? Number(p.price) : "";
+    const codeDiscountPercent = codeDiscount === "" || !codeMrp ? "" : (((codeMrp - codeDiscount) / codeMrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
     const back = openModal(
       '<div class="modal__head"><h3>Edit code-managed product</h3><button class="iconbtn" data-close aria-label="Close">' + ICONS.x + "</button></div>" +
       '<form id="codeProductForm"><div class="modal__body">' +
       '<div class="pcell" style="margin-bottom:16px">' + pImg(p, 64) + '<div><b>' + esc(p.productName) + '</b><small>' + esc(categoryLabel(p.category)) + ' · Details and photo are maintained in the site code</small></div></div>' +
-      '<div class="form-grid"><label class="fld"><span>Product price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required></label>' +
+      '<div class="form-grid"><label class="fld"><span>MRP (₹)</span><input id="codeMrp" type="number" value="' + esc(codeMrp) + '" readonly></label>' +
+      '<label class="fld"><span>Discount (%)</span><input id="codeDiscountPercent" type="number" min="0" max="100" step="0.01" value="' + esc(codeDiscountPercent) + '"><small>Enter a percentage to calculate the customer price.</small></label>' +
+      '<label class="fld"><span>Discount price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required></label>' +
       '<label class="fld"><span>Available stock</span><input id="codeStock" type="number" min="0" step="1" value="' + esc(p.stockQuantity) + '" required></label></div>' +
       '<p class="form-error" id="codeProductErr" hidden></p></div>' +
       '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-close>Cancel</button><button type="submit" class="btn btn--primary" id="codeProductSave">Save changes</button></div></form>'
     );
+    const codePriceInput = $("#codePrice", back);
+    const codePercentInput = $("#codeDiscountPercent", back);
+    codePercentInput.addEventListener("input", function () {
+      const percent = Number(codePercentInput.value);
+      if (codePercentInput.value === "" || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+      codePriceInput.value = String(Math.round(codeMrp * (100 - percent)) / 100);
+    });
+    codePriceInput.addEventListener("input", function () {
+      const sale = Number(codePriceInput.value);
+      if (codePriceInput.value === "" || !Number.isFinite(sale) || !codeMrp) { codePercentInput.value = ""; return; }
+      codePercentInput.value = sale >= codeMrp ? "" : (((codeMrp - sale) / codeMrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+    });
     $("#codeProductForm", back).addEventListener("submit", async function (e) {
       e.preventDefault();
       const err = $("#codeProductErr", back); err.hidden = true;
       const price = Number($("#codePrice", back).value);
       const stockQuantity = Number($("#codeStock", back).value);
       if (!Number.isFinite(price) || price < 0) { err.textContent = "Enter a valid product price."; err.hidden = false; return; }
+      if (price > codeMrp) { err.textContent = "Discount price cannot be higher than the MRP."; err.hidden = false; return; }
+      if (codePercentInput.value !== "" && (!Number.isFinite(Number(codePercentInput.value)) || Number(codePercentInput.value) < 0 || Number(codePercentInput.value) > 100)) { err.textContent = "Discount must be between 0% and 100%."; err.hidden = false; return; }
       if (!Number.isInteger(stockQuantity) || stockQuantity < 0) { err.textContent = "Stock must be a whole number 0 or higher."; err.hidden = false; return; }
       const undo = busy($("#codeProductSave", back), "Saving…");
       try {
         await api("PUT", "/api/admin/products/" + encodeURIComponent(p.id), { price: price, stockQuantity: stockQuantity });
-        undo(); closeModal(); toast("Price and stock saved", true); await repaint(VIEWS.products);
+        undo(); closeModal(); toast("Discount price and stock saved", true); await repaint(VIEWS.products);
       } catch (ex) { undo(); err.textContent = ex.message || "Could not save the product."; err.hidden = false; }
     });
   }
@@ -832,6 +851,7 @@
         return {
           label: v.label || v.size || "",
           price: v.price,
+          mrp: v.mrp,
           stockQuantity: v.stock,
           sku: v.sku || "",
           imageUrl: v.imageUrl || v.img || "",
@@ -839,6 +859,7 @@
       }) : []);
     const base = editing ? (p.mrp != null && p.mrp >= p.price ? p.mrp : p.price) : "";
     const disc = editing && p.mrp != null && p.mrp > p.price ? p.price : "";
+    const discPercent = disc !== "" && Number(p.mrp) > 0 ? (((Number(p.mrp) - Number(disc)) / Number(p.mrp)) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1") : "";
     const inactive = editing && p.status === "ARCHIVED";
 
     const back = openModal(
@@ -866,13 +887,14 @@
       '<input type="file" id="imgFile" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">' +
       '<button type="button" class="btn btn--ghost btn--sm" id="imgPick">Upload image</button> ' +
       '<small>JPG / JPEG / PNG / WebP — auto-compressed to ~1400px before upload.</small></div></div></div>' +
-      '<label class="fld"><span>Product price (₹) <i>*</i></span><input name="price" type="number" min="0" step="0.01" required value="' + base + '"><small>List price the store compares against.</small></label>' +
-      '<label class="fld"><span>Discount price (₹, optional)</span><input name="discount" type="number" min="0" step="0.01" value="' + disc + '"><small>What the customer pays. Leave blank for full price.</small></label>' +
+      '<label class="fld"><span>MRP (₹) <i>*</i></span><input name="price" type="number" min="0" step="0.01" required value="' + base + '"><small>List price before discount.</small></label>' +
+      '<label class="fld"><span>Discount (%)</span><input name="discountPercent" type="number" min="0" max="100" step="0.01" value="' + discPercent + '"><small>Enter a percentage to calculate the discounted price.</small></label>' +
+      '<label class="fld"><span>Discount price (₹, optional)</span><input name="discount" type="number" min="0" step="0.01" value="' + disc + '"><small>What the customer pays. Leave blank for full MRP.</small></label>' +
       '<label class="fld"><span>Stock quantity <i>*</i></span><input name="stock" type="number" min="0" step="1" required value="' + (editing ? p.stockQuantity : "") + '"></label>' +
       '<label class="fld"><span>Emoji (art fallback)</span><input name="emoji" maxlength="4" placeholder="📦" value="' + esc(editing && p.emoji ? p.emoji : "") + '"></label>' +
       "</div>" +
       '<div class="fld"><span>Variants (optional)</span><div class="varbox">' +
-      '<p class="varbox__hint">Add one row for each design, size or colour. Give each its own name, price, stock and photo. For example: Rose Mould, Daisy Mould or 3 inch.</p>' +
+      '<p class="varbox__hint">Add one row for each design, size or colour. Set its MRP, discount percentage, customer price, stock and photo. For example: Rose Mould, Daisy Mould or 3 inch.</p>' +
       '<div id="varList">' + children.map(varRowHtml).join("") + "</div>" +
       '<button type="button" class="btn btn--ghost btn--sm var-add" id="varAdd">' + ICONS.plus + " Add variant</button>" +
       "</div></div>" +
@@ -890,6 +912,27 @@
 
     renderIcons(back);
     const form = $("#pForm", back);
+    const mrpInput = $("[name=price]", form);
+    const percentInput = $("[name=discountPercent]", form);
+    const discountInput = $("[name=discount]", form);
+    function updateDiscountFromPercent() {
+      if (percentInput.value === "") { discountInput.value = ""; return; }
+      const mrp = Number(mrpInput.value), percent = Number(percentInput.value);
+      if (!Number.isFinite(mrp) || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+      const sale = Math.round((mrp * (100 - percent)) * 100) / 10000;
+      discountInput.value = percent === 0 ? "" : String(sale);
+    }
+    percentInput.addEventListener("input", updateDiscountFromPercent);
+    mrpInput.addEventListener("input", function () {
+      if (percentInput.value !== "") updateDiscountFromPercent();
+      else if (discountInput.value !== "") updatePercentFromDiscount();
+    });
+    function updatePercentFromDiscount() {
+      const mrp = Number(mrpInput.value), sale = Number(discountInput.value);
+      if (discountInput.value === "" || !Number.isFinite(mrp) || !Number.isFinite(sale) || !mrp) { percentInput.value = ""; return; }
+      percentInput.value = sale >= mrp ? "" : (((mrp - sale) / mrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+    }
+    discountInput.addEventListener("input", updatePercentFromDiscount);
 
     /* image picking */
     let uploadedUrl = null;
@@ -1043,6 +1086,21 @@
         }
       }
     });
+    $("#varList", back).addEventListener("input", function (e) {
+      const row = e.target.closest(".vrow");
+      if (!row) return;
+      const mrpField = $(".v-price", row), pctField = $(".v-discount-percent", row), saleField = $(".v-discount-price", row);
+      if (e.target === pctField) {
+        const mrp = Number(mrpField.value), pct = Number(pctField.value);
+        if (pctField.value !== "" && Number.isFinite(mrp) && mrp >= 0 && Number.isFinite(pct) && pct >= 0 && pct <= 100) saleField.value = pct === 0 ? "" : String(Math.round(mrp * (100 - pct)) / 100);
+      } else if (e.target === mrpField && pctField.value !== "") {
+        const pct = Number(pctField.value), mrp = Number(mrpField.value);
+        if (Number.isFinite(pct) && pct >= 0 && pct <= 100 && Number.isFinite(mrp)) saleField.value = pct === 0 ? "" : String(Math.round(mrp * (100 - pct)) / 100);
+      } else if (e.target === saleField) {
+        const mrp = Number(mrpField.value), sale = Number(saleField.value);
+        pctField.value = saleField.value === "" || !mrp || sale >= mrp ? "" : (((mrp - sale) / mrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+      }
+    });
 
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
@@ -1055,6 +1113,8 @@
       const priceBase = fd.get("price") === "" ? NaN : Number(fd.get("price"));
       const discRaw = fd.get("discount");
       const discount = discRaw === "" || discRaw == null ? null : Number(discRaw);
+      const discountPercentRaw = fd.get("discountPercent");
+      const discountPercent = discountPercentRaw === "" || discountPercentRaw == null ? null : Number(discountPercentRaw);
       const stockRaw = fd.get("stock");
       const stock = stockRaw === "" ? NaN : Number(stockRaw);
       const status = String(fd.get("status") || "ACTIVE");
@@ -1066,6 +1126,7 @@
       if (!Number.isFinite(priceBase) || priceBase < 0) return fail("Enter a valid price.");
       if (discount != null && (!Number.isFinite(discount) || discount < 0)) return fail("Enter a valid discount price.");
       if (discount != null && discount >= priceBase) return fail("Discount price must be lower than the product price.");
+      if (discountPercent != null && (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100)) return fail("Discount must be between 0% and 100%.");
       if (!Number.isInteger(stock) || stock < 0) return fail("Stock must be a whole number ≥ 0.");
 
       /* variant rows */
@@ -1074,16 +1135,20 @@
       for (const row of rows) {
         const label = $(".v-label", row).value.trim();
         const vPrice = $(".v-price", row).value;
+        const vPercent = $(".v-discount-percent", row).value;
+        const vDiscount = $(".v-discount-price", row).value;
         const vStock = $(".v-stock", row).value;
         const vSku = $(".v-sku", row).value.trim();
         const vImg = $(".v-img", row).value.trim();
         const file = $(".v-file input", row).files && $(".v-file input", row).files[0];
-        const any = label || vPrice !== "" || vStock !== "" || vSku || vImg || file;
+        const any = label || vPrice !== "" || vPercent !== "" || vDiscount !== "" || vStock !== "" || vSku || vImg || file;
         if (!any) continue;
         if (!label) return fail("Give each variant a name, such as Red, Green or Yellow.");
         if (vPrice === "" || !Number.isFinite(Number(vPrice)) || Number(vPrice) < 0) return fail('Variant "' + label + '": enter a valid price.');
+        if (vPercent !== "" && (!Number.isFinite(Number(vPercent)) || Number(vPercent) < 0 || Number(vPercent) > 100)) return fail('Variant "' + label + '": discount must be between 0% and 100%.');
+        if (vDiscount !== "" && (!Number.isFinite(Number(vDiscount)) || Number(vDiscount) < 0 || Number(vDiscount) >= Number(vPrice))) return fail('Variant "' + label + '": discount price must be lower than MRP.');
         if (vStock === "" || !Number.isInteger(Number(vStock)) || Number(vStock) < 0) return fail('Variant "' + label + '": stock must be a whole number ≥ 0.');
-        variants.push({ row: row, cid: row.dataset.cid || null, label: label, price: Number(vPrice), stock: Number(vStock), sku: vSku, img: vImg || null, file: file });
+        variants.push({ row: row, cid: row.dataset.cid || null, label: label, price: Number(vPrice), discountPrice: vDiscount === "" ? null : Number(vDiscount), stock: Number(vStock), sku: vSku, img: vImg || null, file: file });
       }
       const seenVariantNames = new Set();
       for (const v of variants) {
@@ -1142,7 +1207,8 @@
             productName: main.productName + " — " + v.label,
             category: main.category,
             description: main.description,
-            price: v.price,
+            price: v.discountPrice != null ? v.discountPrice : v.price,
+            mrp: v.discountPrice != null ? v.price : null,
             stockQuantity: v.stock,
             status: v.stock > 0 ? "ACTIVE" : "OUT_OF_STOCK",
             meta: { parent: main.id, tags: ["vc-hidden"], brand: (p && p.brand) || null },
@@ -1185,9 +1251,14 @@
     v = v || {};
     const name = v.label || v.variantLabel || v.size || "";
     const imageUrl = v.imageUrl || v.img || "";
+    const mrp = v.mrp != null && Number(v.mrp) > Number(v.price) ? Number(v.mrp) : (v.price != null ? Number(v.price) : "");
+    const sale = mrp !== "" && v.price != null && Number(v.price) < Number(mrp) ? Number(v.price) : "";
+    const percent = sale !== "" && Number(mrp) > 0 ? (((Number(mrp) - Number(sale)) / Number(mrp)) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1") : "";
     return '<div class="vrow"' + (v.id ? ' data-cid="' + esc(v.id) + '"' : "") + ">" +
       '<input class="v-label" aria-label="Colour or variant name" placeholder="Colour / option name *" value="' + esc(name) + '">' +
-      '<input class="v-price" type="number" min="0" step="0.01" placeholder="Price ₹ *" value="' + (v.price != null ? v.price : "") + '">' +
+      '<input class="v-price" type="number" min="0" step="0.01" placeholder="MRP ₹ *" value="' + mrp + '">' +
+      '<input class="v-discount-percent" type="number" min="0" max="100" step="0.01" placeholder="Discount %" value="' + percent + '">' +
+      '<input class="v-discount-price" type="number" min="0" step="0.01" placeholder="Sale price ₹" value="' + sale + '">' +
       '<input class="v-stock" type="number" min="0" step="1" placeholder="Stock *" value="' + (v.stockQuantity != null ? v.stockQuantity : "") + '">' +
       '<input class="v-sku" placeholder="SKU (auto)" value="' + esc(v.id || v.sku || "") + '"' + (v.id ? " disabled" : "") + ">" +
       '<input class="v-img" placeholder="Image URL" value="' + (imageUrl && !String(imageUrl).startsWith("data:") ? esc(imageUrl) : "") + '">' +
@@ -1479,7 +1550,8 @@
       '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
       '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
-      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<span class="invoice__delivery-value"><input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="Enter charge" value="" aria-label="Delivery charge in rupees" data-delivery-fee><span class="invoice__pending-quote">Awaiting store quote</span></span>') + '</b></div>' +
+      '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<span class="invoice__delivery-value"><input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="' + (subtotal > 5000 ? '0 · free delivery' : 'Enter charge') + '" value="' + (subtotal > 5000 ? '0' : '') + '" aria-label="Delivery charge in rupees" data-delivery-fee><span class="invoice__pending-quote">Awaiting store quote</span></span>') + '</b></div>' +
+      (subtotal > 5000 ? '<p style="margin:8px 0;color:var(--brand);font-size:12px;font-weight:600">Order subtotal is above ₹5,000; free delivery will be applied.</p>' : '') +
       '<div class="invoice__grand"><span>' + (shippingFinalized ? "Total payable" : "Final total") + '</span><b>' + (shippingFinalized ? money(total) : "After delivery charge is saved") + '</b></div></div></div>' +
       '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
   }
@@ -1489,7 +1561,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + ((order.payment_status === "PAID" || order.payment_proof_sent_at) ? '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");

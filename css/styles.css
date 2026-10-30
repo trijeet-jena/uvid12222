@@ -90,6 +90,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .linkbtn--danger { color: var(--red); }
 
 /* ---------------- header ---------------- */
+.promo-bar { height: 30px; overflow: hidden; display: flex; align-items: center; background: var(--green-d); color: #fff; }
+.promo-bar__track { display: flex; width: max-content; animation: promo-marquee 24s linear infinite; }
+.promo-bar__track span { flex: 0 0 50vw; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .03em; white-space: nowrap; }
+@keyframes promo-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .promo-bar__track { animation: none; width: 100%; justify-content: center; } .promo-bar__track span[aria-hidden="true"] { display: none; } }
 .header {
   position: sticky; top: 0; z-index: 60;
   background: rgba(250, 248, 242, 0.92);
@@ -778,6 +783,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .about-page__reasons { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
 .about-page__reasons li::marker { color: var(--tang); }
 .about-page__promise { border-left: 4px solid var(--tang); }
+.careers-cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 @media (max-width: 700px) { .about-page__grid { grid-template-columns: 1fr; } }
 
 /* ================= responsive ================= */

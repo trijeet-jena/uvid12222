@@ -906,9 +906,14 @@
   /* ================= PAYMENT / SUCCESS ================= */
 
   function paymentProofContent(order) {
+    if (order.paymentProofSubmitted) {
+      return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
+        'Payment proof submitted. Your order is placed and is awaiting store verification.' + '</p>';
+    }
     if (order.paymentProofSent) {
       return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
-        (order.shippingFinalized ? 'Payment proof uploaded. Your order is awaiting store verification.' : 'Payment proof uploaded. Waiting for the store to confirm the final delivery total.') + '</p>';
+        (order.shippingFinalized ? 'Payment proof uploaded. Confirm below to place your order.' : 'Payment proof uploaded. Waiting for the store to confirm the final delivery total before you can confirm.') + '</p>' +
+        (order.shippingFinalized ? '<button class="btn btn--primary btn--block" type="button" id="confirmPaymentProof">Confirm payment &amp; place order</button>' : '');
     }
     return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
       (order.shippingFinalized ? 'Choose your screenshot or payment receipt in any file format (up to 1.4 MB).' : 'If you have already paid, choose your screenshot or payment receipt in any file format (up to 1.4 MB).') +
@@ -919,6 +924,7 @@
     var order = A.state.orders.filter(function (o) { return o.id === orderId; })[0];
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
     if (order.status === "Cancelled") { view.innerHTML = emptyState("↩️", "Order cancelled", "This order is cancelled. Contact the store if you already transferred payment.", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
+    if (order.paymentProofSubmitted) { successHtml(order); return; }
 
     var isCod = String(order.payment).toLowerCase() === "cod";
     if (order._srv && isCod) { successHtml(order); return; }
@@ -970,9 +976,11 @@
         var result = await response.json();
         if (!response.ok) throw new Error(result.error || "Could not upload the payment proof.");
         order.paymentProofSent = true;
-        order.status = "Placed";
+        order.paymentProofFileName = file.name;
+        if (result.order && result.order.payment_proof_file_name) order.paymentProofFileName = result.order.payment_proof_file_name;
+        order.status = "Awaiting payment";
         order.stageIndex = 0;
-        order.paymentStatus = "Awaiting payment verification";
+        order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
         A.save();
         clearInterval(paymentTimer);
         paymentPage(order.id);
@@ -980,6 +988,37 @@
         uploadButton.disabled = false;
         uploadButton.textContent = "Upload payment proof";
         if (status) { status.textContent = error.message || "Could not upload the payment proof. Please try again."; status.classList.add("upi-wait__status--error"); }
+      }
+    });
+    var confirmProofButton = $("#confirmPaymentProof");
+    if (confirmProofButton) confirmProofButton.addEventListener("click", async function () {
+      confirmProofButton.disabled = true;
+      confirmProofButton.textContent = "Submitting…";
+      var status = $("#upiPaymentStatus");
+      try {
+        var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/confirm-payment-proof", {
+          method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}"
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not confirm your order.");
+        order.paymentProofSubmitted = true;
+        order.paymentProofSent = true;
+        order.status = "Placed";
+        order.stageIndex = 0;
+        order.paymentStatus = result.order && result.order.payment_status === "PAID" ? "Paid ✓" : "Awaiting payment verification";
+        order.paymentConfirmed = Boolean(result.order && result.order.payment_status === "PAID");
+        if (result.order) {
+          order.shippingFinalized = Number(result.order.shipping_finalized) !== 0;
+          order.totals.shipping = Number(result.order.shipping) || 0;
+          order.totals.total = Number(result.order.total_amount) || order.totals.total;
+        }
+        A.save();
+        clearInterval(paymentTimer);
+        successHtml(order);
+      } catch (error) {
+        confirmProofButton.disabled = false;
+        confirmProofButton.textContent = "Confirm payment & place order";
+        if (status) { status.textContent = error.message || "Could not confirm your order. Please try again."; status.classList.add("upi-wait__status--error"); }
       }
     });
     function checkPaymentStatus() {
@@ -990,6 +1029,15 @@
         .then(function (data) {
           var serverOrder = data && data.order;
           if (!serverOrder) return;
+          var hadPaymentProof = Boolean(order.paymentProofSent);
+          var hadFinalizedQuote = Boolean(order.shippingFinalized);
+          order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
+          order.totals.shipping = Number(serverOrder.shipping) || 0;
+          order.totals.total = Number(serverOrder.total_amount) || order.totals.total;
+          if (serverOrder.payment_proof_file_name) {
+            order.paymentProofSent = true;
+            order.paymentProofFileName = serverOrder.payment_proof_file_name;
+          }
           if (serverOrder.status === "CANCELLED") {
             order.status = "Cancelled";
             A.save();
@@ -1003,7 +1051,24 @@
           var orderStatusChanged = order.status !== latestStatus;
           order.status = latestStatus;
           order.stageIndex = stageIndex;
-          if (Number(serverOrder.shipping_finalized) !== 0 && !order.shippingFinalized) {
+          if (serverOrder.payment_proof_sent_at) {
+            order.paymentProofSubmitted = true;
+            order.paymentProofSent = true;
+            order.paymentStatus = serverOrder.payment_status === "PAID" ? "Paid ✓" : "Awaiting payment verification";
+            order.paymentConfirmed = serverOrder.payment_status === "PAID";
+            A.save();
+            clearInterval(paymentTimer);
+            successHtml(order);
+            return;
+          }
+          if (serverOrder.payment_proof_file_name && !hadPaymentProof) {
+            order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+            A.save();
+            clearInterval(paymentTimer);
+            paymentPage(order.id);
+            return;
+          }
+          if (Number(serverOrder.shipping_finalized) !== 0 && !hadFinalizedQuote) {
             order.shippingFinalized = true;
             order.totals.shipping = Number(serverOrder.shipping) || 0;
             order.totals.total = Number(serverOrder.total_amount) || 0;
@@ -1023,16 +1088,6 @@
             else statusEl.textContent = "Payment verified. Current order status: " + order.status + ".";
             return;
           }
-          if (serverOrder.payment_proof_file_name && !order.paymentProofSent) {
-            order.paymentProofSent = true;
-            order.status = "Placed";
-            order.stageIndex = 0;
-            order.paymentStatus = "Awaiting payment verification";
-            A.save();
-            clearInterval(paymentTimer);
-            paymentPage(order.id);
-            return;
-          }
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
@@ -1050,13 +1105,15 @@
 
   function successHtml(order) {
     var isCod = String(order.payment).toLowerCase() === "cod";
+    var proofSubmitted = Boolean(order.paymentProofSubmitted);
+    var paymentConfirmed = Boolean(order.paymentConfirmed);
     var eta = A.fmtDate(order.eta);
     view.innerHTML =
       '<div class="success card">' +
       '<div class="success__burst" aria-hidden="true">' + '<i></i><i></i><i></i><i></i><i></i><i></i>' + '</div>' +
       '<div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
-      '<h1>Order ' + (isCod ? "confirmed!" : "successful!") + '</h1>' +
-      '<p class="success__sub">' + (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.") + '</p>' +
+      '<h1>' + (proofSubmitted ? "Order placed successfully!" : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
+      '<p class="success__sub">' + (proofSubmitted && !paymentConfirmed ? "Your payment proof for <b>" + money(order.totals.total) + "</b> was submitted. The store will verify the transfer before processing your order." : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.")) + '</p>' +
       '<p class="success__sub" id="upiPaymentStatus">Current order status: <b>' + esc(order.status || "Placed") + '</b>.</p>' +
       '<div class="success__meta card-inset">' +
       '<div><span>Order ID</span><b>' + order.id + '</b></div>' +
@@ -1376,6 +1433,20 @@
       '</div>';
   }
 
+  function careersPage() {
+    var careerMessage = encodeURIComponent("Hello UVID, I am interested in working with your store. I would like to share my details and learn about current opportunities.");
+    view.innerHTML = crumbs([{ label: "Home", href: "#/" }, { label: "Careers" }]) +
+      '<div class="about-page">' +
+      '<header class="card about-page__hero"><p class="about-page__eyebrow">CAREERS AT UVID</p>' +
+      '<h1>Work with us</h1><p class="about-page__headline">Help more people bring their creative ideas to life.</p>' +
+      '<p class="about-page__tagline">Interested in joining UVID Art and Craft Supplies? Tell us about yourself and the kind of work you are looking for.</p></header>' +
+      '<section class="card about-page__section"><h2>Start a conversation</h2>' +
+      '<p>Send us your name, experience, area of interest, and contact details. We will get back to you when a suitable opportunity is available.</p>' +
+      '<div class="careers-cta"><a class="btn btn--primary" href="https://wa.me/917406155738?text=' + careerMessage + '" target="_blank" rel="noopener noreferrer">Message us on WhatsApp</a>' +
+      '<a class="btn btn--ghost" href="mailto:uvidartandcraft@gmail.com?subject=Career%20opportunities%20at%20UVID">Email us</a></div></section>' +
+      '</div>';
+  }
+
   /* ================= routing ================= */
 
   function rerender() {
@@ -1396,6 +1467,7 @@
       A.route("orders/:id", function (params) { orderDetailPage(params.id); });
       A.route("account", function (params, query) { accountPage(query || {}); });
       A.route("about", function () { aboutPage(); });
+      A.route("careers", function () { careersPage(); });
     },
     rerender: rerender
   };

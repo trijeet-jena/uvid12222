@@ -299,9 +299,18 @@ table.tbl { width: 100%; border-collapse: collapse; min-width: 640px; }
 .varbox { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fbfcfb; }
 .varbox__hint { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
 .vrow {
-  display: grid; grid-template-columns: 1.3fr 0.8fr 0.7fr 1fr 1.2fr auto auto;
+  display: grid; grid-template-columns: 1.5fr 0.8fr 0.7fr 0.85fr 0.65fr 0.9fr;
   gap: 8px; align-items: center; margin-bottom: 8px;
 }
+.vrow .v-label { grid-column: 1; }
+.vrow .v-price { grid-column: 2; }
+.vrow .v-discount-percent { grid-column: 3; }
+.vrow .v-discount-price { grid-column: 4; }
+.vrow .v-stock { grid-column: 5; }
+.vrow .v-sku { grid-column: 6; }
+.vrow .v-img { grid-column: 1 / span 4; }
+.vrow .v-file { grid-column: 5; }
+.vrow .iconbtn { grid-column: 6; }
 .vrow input { border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font: 500 13.5px "Outfit", sans-serif; min-width: 0; background: #fff; }
 .vrow .v-file {
   border: 1px solid var(--line); border-radius: 9px; background: #fff; cursor: pointer;
@@ -524,6 +533,9 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 720px) {
   .form-grid { grid-template-columns: 1fr; }
   .vrow { grid-template-columns: 1fr 1fr; }
+  .vrow .v-label, .vrow .v-price, .vrow .v-discount-percent, .vrow .v-discount-price, .vrow .v-stock, .vrow .v-sku { grid-column: auto; }
+  .vrow .v-img { grid-column: 1 / span 2; }
+  .vrow .v-file, .vrow .iconbtn { grid-column: auto; }
   .vrow .iconbtn { width: 100%; }
   .filters input { min-width: 0; width: 100%; }
   .filters { width: 100%; }

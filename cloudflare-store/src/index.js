@@ -717,7 +717,9 @@ async function revenueReport(env, requestedMonth) {
 async function orderList(env, customerId = null, status = null, includeCustomerDetails = false) {
   const customerColumns = includeCustomerDetails ? ",u.name AS customer_name,u.email AS customer_email,u.mobile_number AS customer_mobile_number" : "";
   const customerJoin = includeCustomerDetails ? " LEFT JOIN users u ON u.id=o.customer_id" : "";
-  const proofColumns = ",pp.mime AS payment_proof_mime,pp.file_name AS payment_proof_file_name,pp.byte_size AS payment_proof_byte_size,pp.created_at AS payment_proof_created_at";
+  const proofColumns = includeCustomerDetails
+    ? ",CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.mime END AS payment_proof_mime,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.file_name END AS payment_proof_file_name,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.byte_size END AS payment_proof_byte_size,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.created_at END AS payment_proof_created_at"
+    : ",pp.mime AS payment_proof_mime,pp.file_name AS payment_proof_file_name,pp.byte_size AS payment_proof_byte_size,pp.created_at AS payment_proof_created_at";
   let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${customerColumns}${proofColumns} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id${customerJoin} LEFT JOIN order_payment_proofs pp ON pp.order_id=o.id`, args = [];
   if (customerId != null) { sql += " WHERE o.customer_id=?"; args.push(customerId); }
   else if (status) { sql += " WHERE o.status=?"; args.push(status); }
@@ -1070,6 +1072,8 @@ async function handleApi(request, env, user, url) {
   if (match && method === "GET") {
     if (adminOnly) return adminOnly;
     const id = decodeURIComponent(match[1]);
+    const order = await env.DB.prepare("SELECT payment_proof_sent_at FROM orders WHERE id=?").bind(id).first();
+    if (!order || !order.payment_proof_sent_at) return error("No customer-submitted payment proof is available for this order.",404);
     const proof = await env.DB.prepare("SELECT mime,file_name,byte_size,data,created_at FROM order_payment_proofs WHERE order_id=?").bind(id).first();
     if (!proof) return error("No payment proof has been uploaded for this order.",404);
     return paymentProofResponse(proof);
@@ -1116,13 +1120,15 @@ async function handleApi(request, env, user, url) {
     if (b.shipping === null || b.shipping === undefined || String(b.shipping).trim() === "") return error("Enter a delivery charge, or enter 0 for free delivery.");
     const value = Number(b.shipping);
     if (!Number.isFinite(value) || value < 0 || value > 10000000) return error("Delivery charge must be between ₹0 and ₹10,000,000.");
-    const shipping = Math.round(value * 100) / 100;
+    const requestedShipping = Math.round(value * 100) / 100;
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!current) return error("Order not found.",404);
     if (current.status === "CANCELLED") return error("A cancelled order cannot be repriced.",409);
     if (current.payment_status === "PAID") return error("This order is already paid, so its delivery charge cannot be changed.",409);
     const amounts = await env.DB.prepare("SELECT COALESCE(SUM(price_at_purchase*quantity),0) AS subtotal FROM order_items WHERE order_id=?").bind(id).first();
-    const total = Math.round((Number(amounts?.subtotal || 0) - Number(current.discount || 0) + shipping) * 100) / 100;
+    const subtotal = Number(amounts?.subtotal || 0);
+    const shipping = subtotal > 5000 ? 0 : requestedShipping;
+    const total = Math.round((subtotal - Number(current.discount || 0) + shipping) * 100) / 100;
     const timestamp = now();
     await env.DB.batch([
       env.DB.prepare("UPDATE orders SET shipping=?,total_amount=?,updated_at=? WHERE id=?").bind(shipping,total,timestamp,id),
@@ -1140,7 +1146,7 @@ async function handleApi(request, env, user, url) {
     if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
     const paymentProof = await env.DB.prepare("SELECT order_id FROM order_payment_proofs WHERE order_id=?").bind(id).first();
-    if (order.payment_status !== "PAID" && !paymentProof) return error("The customer has not uploaded payment proof yet.",409);
+    if (order.payment_status !== "PAID" && (!paymentProof || !order.payment_proof_sent_at)) return error("The customer has not submitted payment proof yet.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
     const alreadyPaid = order.payment_status === "PAID";
@@ -1182,6 +1188,7 @@ async function handleApi(request, env, user, url) {
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!order) return error("Order not found.",404);
     if (order.status === "CANCELLED") return error("A cancelled order cannot receive an order email.",409);
+    if (order.payment_method === "UPI" && order.payment_status !== "PAID" && !order.payment_proof_sent_at) return error("The customer must confirm the payment proof before an order email can be sent.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     const items = await orderEmailItems(env,id);
     const type = order.payment_status === "PAID" ? "paid" : "placed";
@@ -1247,14 +1254,7 @@ async function handleApi(request, env, user, url) {
   if(path==="/api/orders" && method==="POST"){
     if(customerOnly) return customerOnly;
     const out=await placeOrder(env,user,await readBody());
-    let emailNotification={sent:false,reason:"notification_error"};
-    try {
-      emailNotification=await sendOrderEmail(env,out.order,"placed",await orderEmailItems(env,out.order.id));
-      if(!emailNotification.sent) console.warn("[ORDER EMAIL] New-order notification was not delivered.",emailNotification.reason);
-    } catch (cause) {
-      console.warn("[ORDER EMAIL] New-order notification could not be prepared.",cause?.name||"notification error");
-    }
-    return json({ok:true,...out,emailNotification},201);
+    return json({ok:true,...out,emailNotification:{sent:false,reason:"awaiting_customer_payment_proof_confirmation"}},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
   match=path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
@@ -1269,26 +1269,42 @@ async function handleApi(request, env, user, url) {
     if(order.status==="CANCELLED") return error("A cancelled order cannot receive payment proof.",409);
     if(order.payment_status==="PAID") return error("This order is already paid.",409);
     if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer receive payment proof.",409);
-    const previous=await env.DB.prepare("SELECT order_id FROM order_payment_proofs WHERE order_id=?").bind(id).first();
+    if(order.payment_proof_sent_at) return error("This payment proof has already been submitted. Contact the store if you need to replace it.",409);
     const timestamp=now();
     await env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,file_name,byte_size,data,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,file_name=excluded.file_name,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
       .bind(id,mime,fileName,bytes.length,bytes,timestamp).run();
-    const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_proof_sent_at=COALESCE(payment_proof_sent_at,?),updated_at=? WHERE id=? AND customer_id=? AND status IN ('AWAITING_PAYMENT','PLACED') AND payment_status!='PAID'")
-      .bind(timestamp,timestamp,id,user.id).run();
-    if(!Number(updated.meta?.changes||0)) return error("This order changed before the file finished uploading. Refresh the page and check its status.",409);
     await audit(env,request,user,"order.payment_proof_uploaded",id,{fileName,mime,byteSize:bytes.length});
     const savedOrder=(await orderList(env,user.id)).find((item)=>item.id===id);
-    let emailNotification={sent:false,reason:"replacement_upload"};
-    if(!previous){
-      emailNotification=await sendOrderEmail(env,savedOrder,"placed",await orderEmailItems(env,id));
-      if(!emailNotification.sent) console.warn("[ORDER EMAIL] Payment-proof upload notification was not delivered.",emailNotification.reason);
-    }
-    return json({ok:true,emailNotification,order:savedOrder});
+    return json({ok:true,order:savedOrder});
   }
   match=path.match(/^\/api\/orders\/([^/]+)\/confirm-payment-proof$/);
   if(match && method==="POST"){
     if(customerOnly) return customerOnly;
-    return error("Upload your payment proof file to submit this order.",410);
+    const id=decodeURIComponent(match[1]);
+    const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+    if(!order) return error("Order not found.",404);
+    if(order.payment_method!=="UPI") return error("This order is not a UPI payment.",409);
+    if(order.status==="CANCELLED") return error("A cancelled order cannot be confirmed.",409);
+    if(order.payment_status==="PAID") return error("This order has already been confirmed as paid.",409);
+    if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer be submitted.",409);
+    const proof=await env.DB.prepare("SELECT order_id,file_name FROM order_payment_proofs WHERE order_id=?").bind(id).first();
+    if(!proof) return error("Upload your payment proof file before confirming the order.",409);
+    const quote=await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
+    if(quote && Number(quote.finalized)!==1) return error("Wait for the store to confirm the final delivery total before submitting your order.",409);
+    const timestamp=now();
+    const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_proof_sent_at=COALESCE(payment_proof_sent_at,?),updated_at=? WHERE id=? AND customer_id=? AND status IN ('AWAITING_PAYMENT','PLACED') AND payment_status!='PAID' AND payment_proof_sent_at IS NULL")
+      .bind(timestamp,timestamp,id,user.id).run();
+    if(!Number(updated.meta?.changes||0)) return error("This order was already submitted or changed. Refresh the page to see its latest status.",409);
+    await audit(env,request,user,"order.payment_proof_confirmed",id,{fileName:proof.file_name||null});
+    const savedOrder=(await orderList(env,user.id)).find((item)=>item.id===id);
+    let emailNotification={sent:false,reason:"notification_error"};
+    try {
+      emailNotification=await sendOrderEmail(env,savedOrder,"placed",await orderEmailItems(env,id));
+      if(!emailNotification.sent) console.warn("[ORDER EMAIL] Customer-submitted order notification was not delivered.",emailNotification.reason);
+    } catch (cause) {
+      console.warn("[ORDER EMAIL] Customer-submitted order notification could not be prepared.",cause?.name||"notification error");
+    }
+    return json({ok:true,emailNotification,order:savedOrder});
   }
   match=path.match(/^\/api\/orders\/([^/]+)(?:\/cancel)?$/);
   if(match && method==="POST" && path.endsWith("/cancel")){
