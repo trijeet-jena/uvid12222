@@ -801,7 +801,8 @@ async function placeOrder(env, user, body) {
     let p = byId.get(id);
     if (!p && CODE_PRODUCT_BY_ID.has(id)) p = codeProductOrderRow(CODE_PRODUCT_BY_ID.get(id), codeStockById.get(id));
     if (!p || p.status === "ARCHIVED") throw Object.assign(new Error("A cart item is no longer available."), { status: 409 });
-    if (p.status === "OUT_OF_STOCK" || p.stock_quantity < qty) throw Object.assign(new Error(`${p.product_name} does not have enough stock.`), { status: 409 });
+    if (p.status === "OUT_OF_STOCK" || p.stock_quantity <= 0) throw Object.assign(new Error(`${p.product_name} is out of stock and cannot be purchased right now.`), { status: 409 });
+    if (p.stock_quantity < qty) throw Object.assign(new Error(`Only ${p.stock_quantity} of ${p.product_name} are available.`), { status: 409 });
     subtotal += p.price * qty; lines.push({ p, qty });
   }
   const discount = 0;

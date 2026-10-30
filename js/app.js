@@ -311,11 +311,14 @@
     if (!requireLogin("Login to add items to your cart.")) return false;
     var p = window.PT.findProduct(id);
     if (!p) return false;
+    var stock = Number(p.stock) || 0;
+    if (stock <= 0) { toast(p.name + " is out of stock.", false); return false; }
     var line = null, i;
     for (i = 0; i < state.cart.length; i++) if (state.cart[i].id === id) { line = state.cart[i]; break; }
     var next = (line ? line.qty : 0) + qty;
-    if (next > p.stock) { toast("Only " + p.stock + " in stock.", false); next = p.stock; }
-    if (line) line.qty = next; else state.cart.push({ id: id, qty: Math.max(1, next) });
+    if (next > stock) { toast("Only " + stock + " in stock.", false); next = stock; }
+    if (next < 1) return false;
+    if (line) line.qty = next; else state.cart.push({ id: id, qty: next });
     pushRecent(id);
     save(); renderChrome();
     toast(p.name.split("—")[0].trim() + " added to cart", true);
@@ -329,7 +332,10 @@
         var p = window.PT.findProduct(id);
         if (qty <= 0) state.cart.splice(i, 1);
         else {
-          if (p && qty > p.stock) { qty = p.stock; toast("Only " + p.stock + " in stock.", false); }
+          var stock = Number(p && p.stock) || 0;
+          if (stock <= 0 && qty > state.cart[i].qty) { toast((p ? p.name : "This product") + " is out of stock.", false); return; }
+          if (p && qty > stock) { qty = stock; toast("Only " + stock + " in stock.", false); }
+          if (qty <= 0) { state.cart.splice(i, 1); break; }
           state.cart[i].qty = qty;
         }
         break;
@@ -376,6 +382,13 @@
     /* drop lines whose product was archived/deleted in the admin panel */
     state.cart = state.cart.filter(function (l) { return !!window.PT.findProduct(l.id); });
     if (state.cart.length === 0) { toast("Your cart is empty.", false); return Promise.resolve(null); }
+    for (var i = 0; i < state.cart.length; i++) {
+      var line = state.cart[i];
+      var product = window.PT.findProduct(line.id);
+      var available = Number(product && product.stock) || 0;
+      if (available <= 0) { toast((product ? product.name : "A product") + " is out of stock. Remove it from your cart.", false); return Promise.resolve(null); }
+      if (line.qty > available) { toast("Only " + available + " of " + product.name + " are available. Update your cart quantity.", false); return Promise.resolve(null); }
+    }
     var address = session().address;
     if (!address) { toast("Add a delivery address first.", false); navigateTo("#/checkout"); return Promise.resolve(null); }
 

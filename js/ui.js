@@ -90,6 +90,29 @@
 
   /* ================= shared components ================= */
 
+  function productStockMessage(product) {
+    var stock = Number(product && product.stock) || 0;
+    if (stock <= 0) return "Out of stock";
+    return stock <= 20 ? "⚡ Hurry! Only " + stock + " left in stock" : "✅ In stock — ships in 24 hrs";
+  }
+
+  function productActionsHtml(product, rootId, hasVariants, inCart) {
+    if ((Number(product && product.stock) || 0) <= 0) {
+      return '<button class="btn btn--soft" type="button" disabled aria-disabled="true">Out of stock</button>';
+    }
+    return (inCart > 0 && !hasVariants
+      ? '<a class="btn btn--ghost" href="#/cart">Go to cart →</a>'
+      : '<button class="btn btn--ghost" data-add="' + esc(product.id) + '" data-root="' + esc(rootId) + '">🛒 Add to cart</button>') +
+      '<button class="btn btn--primary" data-buy="' + esc(product.id) + '" data-root="' + esc(rootId) + '">⚡ Buy now</button>';
+  }
+
+  function cartHasUnavailableItems() {
+    return A.state.cart.some(function (line) {
+      var product = D.findProduct(line.id);
+      return !product || (Number(product.stock) || 0) <= 0 || line.qty > (Number(product.stock) || 0);
+    });
+  }
+
   function productCard(p) {
     var inCart = 0;
     A.state.cart.forEach(function (l) { if (l.id === p.id) inCart = l.qty; });
@@ -107,10 +130,12 @@
       '<a class="pcard__name" href="#/p/' + p.id + '">' + esc(p.name) + '</a>' +
       (p.rating ? '<div class="rate"><span class="rate__badge">' + p.rating.toFixed(1) + ' <i>★</i></span><span class="rate__count">(' + p.ratingCount.toLocaleString("en-IN") + ')</span></div>' : '<div class="rate rate--new">New</div>') +
       '<div class="pcard__price"><b>' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
-      (p.variants && p.variants.length
+      ((Number(p.stock) || 0) <= 0
+        ? '<button class="btn btn--soft btn--block" type="button" disabled aria-disabled="true">Out of stock</button>'
+        : p.variants && p.variants.length
         ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">' + (p.category === "candle-making" || p.category === "resin-moulds" ? "Choose a design" : "Choose an option") + '</a>'
         : inCart > 0
-          ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>'
+          ? '<div class="stepper" data-step="' + p.id + '"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + inCart + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase"' + (inCart >= Number(p.stock) ? ' disabled' : '') + '>+</button></div>'
           : '<button class="btn btn--soft btn--block" data-add="' + p.id + '">Add to cart</button>') +
       '</div></article>';
   }
@@ -495,10 +520,15 @@
       .slice(0, 6);
     var inCart = 0;
     A.state.cart.forEach(function (l) { if (l.id === p.id) inCart = l.qty; });
-    var specSource = hasVariants ? mainP.specs : p.specs;
+    var availableStock = Number(p.stock) || 0;
+    var stockDescription = availableStock <= 0 ? "Out of stock" : hasVariants ? availableStock + " available for the selected design" : availableStock + " available";
+    var specSource = Object.assign({}, hasVariants ? mainP.specs : p.specs);
+    specSource.Stock = stockDescription;
     var specRows = Object.keys(specSource).map(function (k) {
-      return '<tr><th>' + esc(k) + '</th><td>' + esc(specSource[k]) + '</td></tr>';
+      return '<tr><th>' + esc(k) + '</th><td' + (/^stock$/i.test(k) ? ' id="pdpStockSpecValue"' : '') + '>' + esc(specSource[k]) + '</td></tr>';
     }).join("");
+    var currentHighlights = p.highlights.filter(function (highlight) { return !/\bstock\b/i.test(String(highlight)); });
+    currentHighlights.push(stockDescription);
     var variantLabel = hasVariants ? mainP.name + " — " + (selectedVariant.label || p.name) : p.name;
     var productCrumbs = [{ label: "Home", href: "#/" }];
     var parentCat = cat.parentSlug ? D.categoryBySlug(cat.parentSlug) : null;
@@ -514,17 +544,13 @@
       (hasVariants
         ? '<div class="pdp__colours" role="group" aria-label="' + variantHeading + '"><span class="pdp__colourslabel">' + variantHeading + '</span>' +
           mainP.variants.map(function (v) {
-            return '<button type="button" class="pdp__swatch' + (p.id === v.id ? " pdp__swatch--on" : "") + '" data-vcsize="' + esc(v.size) + '" data-vcid="' + v.id + '" aria-pressed="' + (p.id === v.id) + '">' +
-              '<img src="' + v.img + '" alt="" />' + esc(v.label) + "</button>";
+            var soldOut = (Number(v.stock) || 0) <= 0;
+            return '<button type="button" class="pdp__swatch' + (p.id === v.id ? " pdp__swatch--on" : "") + '" data-vcsize="' + esc(v.size) + '" data-vcid="' + esc(v.id) + '" aria-pressed="' + (p.id === v.id) + '"' + (soldOut ? ' disabled title="Out of stock"' : '') + '>' +
+              '<img src="' + esc(v.img) + '" alt="" />' + esc(v.label) + (soldOut ? " · Out of stock" : "") + "</button>";
           }).join("") + "</div>"
         : "") +
       '<div class="pdp__thumbs" id="pdpThumbs">' + thumbHtml(p, 0) + "</div>" +
-      '<div class="pdp__actions">' +
-      (inCart > 0 && !hasVariants
-        ? '<a class="btn btn--ghost" href="#/cart">Go to cart →</a>'
-        : '<button class="btn btn--ghost" data-add="' + p.id + '" data-root="' + mainId + '">🛒 Add to cart</button>') +
-      '<button class="btn btn--primary" data-buy="' + p.id + '" data-root="' + mainId + '">⚡ Buy now</button>' +
-      '</div></section>' +
+      '<div class="pdp__actions" id="pdpActions">' + productActionsHtml(p, mainId, hasVariants, inCart) + '</div></section>' +
 
       '<section class="pdp__info">' +
       '<p class="pdp__brand"><a href="#/search?q=' + encodeURIComponent(p.brand) + '">' + esc(p.brand) + '</a></p>' +
@@ -539,13 +565,13 @@
       '<p class="pdp__tax">Inclusive of all taxes</p></div>' +
       '<div class="pdp__delivery card-inset">' +
       '<p>🚚 Delivery by <b>' + etaStr + '</b> · Delivery charge confirmed after address review</p>' +
-      '<p>' + (p.stock <= 20 ? "⚡ Hurry! Only " + p.stock + " left in stock" : "✅ In stock — ships in 24 hrs") + '</p>'.replace("<p>", "<p id='pdpStockBadge'>") +
+      '<p id="pdpStockBadge"' + ((Number(p.stock) || 0) <= 0 ? ' class="stock-out"' : '') + '>' + esc(productStockMessage(p)) + '</p>' +
       '<p>📱 Pay by UPI QR</p></div>' +
       '<div class="pdp__wishrow">' +
       '<button class="heartbtn' + (wished ? " heartbtn--on" : "") + '" data-wish="' + mainId + '">' + (wished ? "♥ Wishlisted" : "♡ Add to wishlist") + '</button>' +
       '</div>' +
       '<div class="pdp__section"><h3>Highlights</h3><ul class="ticks">' +
-      p.highlights.map(function (h) { return '<li>' + esc(h) + '</li>'; }).join("") + '</ul></div>' +
+      currentHighlights.map(function (h) { return '<li' + (h === stockDescription ? ' id="pdpStockHighlight"' : '') + '>' + esc(h) + '</li>'; }).join("") + '</ul></div>' +
       '<div class="pdp__section"><h3>Specifications</h3><table class="specs">' + specRows + '</table></div>' +
       (p.rating
         ? '<div class="pdp__section"><h3>Ratings & reviews</h3>' +
@@ -601,8 +627,21 @@
             if (btn.hasAttribute("data-add")) btn.setAttribute("data-add", rec.id);
             if (btn.hasAttribute("data-buy")) btn.setAttribute("data-buy", rec.id);
           });
+          var cartQty = 0;
+          A.state.cart.forEach(function (line) { if (line.id === rec.id) cartQty = line.qty; });
+          var actions = $("#pdpActions");
+          if (actions) actions.innerHTML = productActionsHtml(rec, mainId, hasVariants, cartQty);
           var badge = $("#pdpStockBadge");
-          if (badge) badge.innerHTML = esc(rec.stock <= 20 ? "⚡ Hurry! Only " + rec.stock + " left in stock" : "✅ In stock — ships in 24 hrs");
+          var selectedStock = Number(rec.stock) || 0;
+          var selectedStockDescription = selectedStock <= 0 ? "Out of stock" : hasVariants ? selectedStock + " available for the selected design" : selectedStock + " available";
+          if (badge) {
+            badge.textContent = productStockMessage(rec);
+            badge.classList.toggle("stock-out", (Number(rec.stock) || 0) <= 0);
+          }
+          var stockSpec = $("#pdpStockSpecValue");
+          if (stockSpec) stockSpec.textContent = selectedStockDescription;
+          var stockHighlight = $("#pdpStockHighlight");
+          if (stockHighlight) stockHighlight.textContent = selectedStockDescription;
         });
       });
     }
@@ -636,19 +675,23 @@
     var lines = A.state.cart.map(function (l) {
       var p = D.findProduct(l.id);
       var wished = A.inWishlist(p.id);
+      var stock = Number(p.stock) || 0;
+      var stockMessage = stock <= 0 ? "Out of stock — remove this item to continue" : l.qty > stock ? "Only " + stock + " available — reduce quantity" : stock <= 20 ? "Only " + stock + " left" : "In stock";
+      var stockProblem = stock <= 0 || l.qty > stock;
       return '<article class="cline">' +
         '<a class="cline__img" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /></a>' +
         '<div class="cline__body">' +
         '<a class="cline__name" href="#/p/' + p.id + '">' + esc(p.name) + '</a>' +
-        '<p class="cline__seller">' + esc(p.brand) + ' · ' + (p.stock <= 20 ? "Only " + p.stock + " left" : "In stock") + '</p>' +
+        '<p class="cline__seller' + (stockProblem ? ' stock-out' : '') + '">' + esc(p.brand) + ' · ' + esc(stockMessage) + '</p>' +
         '<div class="cline__price"><b>' + money(p.price * l.qty) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp * l.qty) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
         '<div class="cline__ops">' +
-        '<div class="stepper"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + l.qty + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase">+</button></div>' +
+        '<div class="stepper"><button data-qty="dec" data-id="' + p.id + '" aria-label="Decrease">−</button><span>' + l.qty + '</span><button data-qty="inc" data-id="' + p.id + '" aria-label="Increase"' + (stock <= 0 || l.qty >= stock ? ' disabled' : '') + '>+</button></div>' +
         '<button class="linkbtn" data-savelater="' + p.id + '">' + (wished ? "♥ Saved" : "♡ Save for later") + '</button>' +
         '<button class="linkbtn linkbtn--danger" data-remove="' + p.id + '">Remove</button>' +
         '</div></div></article>';
     }).join("");
 
+    var unavailableItems = cartHasUnavailableItems();
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: "Cart" }]) +
       '<div class="cartpage">' +
@@ -666,11 +709,13 @@
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
       '<p class="safe-note">The store will add the delivery charge after reviewing your address. You will see the final total before paying.</p>' +
       (t.mrpTotal - t.subtotal > 0 ? '<p class="prow--save">You save <b>' + money(t.mrpTotal - t.subtotal) + '</b> on this order 🎉</p>' : "") +
-      '<button class="btn btn--primary btn--block btn--lg" id="toCheckout">Place order →</button>' +
+      (unavailableItems ? '<p class="safe-note stock-out" role="status">Remove out-of-stock items or reduce quantities before placing your order.</p>' : '') +
+      '<button class="btn btn--primary btn--block btn--lg" id="toCheckout"' + (unavailableItems ? ' disabled aria-disabled="true"' : '') + '>' + (unavailableItems ? 'Review unavailable items' : 'Place order →') + '</button>' +
       '<p class="safe-note">🔒 Safe and secure payments</p>' +
       '</div></aside></div>';
 
     $("#toCheckout").addEventListener("click", function () {
+      if (cartHasUnavailableItems()) { A.toast("Remove out-of-stock items or reduce quantities before checkout.", false); return; }
       if (!A.requireLogin("Login to checkout.")) return;
       A.navigateTo("#/checkout");
     });
@@ -725,6 +770,11 @@
 
   function checkoutPage() {
     pruneMissingCart();
+    if (cartHasUnavailableItems()) {
+      A.toast("An item in your cart is out of stock or has limited availability. Review your cart first.", false);
+      A.navigateTo("#/cart");
+      return;
+    }
     var t = A.computeTotals();
     if (t.count === 0) { A.navigateTo("#/cart"); return; }
     var s = A.session();
