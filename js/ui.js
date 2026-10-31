@@ -1298,6 +1298,7 @@
         '<span>' + (p ? '<a href="#/p/' + p.id + '">' + esc(it.name) + '</a>' : esc(it.name)) + '</span>' +
         '<em>×' + it.qty + '</em><b>' + money(it.price * it.qty) + '</b></div>';
     }).join("");
+    var courierTrackingUrl = /^https:\/\//i.test(String(o.shiprocketTrackingUrl || "")) ? String(o.shiprocketTrackingUrl) : "";
 
     view.innerHTML =
       crumbs([{ label: "Home", href: "#/" }, { label: "My orders", href: "#/orders" }, { label: o.id }]) +
@@ -1307,6 +1308,7 @@
       '<div class="odetail__grid">' +
       '<section class="card odetail__box"><h2>shipment timeline</h2>' + timeline +
       '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
+      (o.shiprocketAwb ? '<section class="card odetail__box"><h2>courier tracking</h2><p><b>' + esc(o.shiprocketCourier || "Shiprocket courier") + '</b><br>AWB: ' + esc(o.shiprocketAwb) + '</p>' + (courierTrackingUrl ? '<a class="btn btn--soft btn--sm" href="' + esc(courierTrackingUrl) + '" target="_blank" rel="noopener noreferrer">Track shipment</a>' : "") + '</section>' : "") +
       '<section class="card odetail__box"><h2>items (' + o.qty + ')</h2><div class="minis">' + items + '</div>' +
       '<div class="odetail__ops">' +
       (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +

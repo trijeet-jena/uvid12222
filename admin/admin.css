@@ -325,6 +325,13 @@ table.tbl { width: 100%; border-collapse: collapse; min-width: 640px; }
 .v-file__caption { font-size: 10px; line-height: 1; }
 .vrow .iconbtn { width: 36px; height: 36px; color: var(--red); }
 .var-add { margin-top: 4px; }
+.shiprocket-intro { color: var(--muted); margin: 0 0 16px; }
+.shiprocket-grid { margin-bottom: 14px; }
+.shiprocket-results { margin: 0 0 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcfb; }
+.shiprocket-results > p { margin: 0; color: var(--muted); }
+.shiprocket-status { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+.shiprocket-booking p { margin: 8px 0 12px; }
+.shiprocket-booking a + a { margin-left: 10px; }
 
 /* photo gallery (image database) */
 .gal__tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

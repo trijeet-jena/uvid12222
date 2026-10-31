@@ -1469,6 +1469,7 @@
     const quotePending = Number(o.shipping_finalized) === 0;
     const proofReported = Boolean(o.payment_proof_sent_at);
     const proofUploaded = Boolean(o.payment_proof_file_name);
+    const courierReady = o.payment_status === "PAID" && Number(o.shipping_finalized) === 1 && o.status !== "CANCELLED";
     const paymentNote = awaitingUpi ? " · Payment pending" + (proofUploaded ? " · Payment proof uploaded" : proofReported ? " · Proof reported" : "") : "";
     const paymentInstruction = quotePending
       ? "Set the delivery charge in the invoice first."
@@ -1486,7 +1487,8 @@
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") + "</td>" +
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") +
+      (o.shiprocket_awb_code ? '<small class="order-workflow-note">' + esc(o.shiprocket_courier_name || "Shiprocket") + ' · AWB ' + esc(o.shiprocket_awb_code) + '</small>' : courierReady && o.shiprocket_status !== "CREATING" ? '<button class="btn btn--soft btn--sm" type="button" data-book-courier="' + esc(o.id) + '">' + (o.shiprocket_status === "FAILED" || o.shiprocket_status === "ORDER_CREATED" || o.shiprocket_status === "AWB_ASSIGNED" ? "Continue courier booking" : "Book courier") + '</button>' : "") + "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
@@ -1497,6 +1499,10 @@
   function invoiceImageUrl(value) {
     const src = String(value || "").trim();
     return /^(https?:\/\/|\/(?!\/)|data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,])/i.test(src) ? src : "";
+  }
+  function externalHttpsUrl(value) {
+    const src = String(value || "").trim();
+    return /^https:\/\//i.test(src) ? src : "";
   }
   function orderInvoiceHtml(order) {
     const address = orderAddress(order);
@@ -1526,6 +1532,13 @@
       : proofUrl && proofMime === "application/pdf"
         ? '<iframe src="' + esc(proofUrl) + '" title="Payment proof PDF for order ' + esc(order.id) + '"></iframe>'
         : "";
+    const shipmentTrackUrl = externalHttpsUrl(order.shiprocket_tracking_url);
+    const shipmentLabelUrl = externalHttpsUrl(order.shiprocket_label_url);
+    const shipmentDetails = order.shiprocket_awb_code
+      ? '<section class="invoice__proof shiprocket-booking"><h3>Courier booking</h3><p><b>' + esc(order.shiprocket_courier_name || "Shiprocket courier") + '</b> · AWB ' + esc(order.shiprocket_awb_code) + '<br><span>' + esc(order.shiprocket_pickup_status || order.shiprocket_status || "Booking created") + '</span></p>' +
+        (shipmentTrackUrl ? '<a href="' + esc(shipmentTrackUrl) + '" target="_blank" rel="noopener noreferrer">Track shipment</a> ' : "") +
+        (shipmentLabelUrl ? '<a href="' + esc(shipmentLabelUrl) + '" target="_blank" rel="noopener noreferrer">Open shipping label</a>' : "") + '</section>'
+      : order.shiprocket_status === "FAILED" ? '<section class="invoice__proof shiprocket-booking"><h3>Courier booking needs attention</h3><p>' + esc(order.shiprocket_error_message || "The last Shiprocket attempt did not finish.") + '</p></section>' : "";
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
@@ -1537,6 +1550,7 @@
       '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
       (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview">' + proofPreview + '</div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
+      shipmentDetails +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
       (items.length ? items.map(function (item, index) {
         const quantity = Number(item.quantity) || 0;
@@ -1561,7 +1575,7 @@
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + ((order.payment_status === "PAID" || order.payment_proof_sent_at) ? '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + (order.payment_status === "PAID" && !quotePending && order.status !== "CANCELLED" && !order.shiprocket_awb_code && order.shiprocket_status !== "CREATING" ? '<button class="btn btn--soft" type="button" data-invoice-book-courier>' + (["FAILED","ORDER_CREATED","AWB_ASSIGNED"].includes(order.shiprocket_status) ? "Continue courier booking" : "Book courier with Shiprocket") + '</button>' : "") + ((order.payment_status === "PAID" || order.payment_proof_sent_at) ? '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1589,6 +1603,8 @@
     });
     const printButton = back.querySelector("[data-print-invoice]");
     if (printButton) printButton.addEventListener("click", function () { window.print(); });
+    const bookCourierButton = back.querySelector("[data-invoice-book-courier]");
+    if (bookCourierButton) bookCourierButton.addEventListener("click", function () { closeModal(); openShiprocketModal(order); });
     const emailButton = back.querySelector("[data-send-order-email]");
     if (emailButton) emailButton.addEventListener("click", async function () {
       const undo = busy(emailButton, "Sending…");
@@ -1632,7 +1648,130 @@
       }
     });
   }
+  async function openShiprocketModal(order) {
+    const address = orderAddress(order);
+    const back = openModal(
+      '<div class="modal__head"><h3>Book courier · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close courier booking">' + ICONS.x + '</button></div>' +
+      '<div class="modal__body"><p class="shiprocket-intro">Choose your pickup location, confirm the package size, and compare available courier rates. Booking creates the Shiprocket shipment and requests pickup.</p>' +
+      '<p class="form-error" id="srSetupError" hidden></p>' +
+      '<div class="form-grid shiprocket-grid"><label class="fld span2"><span>Pickup location <i>*</i></span><select id="srPickupLocation" required><option value="">Loading pickup locations…</option></select><small>Choose a pickup address already saved in Shiprocket.</small></label>' +
+      '<label class="fld"><span>Customer state <i>*</i></span><input id="srDeliveryState" maxlength="100" value="' + esc(order.shiprocket_delivery_state || address.state || "") + '" placeholder="e.g. Karnataka" required></label>' +
+      '<label class="fld"><span>Package weight (kg) <i>*</i></span><input id="srWeight" type="number" min="0.001" max="1000" step="0.001" value="' + esc(order.shiprocket_weight || "") + '" required></label>' +
+      '<label class="fld"><span>Length (cm) <i>*</i></span><input id="srLength" type="number" min="0.6" max="1000" step="0.1" value="' + esc(order.shiprocket_length || "") + '" required></label>' +
+      '<label class="fld"><span>Breadth (cm) <i>*</i></span><input id="srBreadth" type="number" min="0.6" max="1000" step="0.1" value="' + esc(order.shiprocket_breadth || "") + '" required></label>' +
+      '<label class="fld"><span>Height (cm) <i>*</i></span><input id="srHeight" type="number" min="0.6" max="1000" step="0.1" value="' + esc(order.shiprocket_height || "") + '" required></label></div>' +
+      '<div id="srCourierResults" class="shiprocket-results" hidden></div><p class="form-error" id="srBookingError" hidden></p><p class="shiprocket-status" id="srBookingStatus" role="status"></p></div>' +
+      '<div class="modal__foot"><button class="btn btn--ghost" data-close>Cancel</button><button class="btn btn--soft" type="button" id="srCheckRates" disabled>Check courier rates</button><button class="btn btn--primary" type="button" id="srBookCourier" hidden>Book selected courier</button></div>',
+      "modal--wide"
+    );
+    const pickupSelect = $("#srPickupLocation", back);
+    const setupError = $("#srSetupError", back);
+    const bookingError = $("#srBookingError", back);
+    const bookingStatus = $("#srBookingStatus", back);
+    const checkButton = $("#srCheckRates", back);
+    const bookButton = $("#srBookCourier", back);
+    const results = $("#srCourierResults", back);
+    let courierOptions = [];
+    try {
+      const result = await api("GET", "/api/admin/shiprocket/pickup-locations");
+      if (!result.configured) {
+        setupError.innerHTML = 'Shiprocket is not connected yet. Add your API credentials as Cloudflare Worker secrets <code>SHIPROCKET_EMAIL</code> and <code>SHIPROCKET_PASSWORD</code>, then reopen this window.';
+        setupError.hidden = false;
+        pickupSelect.innerHTML = '<option value="">Shiprocket is not connected</option>';
+        return;
+      }
+      const locations = Array.isArray(result.pickupLocations) ? result.pickupLocations : [];
+      if (!locations.length) {
+        setupError.textContent = "No active Shiprocket pickup addresses were found. Add or activate a pickup address in Shiprocket, then try again.";
+        setupError.hidden = false;
+        pickupSelect.innerHTML = '<option value="">No pickup locations available</option>';
+        return;
+      }
+      pickupSelect.innerHTML = '<option value="">Choose a pickup location…</option>' + locations.map(function (location) {
+        return '<option value="' + esc(location.name) + '">' + esc(location.name) + ' · ' + esc(location.pincode) + (location.city ? ' · ' + esc(location.city) : '') + '</option>';
+      }).join("");
+      const preferred = order.shiprocket_pickup_location || result.defaultPickupLocation || (locations.find(function (location) { return location.primary; }) || {}).name || "";
+      if (preferred) pickupSelect.value = preferred;
+      if (order.shiprocket_shipment_id) {
+        [pickupSelect, $("#srDeliveryState", back), $("#srWeight", back), $("#srLength", back), $("#srBreadth", back), $("#srHeight", back)].forEach(function (field) { field.disabled = true; });
+      }
+      checkButton.disabled = false;
+    } catch (error) {
+      setupError.textContent = error.message || "Could not load Shiprocket pickup locations.";
+      setupError.hidden = false;
+      pickupSelect.innerHTML = '<option value="">Could not load pickup locations</option>';
+    }
+    function bookingPayload() {
+      return {
+        pickupLocation: pickupSelect.value,
+        deliveryState: $("#srDeliveryState", back).value.trim(),
+        weight: $("#srWeight", back).value,
+        length: $("#srLength", back).value,
+        breadth: $("#srBreadth", back).value,
+        height: $("#srHeight", back).value,
+      };
+    }
+    checkButton.addEventListener("click", async function () {
+      bookingError.hidden = true;
+      results.hidden = true;
+      bookButton.hidden = true;
+      const payload = bookingPayload();
+      if (!payload.pickupLocation || !payload.deliveryState || !payload.weight || !payload.length || !payload.breadth || !payload.height) {
+        bookingError.textContent = "Complete the pickup location, customer state, package weight and all three package dimensions.";
+        bookingError.hidden = false;
+        return;
+      }
+      const undo = busy(checkButton, "Checking rates…");
+      try {
+        const data = await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/shiprocket/rates", payload);
+        courierOptions = Array.isArray(data.couriers) ? data.couriers : [];
+        if (!courierOptions.length) {
+          results.innerHTML = '<p>No couriers are available for this pickup PIN, delivery PIN and package size. Check the address and dimensions in Shiprocket.</p>';
+          results.hidden = false;
+          return;
+        }
+        results.innerHTML = '<label class="fld"><span>Choose courier</span><select id="srCourierChoice">' + courierOptions.map(function (courier) {
+          return '<option value="' + courier.id + '">' + esc(courier.name) + ' · ' + money(courier.rate) + (courier.eta ? ' · ' + esc(courier.eta) : '') + '</option>';
+        }).join("") + '</select><small>Rates and serviceability are returned by Shiprocket for this package.</small></label>';
+        results.hidden = false;
+        bookButton.hidden = false;
+      } catch (error) {
+        bookingError.textContent = error.message || "Could not check Shiprocket rates.";
+        bookingError.hidden = false;
+      } finally { undo(); }
+    });
+    bookButton.addEventListener("click", async function () {
+      const select = $("#srCourierChoice", back);
+      const courier = courierOptions.find(function (option) { return String(option.id) === String(select && select.value); });
+      if (!courier) return;
+      const ok = await confirmDialog("Book " + courier.name + " for " + order.id + " at the quoted Shiprocket rate of " + money(courier.rate) + "? This creates the shipment, assigns an AWB, and requests courier pickup.", { yes: "Book courier" });
+      if (!ok) return;
+      bookingError.hidden = true;
+      const undo = busy(bookButton, "Booking…");
+      try {
+        const result = await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/shiprocket/book", Object.assign({}, bookingPayload(), { courierId: courier.id }));
+        const updated = result.order;
+        const index = state.orders.findIndex(function (item) { return String(item.id) === String(order.id); });
+        if (index >= 0) state.orders[index] = updated;
+        closeModal();
+        toast("Shiprocket booking created for " + order.id + (updated.shiprocket_awb_code ? " · AWB " + updated.shiprocket_awb_code : ""), true);
+        await repaint(VIEWS.orders);
+        const fresh = state.orders.find(function (item) { return String(item.id) === String(order.id); });
+        if (fresh) openOrderInvoice(fresh);
+      } catch (error) {
+        undo();
+        bookingError.textContent = error.message || "Shiprocket could not book this courier.";
+        bookingError.hidden = false;
+      }
+    });
+  }
   content.addEventListener("click", async function (e) {
+    const bookCourier = e.target.closest("[data-book-courier]");
+    if (bookCourier) {
+      const order = state.orders.find(function (item) { return String(item.id) === bookCourier.dataset.bookCourier; });
+      if (order) openShiprocketModal(order);
+      return;
+    }
     const place = e.target.closest("[data-confirm-place]");
     if (place) {
       const order = state.orders.find(function (item) { return String(item.id) === place.dataset.confirmPlace; });
