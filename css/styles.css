@@ -596,6 +596,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .shiprocket-customer h2 { margin: 0 0 8px; font-size: 17px; }
 .shiprocket-customer p { margin: 8px 0 12px; color: var(--ink-2); }
 .shiprocket-customer details > summary { color: var(--green-d); font-weight: 700; cursor: pointer; }
+.shiprocket-customer details > summary.shiprocket-customer__trigger { display: inline-flex; margin: 4px 0 8px; list-style: none; }
+.shiprocket-customer details > summary.shiprocket-customer__trigger::-webkit-details-marker { display: none; }
 .shiprocket-customer__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .shiprocket-customer__fields label, .shiprocket-customer__results label { display: grid; gap: 5px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
 .shiprocket-customer__fields input, .shiprocket-customer__fields select, .shiprocket-customer__results select { width: 100%; min-height: 42px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: #fff; font: inherit; }

@@ -1118,7 +1118,7 @@
     }
     return '<section class="shiprocket-customer card-inset" data-shiprocket-order="' + esc(orderId) + '"><h2>Book your courier with Shiprocket</h2>' +
       (ready
-        ? '<details data-sr-details><summary>See courier options and book</summary><p>Compare the couriers available for your delivery PIN, then choose one to book this order. Enter the packed parcel size and weight.</p>' +
+        ? '<details data-sr-details><summary class="shiprocket-customer__trigger">Book your courier</summary><p>Compare the couriers available for your delivery PIN, then choose one to book this order. Enter the packed parcel size and weight.</p>' +
           '<div class="shiprocket-customer__fields"><label><span>Pickup location</span><select data-sr-pickup><option value="">Loading pickup locations…</option></select></label>' +
           '<label><span>Your state</span><input data-sr-state maxlength="100" value="' + esc(order.shiprocketDeliveryState || order.address?.state || "") + '" placeholder="e.g. Karnataka" required></label>' +
           '<label><span>Parcel weight (kg)</span><input data-sr-weight type="number" min="0.001" max="1000" step="0.001"' + (order.shiprocketWeight ? ' value="' + esc(order.shiprocketWeight) + '"' : "") + ' required></label>' +
