@@ -912,8 +912,9 @@
     }
     if (order.paymentProofSent) {
       return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
-        (order.shippingFinalized ? 'Payment proof uploaded. Confirm below to place your order.' : 'Payment proof uploaded. Waiting for the store to confirm the final delivery total before you can confirm.') + '</p>' +
-        (order.shippingFinalized ? '<button class="btn btn--primary btn--block" type="button" id="confirmPaymentProof">Confirm payment &amp; place order</button>' : '');
+        'Payment proof uploaded. Confirm your order below.' +
+        (order.shippingFinalized ? '' : ' The store will confirm the delivery charge after reviewing your address.') + '</p>' +
+        '<button class="btn btn--primary btn--block" type="button" id="confirmPaymentProof">Confirm order</button>';
     }
     return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
       (order.shippingFinalized ? 'Choose your screenshot or payment receipt in any file format (up to 1.4 MB).' : 'If you have already paid, choose your screenshot or payment receipt in any file format (up to 1.4 MB).') +
@@ -1017,7 +1018,7 @@
         successHtml(order);
       } catch (error) {
         confirmProofButton.disabled = false;
-        confirmProofButton.textContent = "Confirm payment & place order";
+        confirmProofButton.textContent = "Confirm order";
         if (status) { status.textContent = error.message || "Could not confirm your order. Please try again."; status.classList.add("upi-wait__status--error"); }
       }
     });
@@ -1112,8 +1113,8 @@
       '<div class="success card">' +
       '<div class="success__burst" aria-hidden="true">' + '<i></i><i></i><i></i><i></i><i></i><i></i>' + '</div>' +
       '<div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
-      '<h1>' + (proofSubmitted ? "Order placed successfully!" : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
-      '<p class="success__sub">' + (proofSubmitted && !paymentConfirmed ? "Your payment proof for <b>" + money(order.totals.total) + "</b> was submitted. The store will verify the transfer before processing your order." : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.")) + '</p>' +
+      '<h1>' + (proofSubmitted ? "Your order has been confirmed!" : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
+      '<p class="success__sub">' + (proofSubmitted && !paymentConfirmed ? "Your payment proof was submitted. The store will verify the transfer before processing your order." + (!order.shippingFinalized ? " The delivery charge will be confirmed after the address review." : "") : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.")) + '</p>' +
       '<p class="success__sub" id="upiPaymentStatus">Current order status: <b>' + esc(order.status || "Placed") + '</b>.</p>' +
       '<div class="success__meta card-inset">' +
       '<div><span>Order ID</span><b>' + order.id + '</b></div>' +

@@ -1289,8 +1289,6 @@ async function handleApi(request, env, user, url) {
     if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer be submitted.",409);
     const proof=await env.DB.prepare("SELECT order_id,file_name FROM order_payment_proofs WHERE order_id=?").bind(id).first();
     if(!proof) return error("Upload your payment proof file before confirming the order.",409);
-    const quote=await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
-    if(quote && Number(quote.finalized)!==1) return error("Wait for the store to confirm the final delivery total before submitting your order.",409);
     const timestamp=now();
     const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_proof_sent_at=COALESCE(payment_proof_sent_at,?),updated_at=? WHERE id=? AND customer_id=? AND status IN ('AWAITING_PAYMENT','PLACED') AND payment_status!='PAID' AND payment_proof_sent_at IS NULL")
       .bind(timestamp,timestamp,id,user.id).run();
