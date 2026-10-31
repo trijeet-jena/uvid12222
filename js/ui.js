@@ -1104,150 +1104,12 @@
     checkPaymentStatus();
   }
 
-  var shiprocketCustomerRefreshTimer = null;
-
   function customerShiprocketPanel(order) {
-    if (!order || !order._srv) return "";
-    var orderId = String(order.id || "");
-    var ready = Boolean((order.paymentConfirmed || order.paymentProofSubmitted) && order.status !== "Cancelled");
-    if (order.shiprocketAwb) {
-      var tracking = /^https:\/\//i.test(String(order.shiprocketTrackingUrl || "")) ? String(order.shiprocketTrackingUrl) : "";
-      return '<section class="shiprocket-customer card-inset" data-shiprocket-order="' + esc(orderId) + '"><h2>Shiprocket courier booked</h2>' +
-        '<p><b>' + esc(order.shiprocketCourier || "Courier") + '</b> · AWB ' + esc(order.shiprocketAwb) + '</p>' +
-        (tracking ? '<a class="btn btn--soft btn--sm" href="' + esc(tracking) + '" target="_blank" rel="noopener noreferrer">Track shipment</a>' : "") + '</section>';
-    }
-    return '<section class="shiprocket-customer card-inset" data-shiprocket-order="' + esc(orderId) + '"><h2>Book your courier with Shiprocket</h2>' +
-      (ready
-        ? '<details data-sr-details><summary class="shiprocket-customer__trigger">Book your courier</summary><p>Compare the couriers available for your delivery PIN, then choose one to book this order. Enter the packed parcel size and weight.</p>' +
-          '<div class="shiprocket-customer__fields"><label><span>Pickup location</span><select data-sr-pickup><option value="">Loading pickup locations…</option></select></label>' +
-          '<label><span>Your state</span><input data-sr-state maxlength="100" value="' + esc(order.shiprocketDeliveryState || order.address?.state || "") + '" placeholder="e.g. Karnataka" required></label>' +
-          '<label><span>Parcel weight (kg)</span><input data-sr-weight type="number" min="0.001" max="1000" step="0.001"' + (order.shiprocketWeight ? ' value="' + esc(order.shiprocketWeight) + '"' : "") + ' required></label>' +
-          '<label><span>Length (cm)</span><input data-sr-length type="number" min="0.6" max="1000" step="0.1"' + (order.shiprocketLength ? ' value="' + esc(order.shiprocketLength) + '"' : "") + ' required></label>' +
-          '<label><span>Breadth (cm)</span><input data-sr-breadth type="number" min="0.6" max="1000" step="0.1"' + (order.shiprocketBreadth ? ' value="' + esc(order.shiprocketBreadth) + '"' : "") + ' required></label>' +
-          '<label><span>Height (cm)</span><input data-sr-height type="number" min="0.6" max="1000" step="0.1"' + (order.shiprocketHeight ? ' value="' + esc(order.shiprocketHeight) + '"' : "") + ' required></label></div>' +
-          '<p class="shiprocket-customer__message" data-sr-message role="status"></p><button class="btn btn--soft btn--sm" type="button" data-sr-rates disabled>Check courier rates</button><div class="shiprocket-customer__results" data-sr-results hidden></div>' +
-          '</details>'
-        : '<p>Book your courier here after you upload your payment proof and confirm your order.</p><button class="btn btn--soft btn--sm" type="button" disabled>' + (order.status === "Cancelled" ? "Order cancelled" : "Upload proof and confirm your order first") + '</button>') +
-      '</section>';
+    if (!order || !order._srv || order.status === "Cancelled") return "";
+    return '<section class="shiprocket-customer card-inset"><h2>Book a courier</h2>' +
+      '<p>Continue to Shiprocket to enter the shipment details and choose your courier.</p>' +
+      '<a class="btn btn--primary btn--sm" href="https://www.shiprocket.in/">Book your courier</a></section>';
   }
-
-  function bindCustomerShiprocket(order) {
-    if (shiprocketCustomerRefreshTimer) { clearInterval(shiprocketCustomerRefreshTimer); shiprocketCustomerRefreshTimer = null; }
-    var panel = view.querySelector("[data-shiprocket-order]");
-    if (!panel) return;
-    var details = panel.querySelector("[data-sr-details]");
-    if (!details) {
-      if (order.status !== "Cancelled" && !order.shiprocketAwb) {
-        shiprocketCustomerRefreshTimer = setInterval(function () {
-          var hash = (location.hash || "").split("?")[0];
-          if (hash !== "#/pay/" + order.id && hash !== "#/orders/" + order.id) { clearInterval(shiprocketCustomerRefreshTimer); shiprocketCustomerRefreshTimer = null; return; }
-          fetch("/api/orders/" + encodeURIComponent(order.id), { cache: "no-store", credentials: "same-origin" })
-            .then(function (response) { if (!response.ok) throw new Error("Refresh failed"); return response.json(); })
-            .then(function (data) {
-              if (!data || !data.order) return;
-              var fresh = serverOrderToClient(data.order);
-              var index = A.state.orders.findIndex(function (item) { return String(item.id) === String(fresh.id); });
-              if (index >= 0) A.state.orders[index] = fresh; else A.state.orders.unshift(fresh);
-              A.save();
-              if ((fresh.paymentConfirmed || fresh.paymentProofSubmitted) && fresh.status !== "Cancelled") {
-                clearInterval(shiprocketCustomerRefreshTimer); shiprocketCustomerRefreshTimer = null;
-                if (hash === "#/pay/" + order.id) successHtml(fresh); else orderDetailPage(fresh.id);
-              }
-            }).catch(function () {});
-        }, 12000);
-      }
-      return;
-    }
-    var pickup = panel.querySelector("[data-sr-pickup]");
-    var message = panel.querySelector("[data-sr-message]");
-    var ratesButton = panel.querySelector("[data-sr-rates]");
-    var results = panel.querySelector("[data-sr-results]");
-    var loaded = false;
-    function showMessage(text, bad) {
-      message.textContent = text || "";
-      message.classList.toggle("shiprocket-customer__message--error", Boolean(bad));
-    }
-    function payload() {
-      return {
-        pickupLocation: pickup.value,
-        deliveryState: panel.querySelector("[data-sr-state]").value.trim(),
-        weight: panel.querySelector("[data-sr-weight]").value,
-        length: panel.querySelector("[data-sr-length]").value,
-        breadth: panel.querySelector("[data-sr-breadth]").value,
-        height: panel.querySelector("[data-sr-height]").value,
-      };
-    }
-    details.addEventListener("toggle", async function () {
-      if (!details.open || loaded) return;
-      loaded = true;
-      try {
-        var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/shiprocket/pickup-locations", { cache: "no-store", credentials: "same-origin" });
-        var data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Could not load courier options.");
-        if (!data.configured) {
-          pickup.innerHTML = '<option value="">Shiprocket unavailable</option>';
-          showMessage("Shiprocket booking is not connected yet. Please contact the store.", true);
-          return;
-        }
-        var locations = Array.isArray(data.pickupLocations) ? data.pickupLocations : [];
-        if (!locations.length) {
-          pickup.innerHTML = '<option value="">No pickup location is available</option>';
-          showMessage("No active Shiprocket pickup address is available. Please contact the store.", true);
-          return;
-        }
-        pickup.innerHTML = '<option value="">Choose a pickup location…</option>' + locations.map(function (location) {
-          return '<option value="' + esc(location.name) + '">' + esc(location.name) + ' · ' + esc(location.pincode) + (location.city ? ' · ' + esc(location.city) : "") + '</option>';
-        }).join("");
-        var preferred = order.shiprocketPickupLocation || data.defaultPickupLocation || ((locations.find(function (location) { return location.primary; }) || {}).name || "");
-        if (preferred) pickup.value = preferred;
-        if (order.shiprocketShipmentId) {
-          [pickup, panel.querySelector("[data-sr-state]"), panel.querySelector("[data-sr-weight]"), panel.querySelector("[data-sr-length]"), panel.querySelector("[data-sr-breadth]"), panel.querySelector("[data-sr-height]")].forEach(function (field) { field.disabled = true; });
-        }
-        ratesButton.disabled = false;
-      } catch (error) { showMessage(error.message || "Could not load Shiprocket options.", true); }
-    });
-    ratesButton.addEventListener("click", async function () {
-      results.hidden = true;
-      var values = payload();
-      if (!values.pickupLocation || !values.deliveryState || !values.weight || !values.length || !values.breadth || !values.height) {
-        showMessage("Choose a pickup address and enter your state plus the parcel's packed weight and size.", true);
-        return;
-      }
-      ratesButton.disabled = true; ratesButton.textContent = "Checking rates…"; showMessage("Checking available Shiprocket couriers…", false);
-      try {
-        var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/shiprocket/rates", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
-        var data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Could not check courier rates.");
-        var couriers = Array.isArray(data.couriers) ? data.couriers : [];
-        if (!couriers.length) { showMessage("No courier service is available for this PIN code and parcel size.", true); return; }
-        results.innerHTML = '<label><span>Choose a courier</span><select data-sr-courier>' + couriers.map(function (courier) {
-          return '<option value="' + courier.id + '">' + esc(courier.name) + ' · ' + money(courier.rate) + (courier.eta ? ' · ' + esc(courier.eta) : "") + '</option>';
-        }).join("") + '</select></label><p>Courier rate shown is Shiprocket’s quote. Your order total remains as confirmed by the store.</p><button class="btn btn--primary btn--sm" type="button" data-sr-book>Book selected courier</button>';
-        results.hidden = false;
-        var bookButton = results.querySelector("[data-sr-book]");
-        bookButton.addEventListener("click", async function () {
-          var select = results.querySelector("[data-sr-courier]");
-          var courier = couriers.find(function (item) { return String(item.id) === String(select.value); });
-          if (!courier || !window.confirm("Book " + courier.name + " for order " + order.id + " at " + money(courier.rate) + "? Shiprocket will create the shipment and request pickup from the store.")) return;
-          bookButton.disabled = true; bookButton.textContent = "Booking courier…";
-          try {
-            var bookingResponse = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/shiprocket/book", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({}, values, { courierId: courier.id })) });
-            var bookingData = await bookingResponse.json();
-            if (!bookingResponse.ok) throw new Error(bookingData.error || "Could not book this courier.");
-            var freshOrder = serverOrderToClient(bookingData.order);
-            var stateIndex = A.state.orders.findIndex(function (item) { return String(item.id) === String(freshOrder.id); });
-            if (stateIndex >= 0) A.state.orders[stateIndex] = freshOrder; else A.state.orders.unshift(freshOrder);
-            A.save();
-            A.toast("Shiprocket courier booked for " + freshOrder.id + (freshOrder.shiprocketAwb ? " · AWB " + freshOrder.shiprocketAwb : ""), true);
-            if ((location.hash || "").split("?")[0] === "#/pay/" + order.id) successHtml(freshOrder); else orderDetailPage(freshOrder.id);
-          } catch (error) { showMessage(error.message || "Could not book this courier. Please try again.", true); bookButton.disabled = false; bookButton.textContent = "Book selected courier"; }
-        });
-        showMessage("Choose the courier service that suits you, then book it.", false);
-      } catch (error) { showMessage(error.message || "Could not check courier rates.", true); }
-      finally { ratesButton.disabled = false; ratesButton.textContent = "Check courier rates"; }
-    });
-  }
-
   function successHtml(order) {
     var isCod = String(order.payment).toLowerCase() === "cod";
     var proofSubmitted = Boolean(order.paymentProofSubmitted);
@@ -1273,7 +1135,6 @@
       '<a class="btn btn--ghost" href="#/">Continue shopping</a>' +
       '</div></div>' +
       shelf("Complete your desk", "Frequently bought together", D.PRODUCTS.filter(function (p) { return p.tags.indexOf("bestseller") > -1; }).slice(0, 6));
-    bindCustomerShiprocket(order);
   }
 
   function openCustomerInvoice(order) {
@@ -1452,7 +1313,6 @@
       '<div class="odetail__grid">' +
       '<section class="card odetail__box"><h2>shipment timeline</h2>' + timeline +
       '<p class="ocard__eta odetail__eta">🚚 ' + (o.status === "Delivered" ? "Delivered on " + A.fmtDate(o.eta) : cancelled ? "Order cancelled" : "Arriving by <b>" + A.fmtDate(o.eta) + "</b>") + '</p></section>' +
-      customerShiprocketPanel(o) +
       '<section class="card odetail__box"><h2>items (' + o.qty + ')</h2><div class="minis">' + items + '</div>' +
       '<div class="odetail__ops">' +
       (o.status !== "Delivered" && !cancelled ? '<button class="btn btn--ghost btn--sm" data-cancel="' + o.id + '">Cancel order</button>' : "") +
@@ -1469,7 +1329,6 @@
       (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">Pay ' + money(o.totals.total) + ' by UPI</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. You can pay here when the final amount is ready.</p>' : "")) +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
-    bindCustomerShiprocket(o);
   }
 
   /* ================= ACCOUNT ================= */

@@ -325,8 +325,6 @@ table.tbl { width: 100%; border-collapse: collapse; min-width: 640px; }
 .v-file__caption { font-size: 10px; line-height: 1; }
 .vrow .iconbtn { width: 36px; height: 36px; color: var(--red); }
 .var-add { margin-top: 4px; }
-.shiprocket-booking p { margin: 8px 0 12px; }
-.shiprocket-booking a + a { margin-left: 10px; }
 
 /* photo gallery (image database) */
 .gal__tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

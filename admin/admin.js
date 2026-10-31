@@ -1487,7 +1487,7 @@
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
         return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
       }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") +
-      (o.shiprocket_awb_code ? '<small class="order-workflow-note">' + esc(o.shiprocket_courier_name || "Shiprocket") + ' · AWB ' + esc(o.shiprocket_awb_code) + '</small>' : "") + "</td>" +
+      "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
   function orderAddress(order) {
@@ -1498,10 +1498,6 @@
   function invoiceImageUrl(value) {
     const src = String(value || "").trim();
     return /^(https?:\/\/|\/(?!\/)|data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,])/i.test(src) ? src : "";
-  }
-  function externalHttpsUrl(value) {
-    const src = String(value || "").trim();
-    return /^https:\/\//i.test(src) ? src : "";
   }
   function orderInvoiceHtml(order) {
     const address = orderAddress(order);
@@ -1531,13 +1527,6 @@
       : proofUrl && proofMime === "application/pdf"
         ? '<iframe src="' + esc(proofUrl) + '" title="Payment proof PDF for order ' + esc(order.id) + '"></iframe>'
         : "";
-    const shipmentTrackUrl = externalHttpsUrl(order.shiprocket_tracking_url);
-    const shipmentLabelUrl = externalHttpsUrl(order.shiprocket_label_url);
-    const shipmentDetails = order.shiprocket_awb_code
-      ? '<section class="invoice__proof shiprocket-booking"><h3>Courier booking</h3><p><b>' + esc(order.shiprocket_courier_name || "Shiprocket courier") + '</b> · AWB ' + esc(order.shiprocket_awb_code) + '<br><span>' + esc(order.shiprocket_pickup_status || order.shiprocket_status || "Booking created") + '</span></p>' +
-        (shipmentTrackUrl ? '<a href="' + esc(shipmentTrackUrl) + '" target="_blank" rel="noopener noreferrer">Track shipment</a> ' : "") +
-        (shipmentLabelUrl ? '<a href="' + esc(shipmentLabelUrl) + '" target="_blank" rel="noopener noreferrer">Open shipping label</a>' : "") + '</section>'
-      : order.shiprocket_status === "FAILED" ? '<section class="invoice__proof shiprocket-booking"><h3>Courier booking needs attention</h3><p>' + esc(order.shiprocket_error_message || "The last Shiprocket attempt did not finish.") + '</p></section>' : "";
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
@@ -1549,7 +1538,6 @@
       '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
       (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview">' + proofPreview + '</div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
-      shipmentDetails +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
       (items.length ? items.map(function (item, index) {
         const quantity = Number(item.quantity) || 0;

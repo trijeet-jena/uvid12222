@@ -23,87 +23,6 @@ const error = (message, status = 400) => json({ error: message }, status);
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const clean = (v, max = 2000) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max);
 const parseJson = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
-const SHIPROCKET_API = "https://apiv2.shiprocket.in/v1/external";
-let shiprocketTokenCache = "";
-let shiprocketTokenExpiresAt = 0;
-
-function shiprocketConfigured(env) {
-  return Boolean(clean(env.SHIPROCKET_EMAIL, 200) && env.SHIPROCKET_PASSWORD);
-}
-async function shiprocketLogin(env, force = false) {
-  if (!shiprocketConfigured(env)) throw Object.assign(new Error("Shiprocket API credentials are not configured on the store server."), { status: 503 });
-  if (!force && shiprocketTokenCache && Date.now() < shiprocketTokenExpiresAt) return shiprocketTokenCache;
-  let response, data;
-  try {
-    response = await fetch(`${SHIPROCKET_API}/auth/login`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: clean(env.SHIPROCKET_EMAIL, 200), password: env.SHIPROCKET_PASSWORD }),
-    });
-    data = await response.json();
-  } catch (_cause) {
-    throw Object.assign(new Error("Could not connect to Shiprocket. Try again shortly."), { status: 502 });
-  }
-  const token = data?.token || data?.data?.token;
-  if (!response.ok || !token) {
-    const message = clean(data?.message || data?.errors?.[0] || "Shiprocket sign-in failed. Check the API email and password.", 300);
-    throw Object.assign(new Error(message), { status: response.status === 401 ? 503 : 502 });
-  }
-  shiprocketTokenCache = String(token);
-  shiprocketTokenExpiresAt = Date.now() + 9 * 86400000;
-  return shiprocketTokenCache;
-}
-async function shiprocketRequest(env, endpoint, options = {}, retry = true) {
-  const token = await shiprocketLogin(env);
-  let response, data;
-  try {
-    response = await fetch(`${SHIPROCKET_API}${endpoint}`, {
-      method: options.method || "GET",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    });
-    const text = await response.text();
-    data = text ? parseJson(text, { message: text }) : {};
-  } catch (_cause) {
-    throw Object.assign(new Error("Could not connect to Shiprocket. Check the booking in your Shiprocket account before retrying."), { status: 502 });
-  }
-  if (response.status === 401 && retry) {
-    shiprocketTokenCache = ""; shiprocketTokenExpiresAt = 0;
-    await shiprocketLogin(env, true);
-    return shiprocketRequest(env, endpoint, options, false);
-  }
-  if (!response.ok || data?.status === false || Number(data?.status_code) >= 400) {
-    const detail = typeof data?.errors === "string" ? data.errors : Array.isArray(data?.errors) ? data.errors.join(", ") : "";
-    const message = clean(data?.message || detail || `Shiprocket returned error ${response.status}.`, 400);
-    throw Object.assign(new Error(message), { status: 502 });
-  }
-  return data;
-}
-function shiprocketPickupLocations(data) {
-  const candidates = [data?.data?.shipping_address, data?.shipping_address, data?.data?.data?.shipping_address, data?.data];
-  const rows = candidates.find(Array.isArray) || [];
-  return rows.map((row) => ({
-    name: clean(row.pickup_location || row.pickup_location_name || row.name || "", 100),
-    pincode: String(row.pin_code || row.pincode || row.pin || "").replace(/\D/g, "").slice(0, 6),
-    city: clean(row.city || "", 100),
-    state: clean(row.state || "", 100),
-    primary: Boolean(row.is_primary || row.primary),
-  })).filter((row) => row.name && /^\d{6}$/.test(row.pincode));
-}
-function shiprocketNumber(value, name, minimum, maximum) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < minimum || n > maximum) throw Object.assign(new Error(`${name} must be between ${minimum} and ${maximum}.`), { status: 400 });
-  return Math.round(n * 1000) / 1000;
-}
-function shiprocketFindValue(value, names, depth = 0) {
-  if (!value || typeof value !== "object" || depth > 5) return null;
-  for (const name of names) if (value[name] != null && value[name] !== "") return value[name];
-  for (const child of Object.values(value)) {
-    const found = shiprocketFindValue(child, names, depth + 1);
-    if (found != null && found !== "") return found;
-  }
-  return null;
-}
-
 function cookieValue(request, name) {
   return (request.headers.get("Cookie") || "").split(";").map((s) => s.trim())
     .find((s) => s.startsWith(name + "="))?.slice(name.length + 1) || "";
@@ -796,13 +715,10 @@ async function revenueReport(env, requestedMonth) {
 async function orderList(env, customerId = null, status = null, includeCustomerDetails = false) {
   const customerColumns = includeCustomerDetails ? ",u.name AS customer_name,u.email AS customer_email,u.mobile_number AS customer_mobile_number" : "";
   const customerJoin = includeCustomerDetails ? " LEFT JOIN users u ON u.id=o.customer_id" : "";
-  const shiprocketColumns = includeCustomerDetails
-    ? ",sr.status AS shiprocket_status,sr.courier_name AS shiprocket_courier_name,sr.courier_rate AS shiprocket_courier_rate,sr.courier_id AS shiprocket_courier_id,sr.shipment_id AS shiprocket_shipment_id,sr.pickup_location AS shiprocket_pickup_location,sr.delivery_state AS shiprocket_delivery_state,sr.weight AS shiprocket_weight,sr.length AS shiprocket_length,sr.breadth AS shiprocket_breadth,sr.height AS shiprocket_height,sr.awb_code AS shiprocket_awb_code,sr.tracking_url AS shiprocket_tracking_url,sr.label_url AS shiprocket_label_url,sr.pickup_status AS shiprocket_pickup_status,sr.error_message AS shiprocket_error_message"
-    : ",sr.status AS shiprocket_status,sr.courier_name AS shiprocket_courier_name,sr.courier_rate AS shiprocket_courier_rate,sr.courier_id AS shiprocket_courier_id,sr.shipment_id AS shiprocket_shipment_id,sr.pickup_location AS shiprocket_pickup_location,sr.delivery_state AS shiprocket_delivery_state,sr.weight AS shiprocket_weight,sr.length AS shiprocket_length,sr.breadth AS shiprocket_breadth,sr.height AS shiprocket_height,sr.awb_code AS shiprocket_awb_code,sr.tracking_url AS shiprocket_tracking_url,NULL AS shiprocket_label_url,sr.pickup_status AS shiprocket_pickup_status,NULL AS shiprocket_error_message";
   const proofColumns = includeCustomerDetails
     ? ",CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.mime END AS payment_proof_mime,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.file_name END AS payment_proof_file_name,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.byte_size END AS payment_proof_byte_size,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.created_at END AS payment_proof_created_at"
     : ",pp.mime AS payment_proof_mime,pp.file_name AS payment_proof_file_name,pp.byte_size AS payment_proof_byte_size,pp.created_at AS payment_proof_created_at";
-  let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${customerColumns}${proofColumns}${shiprocketColumns} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id${customerJoin} LEFT JOIN order_payment_proofs pp ON pp.order_id=o.id LEFT JOIN shiprocket_shipments sr ON sr.order_id=o.id`, args = [];
+  let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${customerColumns}${proofColumns} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id${customerJoin} LEFT JOIN order_payment_proofs pp ON pp.order_id=o.id`, args = [];
   if (customerId != null) { sql += " WHERE o.customer_id=?"; args.push(customerId); }
   else if (status) { sql += " WHERE o.status=?"; args.push(status); }
   sql += " ORDER BY o.created_at DESC LIMIT 200";
@@ -928,173 +844,6 @@ async function orderEmailItems(env, orderId) {
     qty: item.quantity,
     priceAtPurchase: item.price_at_purchase,
   }));
-}
-
-function shiprocketDimensions(body) {
-  return {
-    weight: shiprocketNumber(body?.weight, "Package weight (kg)", 0.001, 1000),
-    length: shiprocketNumber(body?.length, "Package length (cm)", 0.6, 1000),
-    breadth: shiprocketNumber(body?.breadth, "Package breadth (cm)", 0.6, 1000),
-    height: shiprocketNumber(body?.height, "Package height (cm)", 0.6, 1000),
-  };
-}
-async function shiprocketOrderForCustomer(env, id, customerId) {
-  const order = (await orderList(env, customerId, null, true)).find((row) => row.id === id);
-  if (!order) throw Object.assign(new Error("Order not found."), { status: 404 });
-  if (order.status === "CANCELLED") throw Object.assign(new Error("A cancelled order cannot be sent to Shiprocket."), { status: 409 });
-  if (order.payment_status !== "PAID" && !order.payment_proof_sent_at) throw Object.assign(new Error("Upload your payment proof and confirm your order before booking a courier."), { status: 409 });
-  if (!Array.isArray(order.items) || !order.items.length) throw Object.assign(new Error("This order has no shippable items."), { status: 409 });
-  return order;
-}
-async function shiprocketRateOptions(env, order, body) {
-  const existing = await env.DB.prepare("SELECT * FROM shiprocket_shipments WHERE order_id=?").bind(order.id).first();
-  const dimensions = existing?.shipment_id
-    ? { weight: Number(existing.weight), length: Number(existing.length), breadth: Number(existing.breadth), height: Number(existing.height) }
-    : shiprocketDimensions(body);
-  const address = parseJson(order.address_json, {}) || {};
-  const pickupLocation = existing?.shipment_id ? existing.pickup_location : clean(body?.pickupLocation, 100);
-  const locationsResponse = await shiprocketRequest(env, "/settings/company/pickup?is_order_creation=1");
-  const pickup = shiprocketPickupLocations(locationsResponse).find((row) => row.name.toLowerCase() === pickupLocation.toLowerCase());
-  if (!pickup) throw Object.assign(new Error("Choose an active pickup location from your Shiprocket account."), { status: 400 });
-  if (existing?.awb_code && existing.courier_id) {
-    return [{ id: Number(existing.courier_id), name: clean(existing.courier_name || "Assigned courier", 160), rate: Number(existing.courier_rate || 0), eta: "Already assigned" }];
-  }
-  const deliveryPin = String(address.pin || "").replace(/\D/g, "");
-  if (!/^\d{6}$/.test(deliveryPin)) throw Object.assign(new Error("The customer delivery PIN must contain 6 digits."), { status: 400 });
-  const query = new URLSearchParams({
-    pickup_postcode: pickup.pincode,
-    delivery_postcode: deliveryPin,
-    cod: "0",
-    weight: String(dimensions.weight),
-    length: String(dimensions.length),
-    breadth: String(dimensions.breadth),
-    height: String(dimensions.height),
-    declared_value: String(Math.max(0, Number(order.total_amount) || 0)),
-  });
-  const response = await shiprocketRequest(env, "/courier/serviceability/?" + query.toString());
-  const data = response?.data || response;
-  const rows = data?.available_courier_companies || data?.courier_companies || [];
-  return rows.map((row) => ({
-    id: Number(row.courier_company_id || row.id),
-    name: clean(row.courier_name || row.name || "Courier", 160),
-    rate: Number(row.rate ?? row.freight_charge ?? row.total_charges ?? row.rto_charges ?? 0),
-    eta: clean(row.etd || row.estimated_delivery_days || row.delivery_days || "", 80),
-    rating: Number(row.rating || 0),
-  })).filter((row) => Number.isInteger(row.id) && row.id > 0).sort((a, b) => a.rate - b.rate);
-}
-
-async function shiprocketBookOrder(env, request, actor, id, body, order) {
-  const existing = await env.DB.prepare("SELECT * FROM shiprocket_shipments WHERE order_id=?").bind(id).first();
-  const dimensions = existing?.shipment_id
-    ? { weight: Number(existing.weight), length: Number(existing.length), breadth: Number(existing.breadth), height: Number(existing.height) }
-    : shiprocketDimensions(body);
-  const deliveryState = existing?.shipment_id ? existing.delivery_state : clean(body?.deliveryState, 100);
-  if (deliveryState.length < 2) throw Object.assign(new Error("Enter the customer's state for the shipping label."), { status: 400 });
-  const address = parseJson(order.address_json, {}) || {};
-  const pickupLocation = existing?.shipment_id ? existing.pickup_location : clean(body?.pickupLocation, 100);
-  const courierId = Number(body?.courierId);
-  const eligible = await shiprocketRateOptions(env, order, { ...body, pickupLocation, ...dimensions });
-  const chosenCourier = eligible.find((row) => row.id === courierId);
-  if (!chosenCourier) throw Object.assign(new Error("That courier is no longer available for this package. Check rates again."), { status: 409 });
-  if (existing && ["BOOKED", "PICKUP_REQUESTED"].includes(existing.status)) {
-    throw Object.assign(new Error("A Shiprocket shipment already exists for this order."), { status: 409 });
-  }
-  if (existing && existing.shiprocket_order_id && !existing.shipment_id) {
-    throw Object.assign(new Error("Shiprocket created an order reference but did not return a shipment ID. Review the order in Shiprocket before retrying."), { status: 409 });
-  }
-  if (existing && existing.status === "CREATING") {
-    throw Object.assign(new Error("A Shiprocket booking is already in progress for this order."), { status: 409 });
-  }
-  const timestamp = now();
-  if (!existing) {
-    await env.DB.prepare("INSERT INTO shiprocket_shipments (order_id,status,pickup_location,delivery_state,courier_id,courier_name,courier_rate,weight,length,breadth,height,created_at,updated_at) VALUES (?,'CREATING',?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,pickupLocation,deliveryState,courierId,chosenCourier.name,chosenCourier.rate,dimensions.weight,dimensions.length,dimensions.breadth,dimensions.height,timestamp,timestamp).run();
-  } else {
-    await env.DB.prepare("UPDATE shiprocket_shipments SET status='CREATING',pickup_location=?,delivery_state=?,courier_id=?,courier_name=?,courier_rate=?,weight=?,length=?,breadth=?,height=?,error_message=NULL,updated_at=? WHERE order_id=?")
-      .bind(pickupLocation,deliveryState,courierId,chosenCourier.name,chosenCourier.rate,dimensions.weight,dimensions.length,dimensions.breadth,dimensions.height,timestamp,id).run();
-  }
-
-  try {
-    let shiprocketOrderId = existing?.shiprocket_order_id || null;
-    let shipmentId = existing?.shipment_id || null;
-    let awb = existing?.awb_code || "";
-    let courierName = existing?.courier_name || chosenCourier.name;
-    const phoneDigits = String(address.phone || order.customer_mobile_number || "").replace(/\D/g, "");
-    const phone = phoneDigits.length > 10 && phoneDigits.startsWith("91") ? phoneDigits.slice(-10) : phoneDigits;
-    const itemSubtotal = order.items.reduce((sum, item) => sum + Number(item.price_at_purchase || 0) * Number(item.quantity || 0), 0);
-    if (!address.name || !phone || phone.length !== 10 || !address.line || String(address.city || "").length < 2) {
-      throw Object.assign(new Error("Add the customer's full name, 10-digit phone, street address and city before booking."), { status: 400 });
-    }
-    if (!shiprocketOrderId || !shipmentId) {
-      const uvidOrderNumber = String(id).replace(/\D/g, "");
-      const shiprocketOrderReference = "9" + uvidOrderNumber.padStart(10, "0");
-      const created = await shiprocketRequest(env, "/orders/create/adhoc", { method: "POST", body: {
-        order_id: shiprocketOrderReference,
-        comment: "UVID storefront order " + id,
-        order_date: String(order.created_at || now()).slice(0, 16),
-        pickup_location: pickupLocation,
-        billing_customer_name: clean(address.name, 100),
-        billing_address: clean(address.line, 240),
-        billing_address_2: clean(address.line2 || address.landmark || "", 240),
-        billing_city: clean(address.city, 100),
-        billing_pincode: String(address.pin),
-        billing_state: deliveryState,
-        billing_country: clean(address.country || "India", 80),
-        billing_email: clean(address.email || order.customer_email || "", 180),
-        billing_phone: phone,
-        shipping_is_billing: true,
-        order_items: order.items.map((item) => ({
-          name: clean(item.product_name, 160),
-          sku: clean(item.product_id, 100),
-          units: Number(item.quantity),
-          selling_price: Math.round(Number(item.price_at_purchase || 0) * 100) / 100,
-        })),
-        payment_method: "Prepaid",
-        shipping_charges: Math.round(Number(order.shipping || 0) * 100) / 100,
-        sub_total: Math.round(itemSubtotal * 100) / 100,
-        total_discount: Math.round(Number(order.discount || 0) * 100) / 100,
-        weight: dimensions.weight,
-        length: dimensions.length,
-        breadth: dimensions.breadth,
-        height: dimensions.height,
-      } });
-      shiprocketOrderId = shiprocketFindValue(created, ["order_id"]);
-      shipmentId = shiprocketFindValue(created, ["shipment_id"]);
-      if (!shiprocketOrderId || !shipmentId) throw Object.assign(new Error("Shiprocket created the order but did not return both order and shipment IDs. Check Shiprocket before retrying."), { status: 502 });
-      await env.DB.prepare("UPDATE shiprocket_shipments SET shiprocket_order_id=?,shipment_id=?,status='ORDER_CREATED',updated_at=? WHERE order_id=?")
-        .bind(Number(shiprocketOrderId),Number(shipmentId),now(),id).run();
-    }
-    if (!awb) {
-      const assigned = await shiprocketRequest(env, "/courier/assign/awb", { method: "POST", body: { shipment_id: Number(shipmentId), courier_id: courierId } });
-      awb = String(shiprocketFindValue(assigned, ["awb_code", "awb"] ) || "");
-      courierName = clean(shiprocketFindValue(assigned, ["courier_name"]) || chosenCourier.name, 160);
-      if (!awb) throw Object.assign(new Error("Shiprocket created the shipment but did not return an AWB. Check Shiprocket before retrying."), { status: 502 });
-      await env.DB.prepare("UPDATE shiprocket_shipments SET awb_code=?,courier_name=?,tracking_url=?,status='AWB_ASSIGNED',updated_at=? WHERE order_id=?")
-        .bind(awb,courierName,"https://www.shiprocket.in/shipment-tracking/",now(),id).run();
-    }
-    const pickup = await shiprocketRequest(env, "/courier/generate/pickup", { method: "POST", body: { shipment_id: [Number(shipmentId)] } });
-    const pickupStatus = clean(shiprocketFindValue(pickup, ["pickup_status", "status", "message"]) || "Pickup requested", 160);
-    await env.DB.prepare("UPDATE shiprocket_shipments SET status='PICKUP_REQUESTED',pickup_status=?,updated_at=? WHERE order_id=?")
-      .bind(pickupStatus,now(),id).run();
-    let manifestUrl = "", labelUrl = "";
-    try {
-      const manifest = await shiprocketRequest(env, "/manifests/generate", { method: "POST", body: { shipment_id: [Number(shipmentId)] } });
-      manifestUrl = String(shiprocketFindValue(manifest, ["manifest_url", "url"]) || "");
-    } catch (cause) { console.warn("[SHIPROCKET] Manifest generation failed for order", id, clean(cause?.message, 180)); }
-    try {
-      const label = await shiprocketRequest(env, "/courier/generate/label", { method: "POST", body: { shipment_id: [Number(shipmentId)] } });
-      labelUrl = String(shiprocketFindValue(label, ["label_url", "url"]) || "");
-    } catch (cause) { console.warn("[SHIPROCKET] Label generation failed for order", id, clean(cause?.message, 180)); }
-    await env.DB.prepare("UPDATE shiprocket_shipments SET status='BOOKED',manifest_url=?,label_url=?,error_message=NULL,updated_at=? WHERE order_id=?")
-      .bind(manifestUrl,labelUrl,now(),id).run();
-    await audit(env,request,actor,"order.shiprocket_booked_by_customer",id,{shiprocketOrderId:Number(shiprocketOrderId),shipmentId:Number(shipmentId),awb,courierName});
-    return (await orderList(env,order.customer_id)).find((row) => row.id === id);
-  } catch (cause) {
-    const message = clean(cause?.message || "Shiprocket booking failed.", 400);
-    await env.DB.prepare("UPDATE shiprocket_shipments SET status='FAILED',error_message=?,updated_at=? WHERE order_id=?")
-      .bind(message,now(),id).run();
-    throw Object.assign(new Error(message), { status: cause?.status || 502 });
-  }
 }
 
 async function handleApi(request, env, user, url) {
@@ -1506,28 +1255,6 @@ async function handleApi(request, env, user, url) {
     return json({ok:true,...out,emailNotification:{sent:false,reason:"awaiting_customer_payment_proof_confirmation"}},201);
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
-  match=path.match(/^\/api\/orders\/([^/]+)\/shiprocket\/(pickup-locations|rates|book)$/);
-  if(match){
-    if(customerOnly) return customerOnly;
-    const id=decodeURIComponent(match[1]);
-    const order=await shiprocketOrderForCustomer(env,id,user.id);
-    if(match[2]==="pickup-locations" && method==="GET"){
-      if(!shiprocketConfigured(env)) return json({configured:false,pickupLocations:[],defaultPickupLocation:null});
-      const response=await shiprocketRequest(env,"/settings/company/pickup?is_order_creation=1");
-      return json({configured:true,pickupLocations:shiprocketPickupLocations(response),defaultPickupLocation:clean(env.SHIPROCKET_PICKUP_LOCATION,100)||null});
-    }
-    if(match[2]==="pickup-locations") return error("Method not allowed.",405);
-    if(method!=="POST") return error("Method not allowed.",405);
-    if(!shiprocketConfigured(env)) return error("Shiprocket courier booking is not available yet. Please contact the store.",503);
-    const b=await readBody();
-    if(match[2]==="rates"){
-      const existing=await env.DB.prepare("SELECT status FROM shiprocket_shipments WHERE order_id=?").bind(id).first();
-      if(existing && ["BOOKED","PICKUP_REQUESTED"].includes(existing.status)) return error("A Shiprocket courier is already booked for this order.",409);
-      return json({couriers:await shiprocketRateOptions(env,order,b)});
-    }
-    const updated=await shiprocketBookOrder(env,request,user,id,b,order);
-    return json({ok:true,order:updated},201);
-  }
   match=path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
   if(match && method==="POST"){
     if(customerOnly) return customerOnly;
