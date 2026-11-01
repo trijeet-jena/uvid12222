@@ -3546,7 +3546,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
     return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
       (order.shippingFinalized ? 'Choose your screenshot or payment receipt in any file format (up to 1.4 MB).' : 'If you have already paid, choose your screenshot or payment receipt in any file format (up to 1.4 MB).') +
-      '</span></label><input id="paymentProofFile" name="paymentProofFile" type="file" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">Upload payment proof</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">Order ' + esc(order.id) + ' · upload a screenshot or payment receipt.</p></form>';
+      '</span></label><input id="paymentProofFile" name="paymentProofFile" type="file" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">Upload payment proof</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">Upload your payment screenshot or receipt here to continue.</p></form>';
   }
 
   function paymentPage(orderId) {
@@ -3563,7 +3563,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
 
     if (!order.shippingFinalized) {
-      view.innerHTML = '<div class="paywait card upi-wait"><h1>Order ' + esc(order.id) + '</h1>' +
+      view.innerHTML = '<div class="paywait card upi-wait"><h1>Payment details</h1>' +
         '<p>The store is checking your address and will add the delivery charge. Please wait to pay until the final total appears. If you have already paid, upload your payment proof below so it can be attached to this order.</p>' +
         '<div class="upi-wait__amount"><span>Items subtotal · delivery charge pending</span><b>' + money(order.totals.subtotal) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +

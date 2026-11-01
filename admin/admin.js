@@ -1469,11 +1469,11 @@
     const quotePending = Number(o.shipping_finalized) === 0;
     const proofReported = Boolean(o.payment_proof_sent_at);
     const proofUploaded = Boolean(o.payment_proof_file_name);
-    const paymentNote = awaitingUpi ? " · Payment pending" + (proofUploaded ? " · Payment proof uploaded" : proofReported ? " · Proof reported" : "") : "";
+    const paymentNote = awaitingUpi ? (proofUploaded ? " · Awaiting admin approval · Payment proof uploaded" : " · Payment pending" + (proofReported ? " · Proof reported" : "")) : "";
     const paymentInstruction = quotePending
       ? "Set the delivery charge in the invoice first."
       : proofUploaded
-        ? 'Proof uploaded. Verify the transfer in PhonePe, then click "Confirm verified payment" to unlock packing and shipping.'
+        ? 'Customer confirmed the order. Approval is pending: verify the transfer in PhonePe, then click "Confirm verified payment" to continue processing.'
         : proofReported
           ? "Wait for the customer to upload the payment proof, then verify the transfer in PhonePe."
           : "Wait for the customer to pay and upload proof, then verify the transfer in PhonePe.";
@@ -1518,7 +1518,7 @@
     const buyerName = address.name || order.customer_name || "Customer";
     const email = address.email || order.customer_email || "—";
     const phone = address.phone || order.customer_mobile_number || order.mobile_number || "—";
-    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.status === "AWAITING_PAYMENT" || String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting payment" : String(order.payment_status || "PENDING").replace(/[_-]/g, " "));
+    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.payment_proof_sent_at ? "Awaiting admin approval" : (order.status === "AWAITING_PAYMENT" || String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting payment" : String(order.payment_status || "PENDING").replace(/[_-]/g, " ")));
     const proofName = order.payment_proof_file_name ? String(order.payment_proof_file_name) : "";
     const proofMime = String(order.payment_proof_mime || "").toLowerCase();
     const proofUrl = proofName ? "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment-proof" : "";
