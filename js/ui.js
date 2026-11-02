@@ -1441,16 +1441,18 @@
   }
 
   function careersPage() {
-    var careerMessage = encodeURIComponent("Hello UVID, I am interested in working with your store. I would like to share my details and learn about current opportunities.");
+    var careerMessage = encodeURIComponent("Hello UVID, I am interested in working with or partnering with your store. I would like to share my details and learn about current opportunities.");
     view.innerHTML = crumbs([{ label: "Home", href: "#/" }, { label: "Careers" }]) +
       '<div class="about-page">' +
       '<header class="card about-page__hero"><p class="about-page__eyebrow">CAREERS AT UVID</p>' +
-      '<h1>Work with us</h1><p class="about-page__headline">Help more people bring their creative ideas to life.</p>' +
-      '<p class="about-page__tagline">Interested in joining UVID Art and Craft Supplies? Tell us about yourself and the kind of work you are looking for.</p></header>' +
+      '<h1>Work with us or become a partner</h1><p class="about-page__headline">Help more people bring their creative ideas to life.</p>' +
+      '<p class="about-page__tagline">Interested in joining UVID Art and Craft Supplies or partnering with our store? Tell us about yourself and how you would like to work with us.</p></header>' +
       '<section class="card about-page__section"><h2>Start a conversation</h2>' +
-      '<p>Send us your name, experience, area of interest, and contact details. We will get back to you when a suitable opportunity is available.</p>' +
-      '<div class="careers-cta"><a class="btn btn--primary" href="https://wa.me/917406155738?text=' + careerMessage + '" target="_blank" rel="noopener noreferrer">Message us on WhatsApp</a>' +
-      '<a class="btn btn--ghost" href="mailto:uvidartandcraft@gmail.com?subject=Career%20opportunities%20at%20UVID">Email us</a></div></section>' +
+      '<p>Share your name, experience, area of interest, and contact details. Reach us by phone, email, or WhatsApp to discuss a role or partnership.</p>' +
+      '<div class="careers-cta"><a class="btn btn--primary" href="tel:+917406155738">Call +91 74061 55738</a>' +
+      '<a class="btn btn--ghost" href="tel:+919075012945">Call +91 90750 12945</a>' +
+      '<a class="btn btn--ghost" href="mailto:uvidartandcraft@gmail.com?subject=Career%20or%20partnership%20with%20UVID">Email us</a>' +
+      '<a class="btn btn--ghost" href="https://wa.me/917406155738?text=' + careerMessage + '" target="_blank" rel="noopener noreferrer">Message us on WhatsApp</a></div></section>' +
       '</div>';
   }
 
