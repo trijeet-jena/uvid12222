@@ -291,11 +291,89 @@
     navigateQuery(q);
   }
 
+  function normalizeSearchText(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function productSearchScore(product, term) {
+    var query = normalizeSearchText(term);
+    if (!query) return 0;
+    var category = D.categoryBySlug(product.category);
+    var parentCategory = category && category.parentSlug ? D.categoryBySlug(category.parentSlug) : null;
+    var name = normalizeSearchText(product.name);
+    var id = normalizeSearchText(product.id);
+    var brand = normalizeSearchText(product.brand);
+    var categoryName = normalizeSearchText(category && category.label);
+    var parentName = normalizeSearchText(parentCategory && parentCategory.label);
+    var tags = normalizeSearchText((product.tags || []).join(" "));
+    var description = normalizeSearchText(product.description);
+    var fields = [name, id, brand, categoryName, parentName, tags, description];
+    var tokens = query.split(/\s+/);
+    var searchable = fields.join(" ");
+
+    /* Exact product-name and code matches stay ahead of category matches. */
+    if (name === query || id === query) return 120;
+    if (name.indexOf(query) === 0 || id.indexOf(query) === 0) return 105;
+    if (name.indexOf(query) !== -1 || id.indexOf(query) !== -1) return 95;
+    if (brand === query) return 75;
+    if (categoryName === query || parentName === query) return 70;
+    if (categoryName.indexOf(query) === 0 || parentName.indexOf(query) === 0) return 65;
+    if (categoryName.indexOf(query) !== -1 || parentName.indexOf(query) !== -1) return 58;
+    if (brand.indexOf(query) !== -1) return 50;
+    if (tags.indexOf(query) !== -1) return 40;
+    if (description.indexOf(query) !== -1) return 30;
+    if (tokens.every(function (token) { return searchable.indexOf(token) !== -1; })) return 20;
+    return 0;
+  }
+
   function searchProducts(term) {
-    var t = term.toLowerCase();
-    return D.PRODUCTS.filter(function (p) {
-      return (p.name + " " + p.brand + " " + p.category + " " + (p.tags.join(" "))).toLowerCase().indexOf(t) !== -1;
+    return D.PRODUCTS.map(function (product, index) {
+      return { product: product, index: index, score: productSearchScore(product, term) };
+    }).filter(function (entry) { return entry.score > 0; }).sort(function (a, b) {
+      return b.score - a.score || (Number(b.product.popularity) || 0) - (Number(a.product.popularity) || 0) || a.index - b.index;
+    }).map(function (entry) { return entry.product; });
+  }
+
+  function searchRelatedCategories(term, products) {
+    var query = normalizeSearchText(term), found = [], seen = Object.create(null);
+    function add(category) {
+      if (!category || seen[category.slug]) return;
+      seen[category.slug] = true;
+      found.push(category);
+    }
+
+    (products || []).forEach(function (product) {
+      var category = D.categoryBySlug(product.category);
+      if (category && category.parentSlug) add(category);
     });
+
+    D.CATEGORIES.forEach(function (category) {
+      if (normalizeSearchText(category.label).indexOf(query) === -1) return;
+      var children = D.CATEGORIES.filter(function (child) { return child.parentSlug === category.slug; });
+      if (!category.parentSlug && children.length) {
+        children.forEach(function (child) {
+          if ((products || []).some(function (product) { return product.category === child.slug; })) add(child);
+        });
+      } else add(category);
+    });
+
+    return found.slice(0, 8);
+  }
+
+  function searchSubcategoryCards(term, products) {
+    var categories = searchRelatedCategories(term, products);
+    if (!categories.length) return "";
+    return '<section class="subcategory-section search-subcategory-section" aria-label="Related subcategories">' +
+      '<header class="subcategory-section__head"><h2>Related subcategories</h2><p>Explore more products in these matching categories.</p></header>' +
+      '<div class="subcategory-grid">' + categories.map(function (category) {
+        var categoryProducts = D.visibleProducts.filter(function (product) { return product.category === category.slug; });
+        var imageProduct = categoryProducts[0];
+        var image = imageProduct
+          ? '<img src="' + esc(imageProduct.img) + '" alt="' + esc(category.label) + ' product photo" loading="lazy" decoding="async">'
+          : '<span class="subcategory-card__fallback" aria-hidden="true">' + esc(category.emoji || "🗂️") + '</span>';
+        return '<a class="subcategory-card" href="#/c/' + esc(category.slug) + '">' + image +
+          '<span class="subcategory-card__body"><b>' + esc(category.label) + '</b><small>' + categoryProducts.length + ' product' + (categoryProducts.length === 1 ? '' : 's') + '</small><em>Browse subcategory →</em></span></a>';
+      }).join("") + '</div></section>';
   }
 
   function visibleBase(list) { return (list || D.PRODUCTS).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; }); }
@@ -347,7 +425,7 @@
       "newest": function (a, b) { return b.added - a.added; },
       "relevance": function (a, b) { return b.popularity - a.popularity; }
     };
-    out.sort(sorters[sort] || sorters.relevance);
+    if (!q.q || sort !== "relevance") out.sort(sorters[sort] || sorters.relevance);
     return out;
   }
 
@@ -445,7 +523,8 @@
       crumbTrail = [{ label: "Home", href: "#/" }, { label: q.q ? "Search" : "All products", href: "#/search" }];
     }
 
-    var sortOpts = [["relevance", "Popularity"], ["price-asc", "Price — low to high"], ["price-desc", "Price — high to low"], ["rating", "Customer rating"], ["discount", "Discount"], ["newest", "Newest first"]];
+    var relatedSearchCategories = path.indexOf("#/search") === 0 && q.q ? searchSubcategoryCards(q.q, items) : "";
+    var sortOpts = [["relevance", "Relevance"], ["price-asc", "Price — low to high"], ["price-desc", "Price — high to low"], ["rating", "Customer rating"], ["discount", "Discount"], ["newest", "Newest first"]];
     var sortSel = '<label class="sortbox">Sort <select id="sortSel">' +
       sortOpts.map(function (o) { return '<option value="' + o[0] + '"' + (sort === o[0] ? " selected" : "") + '>' + o[1] + '</option>'; }).join("") +
       '</select></label>';
@@ -461,7 +540,7 @@
       '</header>' +
       '<button class="btn btn--ghost btn--block filters__mob" id="openFilters">⚙ Filters & sort</button>' +
       (items.length
-        ? '<div class="grid">' + items.map(productCard).join("") + '</div>'
+        ? '<div class="grid">' + items.map(productCard).join("") + '</div>' + relatedSearchCategories
         : emptyState("🔍", "Nothing matched", "Try removing a filter or searching for something else.",
           '<a class="btn btn--primary" href="#/search">Browse everything</a>')) +
       '</section></div>';
@@ -1956,15 +2035,19 @@
     function suggest() {
       var term = input.value.trim().toLowerCase();
       if (!term) { drop.classList.remove("search__drop--open"); drop.innerHTML = ""; return; }
-      var hits = searchProducts(term).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; }).slice(0, 6);
-      var cats = D.CATEGORIES.filter(function (c) { return c.label.toLowerCase().indexOf(term) !== -1; }).slice(0, 2);
-      var html = "";
-      cats.forEach(function (c) {
-        html += '<a class="sd sd--cat" href="#/c/' + c.slug + '"><span>' + esc(c.label) + '</span></a>';
-      });
-      html += hits.map(function (p) {
+      var allHits = searchProducts(term).filter(function (p) { return p.tags.indexOf("vc-hidden") === -1; });
+      var hits = allHits.slice(0, 6);
+      var cats = searchRelatedCategories(term, allHits);
+      var html = hits.map(function (p) {
         return '<a class="sd" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /><span>' + esc(p.name) + '</span><b>' + money(p.price) + '</b></a>';
       }).join("");
+      if (cats.length) {
+        html += '<div class="sd__group-label">' + (hits.length ? "Related subcategories" : "Categories") + '</div>';
+        html += cats.slice(0, 4).map(function (c) {
+          var count = D.visibleProducts.filter(function (p) { return p.category === c.slug; }).length;
+          return '<a class="sd sd--cat" href="#/c/' + esc(c.slug) + '"><span>' + esc(c.label) + '</span><i>' + count + ' products</i></a>';
+        }).join("");
+      }
       if (!html) html = '<p class="sd sd--none">No matches found. Try another search.</p>';
       else html += '<a class="sd sd--all" href="#/search?q=' + encodeURIComponent(input.value.trim()) + '">See all results for “' + esc(input.value.trim()) + '” →</a>';
       drop.innerHTML = html;

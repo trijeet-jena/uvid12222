@@ -145,6 +145,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .sd span { flex: 1; font-size: 13.8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd b { color: var(--green-d); font-size: 13.5px; }
 .sd i { font-style: normal; font-size: 11px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
+.sd__group-label { padding: 8px 11px 3px; color: var(--ink-3); font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .sd--cat span { font-weight: 600; }
 .sd--none { color: var(--ink-3); font-size: 13.5px; justify-content: center; }
 .sd--all { justify-content: center; color: var(--green-d); font-weight: 600; font-size: 13.5px; border-top: 1px dashed var(--line); border-radius: 0; margin-top: 4px; }
