@@ -1465,10 +1465,31 @@ async function serveImage(request, env, path) {
   return null;
 }
 
+function publicCatalogCacheKey(request, path, url) {
+  if (request.method !== "GET" || url.search) return null;
+  if (path !== "/api/products" && path !== "/api/products/categories") return null;
+  const keyUrl = new URL(request.url);
+  keyUrl.searchParams.set("__uvid_catalog_origin", request.headers.get("Origin") || "same-origin");
+  return new Request(keyUrl.toString(), { method: "GET" });
+}
+
+function catalogCacheResponse(response, cacheState) {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "public, max-age=30, s-maxage=300");
+  headers.set("X-UVID-Catalog-Cache", cacheState);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url); const path = url.pathname.replace(/\/+$/, "") || "/";
     try {
+      const catalogCache = globalThis.caches && globalThis.caches.default;
+      const catalogKey = publicCatalogCacheKey(request, path, url);
+      if (catalogCache && catalogKey) {
+        const cached = await catalogCache.match(catalogKey);
+        if (cached) return catalogCacheResponse(cached, "HIT");
+      }
       if (!env.DB) return error("The D1 database is not connected to this Worker yet.",503);
       if (request.method === "OPTIONS") return new Response(null,{status:204,headers:{"Allow":"GET,POST,PUT,DELETE,OPTIONS"}});
       if (!checkOrigin(request,env) && !["GET","HEAD"].includes(request.method)) return error("Request origin is not allowed.",403);
@@ -1479,7 +1500,15 @@ export default {
       if (user?.role === "ADMIN" && clean(user.email, 200).toLowerCase() !== clean(env.ADMIN_EMAIL, 200).toLowerCase()) user=null;
       if (path.startsWith("/api/")) {
         if (!env.SESSION_SECRET) return error("Set the SESSION_SECRET Worker secret before using the store API.",503);
-        return await handleApi(request,env,user,url);
+        const response = await handleApi(request,env,user,url);
+        if (catalogCache && catalogKey && response.status === 200) {
+          const cacheResponse = catalogCacheResponse(response, "MISS");
+          const cacheWrite = catalogCache.put(catalogKey, cacheResponse.clone());
+          if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(cacheWrite);
+          else await cacheWrite;
+          return cacheResponse;
+        }
+        return response;
       }
       return json({service:"UVID Store API",status:"ready"});
     } catch (e) {

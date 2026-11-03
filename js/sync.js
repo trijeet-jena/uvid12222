@@ -4,7 +4,8 @@
    shows what is saved through the admin panel. Live-refreshes on
    SSE catalog events (/api/events) and falls back to the bundled
    catalog if the API is unreachable (offline / static hosting).
-   Data lives here only in memory — no localStorage caching.
+   A short-lived browser cache keeps the last good catalog available during
+   temporary API or database outages.
    ============================================================ */
 
 (function () {
@@ -40,6 +41,8 @@
   var queued = false;    /* another refresh arrived mid-flight */
   var refreshTimer = null;
   var paintPending = false;
+  var CATALOG_CACHE_KEY = "uvid:catalog-cache:v1";
+  var CATALOG_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
   var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEALAAAAAABAAEAAAIBRAA7";
 
@@ -230,15 +233,38 @@
     if (window.PT.View && typeof window.PT.View.rerender === "function") window.PT.View.rerender();
   }
 
+  function saveCatalogCache(products, categories) {
+    try {
+      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), products: products, categories: categories }));
+    } catch (_error) { /* storage may be full or unavailable */ }
+  }
+
+  function readCatalogCache() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(CATALOG_CACHE_KEY) || "null");
+      if (!cached || !Array.isArray(cached.products) || !Array.isArray(cached.categories) || !cached.savedAt) return null;
+      if (Date.now() - Number(cached.savedAt) > CATALOG_CACHE_TTL_MS) return null;
+      return cached;
+    } catch (_error) { return null; }
+  }
+
   function refresh() {
     if (loading) { queued = true; return; }
     loading = true;
     Promise.all([fetchJson("/api/products"), fetchJson("/api/products/categories")])
       .then(function (res) {
         apply(res[0].products, res[1].categories);
+        saveCatalogCache(res[0].products, res[1].categories);
         paint();
       })
-      .catch(function () { /* API unreachable — keep the bundled catalog */ })
+      .catch(function () {
+        var cached = readCatalogCache();
+        if (cached) {
+          apply(cached.products, cached.categories);
+          paint();
+        }
+        /* With no saved response, keep the bundled catalog as the offline fallback. */
+      })
       .then(function () {
         loading = false;
         if (queued) { queued = false; refresh(); }
