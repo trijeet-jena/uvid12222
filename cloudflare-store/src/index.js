@@ -764,12 +764,23 @@ async function orderList(env, customerId = null, status = null, includeCustomerD
   if (!orders.length) return [];
   const ids = orders.map((o) => o.id);
   const customDesignColumns = includeCustomerDetails ? ",custom_design_json,CASE WHEN custom_design_image IS NOT NULL THEN 1 ELSE 0 END AS custom_design_image_available" : ",NULL AS custom_design_json,0 AS custom_design_image_available";
-  const rows = (await env.DB.prepare(`SELECT id,order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url${customDesignColumns} FROM order_items WHERE order_id IN (${ids.map(() => "?").join(",")}) ORDER BY id`).bind(...ids).all()).results || [];
+  const rows = (await env.DB.prepare(`SELECT oi.id,oi.order_id,oi.product_id,oi.product_name,oi.variant_label,oi.quantity,oi.price_at_purchase,oi.image_url,p.description AS catalog_description,p.meta_json AS catalog_meta_json${customDesignColumns} FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id WHERE oi.order_id IN (${ids.map(() => "?").join(",")}) ORDER BY oi.id`).bind(...ids).all()).results || [];
   const byOrder = new Map(); for (const row of rows) { const a = byOrder.get(row.order_id) || []; a.push(row); byOrder.set(row.order_id, a); }
-  return orders.map((o) => ({ ...o, items: (byOrder.get(o.id) || []).map((item) => ({
-    ...item,
-    image_url: resolvedProductImage({ image_url: item.image_url }, env),
-  })) }));
+  return orders.map((o) => ({ ...o, items: (byOrder.get(o.id) || []).map((item) => {
+    const meta = parseJson(item.catalog_meta_json, {}) || {};
+    const specs = meta.specs || {};
+    const codes = orderItemCodes(item.catalog_meta_json, item.variant_label, item.product_id);
+    return {
+      ...item,
+      product_code: codes.productCode,
+      catalogue_sku: codes.catalogueSku || null,
+      product_description: item.catalog_description || CODE_PRODUCT_BY_ID.get(item.product_id)?.description || null,
+      hsn_code: meta.hsnCode || specs["HSN/SAC"] || specs["HSN Code"] || specs.HSN || null,
+      gst_rate: meta.gstRate ?? specs["GST rate"] ?? specs["GST Rate"] ?? null,
+      product_unit: meta.unit || specs.Unit || specs.UOM || null,
+      image_url: resolvedProductImage({ image_url: item.image_url }, env),
+    };
+  }) }));
 }
 function validPushEndpoint(value) {
   try {
@@ -870,10 +881,18 @@ async function placeOrder(env, user, body) {
   const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);
   if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) throw new Error("Could not allocate an order number.");
   const id = "UVID" + String(orderNumber).padStart(3, "0");
-  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({
-    ...orderItemCodes(l.p.meta_json, l.p.variant_label, l.p.id),
-    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:resolvedProductImage(l.p,env),customDesign:l.customDesign?parseJson(l.customDesign.json,null):null,
-  })) };
+  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => {
+    const meta = parseJson(l.p.meta_json, {}) || {};
+    const specs = meta.specs || {};
+    return {
+      ...orderItemCodes(l.p.meta_json, l.p.variant_label, l.p.id),
+      productId:l.p.id,name:l.p.product_name,description:l.p.description || "",variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:resolvedProductImage(l.p,env),
+      hsnCode:meta.hsnCode || specs["HSN/SAC"] || specs["HSN Code"] || specs.HSN || null,
+      gstRate:meta.gstRate ?? specs["GST rate"] ?? specs["GST Rate"] ?? null,
+      unit:meta.unit || specs.Unit || specs.UOM || null,
+      customDesign:l.customDesign?parseJson(l.customDesign.json,null):null,
+    };
+  }) };
 }
 
 async function orderEmailItems(env, orderId) {

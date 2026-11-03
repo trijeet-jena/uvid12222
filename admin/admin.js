@@ -1542,14 +1542,16 @@
       return '<section class="invoice__custom-design"><h3>Customer A4 design · ' + esc(title) + '</h3><img src="' + esc(designUrl) + '" alt="Customer-saved A4 design for order ' + esc(order.id) + '" loading="eager"><a href="' + esc(designUrl) + '" download="' + esc(order.id) + '-custom-a4-design.png">Download the customer design</a></section>';
     }).join("");
     return '<article class="invoice" id="invoicePrint">' +
-      '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
-      '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
-      '<div class="invoice__heading"><div class="invoice__gstin">GSTIN: <b>29AFJPI2457R1ZO</b></div><h2>INVOICE</h2><span>Invoice / Order No.</span><b>' + esc(order.id) + '</b></div></div>' +
+      '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft Supplies</strong></div></div>' +
+      '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073, Karnataka</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
+      '<div class="invoice__heading"><div class="invoice__gstin">Supplier GSTIN: <b>29AFJPI2457R1ZO</b></div><h2>ORDER INVOICE</h2><b>' + esc(order.id || "—") + '</b><small class="invoice__tax-note">GST tax details are not recorded for this order.</small></div></div>' +
       '<div class="invoice__meta"><div><span>Invoice date</span><b>' + esc(fmtDateTime(order.created_at)) + '</b></div>' +
+      '<div><span>Invoice number</span><b>' + esc(order.id || "—") + '</b></div>' +
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div>' +
-      '<div><span>Payment proof</span><b>' + (proofName ? 'Uploaded · ' + esc(fmtDateTime(order.payment_proof_created_at || order.payment_proof_sent_at)) : order.payment_proof_sent_at ? 'Previously reported · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not uploaded') + '</b></div></div>' +
-      '<div class="invoice__parties"><section><h3>Customer details</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span></section>' +
+      '<div><span>Payment proof</span><b>' + (proofName ? 'Uploaded · ' + esc(fmtDateTime(order.payment_proof_created_at || order.payment_proof_sent_at)) : order.payment_proof_sent_at ? 'Previously reported · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not uploaded') + '</b></div>' +
+      '<div><span>Place of supply</span><b>' + esc(address.state || "Not provided") + '</b></div><div><span>Reverse charge</span><b>Not recorded</b></div></div>' +
+      '<div class="invoice__parties"><section><h3>Billed to</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span><span>Customer GSTIN: ' + esc(address.gstin || "Not provided") + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
       (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview">' + proofPreview + '</div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
@@ -1558,8 +1560,13 @@
         const price = Number(item.price_at_purchase) || 0;
         const imageUrl = invoiceImageUrl(item.image_url || item.imageUrl);
         const image = imageUrl ? '<img src="' + esc(imageUrl) + '" alt="' + esc(item.product_name || "Product") + '" loading="eager">' : '<span class="invoice__no-image">—</span>';
+        const productCode = item.product_code || item.product_id || "—";
+        const productDescription = item.product_description || "Description not available";
+        const hsnCode = item.hsn_code || "Not configured";
+        const gstRate = item.gst_rate == null || item.gst_rate === "" ? "Not configured" : String(item.gst_rate) + "%";
+        const productUnit = item.product_unit || "Not configured";
         return '<tr><td class="invoice__rownum">' + (index + 1) + '</td><td class="invoice__image">' + image + '</td><td class="invoice__product"><b>' + esc(item.product_name || "Product") + '</b>' +
-          (item.product_id ? '<small>Product ID: ' + esc(item.product_id) + '</small>' : "") + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
+          '<small>Product code: ' + esc(productCode) + (item.catalogue_sku ? ' · Catalogue SKU: ' + esc(item.catalogue_sku) : '') + '</small><small class="invoice__description">' + esc(productDescription) + '</small><small>HSN/SAC: ' + esc(hsnCode) + ' · GST rate: ' + esc(gstRate) + ' · Unit: ' + esc(productUnit) + '</small>' + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
           (item.custom_design_json ? '<small>Customer A4 design attached below</small>' : '') + '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num"><b>' + money(price * quantity) + '</b></td></tr>';
       }).join("") : '<tr><td colspan="6">No item details are available.</td></tr>') +
       '</tbody></table></div>' + customDesigns + '<div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
@@ -1567,7 +1574,9 @@
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
       '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<span class="invoice__delivery-value"><input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="' + (subtotal > 5000 ? '0 · free delivery' : 'Enter charge') + '" value="' + (subtotal > 5000 ? '0' : '') + '" aria-label="Delivery charge in rupees" data-delivery-fee><span class="invoice__pending-quote">Awaiting store quote</span></span>') + '</b></div>' +
       (subtotal > 5000 ? '<p style="margin:8px 0;color:var(--brand);font-size:12px;font-weight:600">Order subtotal is above ₹5,000; free delivery will be applied.</p>' : '') +
+      '<div><span>Taxable value / GST breakup</span><b>Not recorded in this order</b></div>' +
       '<div class="invoice__grand"><span>' + (shippingFinalized ? "Total payable" : "Final total") + '</span><b>' + (shippingFinalized ? money(total) : "After delivery charge is saved") + '</b></div></div></div>' +
+      '<section class="invoice__terms"><h3>Terms &amp; Conditions</h3><ol><li>This order invoice reflects the items, quantities and prices saved for this order.</li><li>UPI payment is recorded as paid only after the store verifies the transfer; see the payment status above.</li><li>Delivery charges are shown separately. If the delivery quote is pending, the final payable total is not confirmed.</li><li>Product HSN/SAC classifications, GST rates and tax amounts are not configured in this order record; this document is not a GST tax invoice.</li><li>Returns and exchanges follow the store policy shared at purchase and applicable law. Contact UVID Art and Craft using the details above for invoice corrections.</li></ol></section><div class="invoice__signature"><span>Authorised signatory</span><b>________________________________</b></div>' +
       '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
   }
   function openOrderInvoice(order) {

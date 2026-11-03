@@ -477,6 +477,13 @@
         emoji: prod ? prod.emoji : "📦",
         bg: prod ? prod.bg : "#EEF2FF",
         ink: prod ? prod.ink : "#4C5BD4",
+        productCode: it.productCode || it.catalogueSku || it.productId,
+        catalogueSku: it.catalogueSku || "",
+        description: it.description || (prod && prod.description) || "",
+        hsnCode: it.hsnCode || (prod && prod.hsnCode) || "",
+        gstRate: it.gstRate != null ? it.gstRate : (prod && prod.gstRate),
+        unit: it.unit || (prod && (prod.unit || prod.uom)) || "",
+        imageUrl: it.imageUrl || (prod && (prod.imageUrl || prod.img)) || "",
         customDesign: it.customDesign || null
       };
     });

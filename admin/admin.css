@@ -418,6 +418,7 @@ body.modal-open { overflow: hidden; }
 .invoice__heading .invoice__gstin b { display: inline; margin: 0; color: #202b25; font-size: 12px; }
 .invoice__heading span { display: block; margin-top: 7px; color: #68736d; font-size: 12px; }
 .invoice__heading b { display: block; margin-top: 3px; color: #202b25; font-size: 16px; overflow-wrap: anywhere; }
+.invoice__heading .invoice__tax-note { display: block; max-width: 210px; margin: 8px 0 0 auto; color: #8a4c18; font-size: 10px; line-height: 1.35; }
 .invoice__meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 20px 0; border-bottom: 1px solid #e4e9e5; }
 .invoice__meta span, .invoice__parties span { display: block; color: #707a73; font-size: 12px; }
 .invoice__meta b { display: block; margin-top: 4px; font-size: 13px; text-transform: capitalize; }
@@ -458,6 +459,12 @@ body.modal-open { overflow: hidden; }
 .invoice__totals .invoice__grand { margin-top: 8px; padding: 12px 0 0; border-top: 2px solid #2f8061; font-size: 17px; }
 .invoice__grand span, .invoice__grand b { color: #202b25 !important; font-weight: 800; }
 .invoice__thanks { margin: 28px 0 0; padding-top: 14px; border-top: 1px solid #e4e9e5; color: #667169; text-align: center; font-size: 12px; }
+.invoice__terms { margin-top: 22px; padding: 14px 16px; border: 1px solid #dfe3e0; border-radius: 9px; background: #f8faf8; font-size: 11px; break-inside: avoid; page-break-inside: avoid; }
+.invoice__terms h3 { margin: 0 0 7px; color: #2f8061; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; }
+.invoice__terms ol { margin: 0; padding-left: 18px; }
+.invoice__terms li { margin: 3px 0; }
+.invoice__signature { display: grid; justify-items: end; gap: 22px; margin: 26px 0 0; color: #58635c; font-size: 11px; break-inside: avoid; page-break-inside: avoid; }
+.invoice__signature b { min-width: 190px; padding-top: 5px; border-top: 1px solid #8d9991; text-align: center; font-weight: 500; }
 .order-workflow-note { display: block; max-width: 210px; margin-top: 5px; color: #68736d; line-height: 1.35; }
 .order-place-action { margin-top: 7px; white-space: nowrap; }
 @media (max-width: 560px) {
