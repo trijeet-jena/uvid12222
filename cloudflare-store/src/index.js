@@ -11,6 +11,8 @@ const CODE_PRODUCT_BY_ID = new Map(CODE_PRODUCTS.map((product) => [product.id, p
 const GMAIL_RE = /^[a-z0-9._%+-]+@gmail\.com$/i;
 const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standard-upload size
 const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row limit
+const CUSTOM_A4_PRODUCT_ID = "custom-a4-text-sheet";
+const CUSTOM_A4_FONTS = new Set(["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS", "Courier New"]);
 const COOKIE = "uvid_session";
 const ADMIN_OTP_TTL_MS = 5 * 60 * 1000;
 const encoder = new TextEncoder();
@@ -23,6 +25,42 @@ const error = (message, status = 400) => json({ error: message }, status);
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const clean = (v, max = 2000) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max);
 const parseJson = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+function decodeCustomA4Design(value, productId) {
+  if (productId !== CUSTOM_A4_PRODUCT_ID) {
+    if (value != null) throw Object.assign(new Error("Custom artwork is only supported for the A4 design sheet."), { status: 400 });
+    return null;
+  }
+  if (!value || Number(value.version) !== 1 || Number(value.width) !== 794 || Number(value.height) !== 1123 || !Array.isArray(value.objects) || !value.objects.length || value.objects.length > 40) {
+    throw Object.assign(new Error("Add text to your A4 sheet before saving it."), { status: 400 });
+  }
+  const objects = value.objects.map((item) => {
+    const text = String(item?.text == null ? "" : item.text).replace(/\r/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+    const x = Number(item?.x), y = Number(item?.y), fontSize = Number(item?.fontSize);
+    const color = String(item?.color || "").toLowerCase();
+    const align = String(item?.align || "left");
+    const fontFamily = String(item?.fontFamily || "");
+    if (!text.trim() || text.length > 3000 || !Number.isFinite(x) || x < 0 || x > 794 || !Number.isFinite(y) || y < 0 || y > 1123 || !Number.isFinite(fontSize) || fontSize < 8 || fontSize > 96 || !/^#[0-9a-f]{6}$/.test(color) || !["left", "center", "right"].includes(align) || !CUSTOM_A4_FONTS.has(fontFamily)) {
+      throw Object.assign(new Error("One of the A4 text elements is invalid. Please review your design."), { status: 400 });
+    }
+    return {
+      id: clean(item.id, 80), text, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100,
+      fontFamily, fontSize: Math.round(fontSize * 100) / 100, color, align,
+      bold: Boolean(item.bold), italic: Boolean(item.italic), underline: Boolean(item.underline),
+    };
+  });
+  const imageBase64 = String(value.imageBase64 || "");
+  if (!imageBase64 || imageBase64.length > Math.ceil(D1_IMAGE_LIMIT / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(imageBase64) || imageBase64.length % 4 === 1) {
+    throw Object.assign(new Error("The A4 preview could not be saved. Please save the design again."), { status: 400 });
+  }
+  let binary;
+  try { binary = atob(imageBase64); } catch { throw Object.assign(new Error("The A4 preview file is invalid."), { status: 400 }); }
+  const image = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  if (!image.length || image.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("The A4 preview must be 1.4 MB or smaller."), { status: 413 });
+  if (image.length < 8 || ![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => image[index] === byte)) {
+    throw Object.assign(new Error("The A4 preview must be a PNG image."), { status: 400 });
+  }
+  return { json: JSON.stringify({ version: 1, width: 794, height: 1123, background: "#ffffff", objects }), image };
+}
 function cookieValue(request, name) {
   return (request.headers.get("Cookie") || "").split(";").map((s) => s.trim())
     .find((s) => s.startsWith(name + "="))?.slice(name.length + 1) || "";
@@ -725,7 +763,8 @@ async function orderList(env, customerId = null, status = null, includeCustomerD
   const orders = (await env.DB.prepare(sql).bind(...args).all()).results || [];
   if (!orders.length) return [];
   const ids = orders.map((o) => o.id);
-  const rows = (await env.DB.prepare(`SELECT * FROM order_items WHERE order_id IN (${ids.map(() => "?").join(",")}) ORDER BY id`).bind(...ids).all()).results || [];
+  const customDesignColumns = includeCustomerDetails ? ",custom_design_json,CASE WHEN custom_design_image IS NOT NULL THEN 1 ELSE 0 END AS custom_design_image_available" : ",NULL AS custom_design_json,0 AS custom_design_image_available";
+  const rows = (await env.DB.prepare(`SELECT id,order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url${customDesignColumns} FROM order_items WHERE order_id IN (${ids.map(() => "?").join(",")}) ORDER BY id`).bind(...ids).all()).results || [];
   const byOrder = new Map(); for (const row of rows) { const a = byOrder.get(row.order_id) || []; a.push(row); byOrder.set(row.order_id, a); }
   return orders.map((o) => ({ ...o, items: (byOrder.get(o.id) || []).map((item) => ({
     ...item,
@@ -787,10 +826,18 @@ async function placeOrder(env, user, body) {
   if (!items.length || items.length > 40) throw Object.assign(new Error("Add 1–40 items to the order."), { status: 400 });
   const address = body.address && typeof body.address === "object" ? body.address : {};
   if (!clean(address.line, 300) || !clean(address.city, 100) || !/^\d{6}$/.test(String(address.pin || ""))) throw Object.assign(new Error("Enter a delivery address, city and 6-digit PIN."), { status: 400 });
-  const wants = new Map();
+  const wants = new Map(), customDesigns = new Map();
+  let seenCustomA4 = false;
   for (const item of items) {
     const id = clean(item.productId || item.id, 120); const qty = Number(item.quantity ?? item.qty);
     if (!id || !Number.isInteger(qty) || qty < 1 || qty > 99) throw Object.assign(new Error("One of the cart items is invalid."), { status: 400 });
+    if (id === CUSTOM_A4_PRODUCT_ID) {
+      if (seenCustomA4) throw Object.assign(new Error("Keep the A4 design sheet as one cart item."), { status: 400 });
+      seenCustomA4 = true;
+      customDesigns.set(id, decodeCustomA4Design(item.customDesign, id));
+    } else if (item.customDesign != null) {
+      decodeCustomA4Design(item.customDesign, id);
+    }
     wants.set(id, (wants.get(id) || 0) + qty);
   }
   const products = (await env.DB.prepare(`SELECT * FROM products WHERE id IN (${[...wants.keys()].map(() => "?").join(",")})`).bind(...wants.keys()).all()).results || [];
@@ -803,7 +850,7 @@ async function placeOrder(env, user, body) {
     if (!p || p.status === "ARCHIVED") throw Object.assign(new Error("A cart item is no longer available."), { status: 409 });
     if (p.status === "OUT_OF_STOCK" || p.stock_quantity <= 0) throw Object.assign(new Error(`${p.product_name} is out of stock and cannot be purchased right now.`), { status: 409 });
     if (p.stock_quantity < qty) throw Object.assign(new Error(`Only ${p.stock_quantity} of ${p.product_name} are available.`), { status: 409 });
-    subtotal += p.price * qty; lines.push({ p, qty });
+    subtotal += p.price * qty; lines.push({ p, qty, customDesign: customDesigns.get(id) || null });
   }
   const discount = 0;
   const shipping = 0;
@@ -816,7 +863,7 @@ async function placeOrder(env, user, body) {
     env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized) SELECT 'UVID'||printf('%03d',last_value),0 FROM order_id_counter WHERE id=1")
   ];
   for (const line of lines) {
-    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.p.variant_label,line.qty,line.p.price,line.p.image_url));
+    batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url,custom_design_json,custom_design_image) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.p.variant_label,line.qty,line.p.price,line.p.image_url,line.customDesign?.json||null,line.customDesign?.image||null));
     if (!line.p.codeManaged) batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
   const batchResults = await env.DB.batch(batches);
@@ -825,7 +872,7 @@ async function placeOrder(env, user, body) {
   const id = "UVID" + String(orderNumber).padStart(3, "0");
   return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => ({
     ...orderItemCodes(l.p.meta_json, l.p.variant_label, l.p.id),
-    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:resolvedProductImage(l.p,env),
+    productId:l.p.id,name:l.p.product_name,variantLabel:l.p.variant_label,qty:l.qty,priceAtPurchase:l.p.price,imageUrl:resolvedProductImage(l.p,env),customDesign:l.customDesign?parseJson(l.customDesign.json,null):null,
   })) };
 }
 
@@ -1075,6 +1122,17 @@ async function handleApi(request, env, user, url) {
     const proof = await env.DB.prepare("SELECT mime,file_name,byte_size,data,created_at FROM order_payment_proofs WHERE order_id=?").bind(id).first();
     if (!proof) return error("No payment proof has been uploaded for this order.",404);
     return paymentProofResponse(proof);
+  }
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/items\/(\d+)\/custom-design-image$/);
+  if (match && method === "GET") {
+    if (adminOnly) return adminOnly;
+    const orderId = decodeURIComponent(match[1]);
+    const itemId = Number(match[2]);
+    const item = await env.DB.prepare("SELECT custom_design_image FROM order_items WHERE id=? AND order_id=?").bind(itemId,orderId).first();
+    if (!item?.custom_design_image) return error("No saved A4 design image is available for this order item.",404);
+    const bytes = imageBytes(item.custom_design_image);
+    if (bytes.length < 8 || ![137,80,78,71,13,10,26,10].every((byte,index)=>bytes[index]===byte)) return error("The saved A4 design image is invalid.",500);
+    return new Response(bytes,{headers:{"Content-Type":"image/png","Content-Disposition":"inline; filename=customer-a4-design.png","Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Content-Length":String(bytes.length)}});
   }
   if (path === "/api/admin/push/status" && method === "GET") {
     if (adminOnly) return adminOnly;

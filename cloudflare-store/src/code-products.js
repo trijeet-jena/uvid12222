@@ -78,5 +78,20 @@
       specs: { Design: "Faceted fluted", Type: "Bud vase", Stock: "100 pieces" },
       tags: ["new"],
     },
+    {
+      id: "custom-a4-text-sheet",
+      productName: "Custom A4 Text Design Sheet",
+      category: "art",
+      description: "Design a printable A4 sheet with your own text. Choose a font, size, colour, alignment, and text style, then save your design with your order.",
+      price: 400,
+      mrp: 400,
+      stockQuantity: 100,
+      imageUrl: "/assets/custom-a4-sheet.svg",
+      emoji: "📄",
+      brand: "UVID Art and Craft Supplies",
+      highlights: ["Customise with your own text", "A4 portrait sheet · 210 × 297 mm", "Choose font, size, colour and text style"],
+      specs: { Size: "A4 · 210 × 297 mm", Customisation: "Text, font, size, colour and alignment", "Design preview": "Saved with your order" },
+      tags: ["new"],
+    },
   ];
 })(globalThis);

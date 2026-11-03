@@ -49,6 +49,7 @@
   /* ---------------- persisted store ---------------- */
   var KEY = "uvid:v1";
   var SKEY = "uvid:session";
+  var CUSTOM_A4_PRODUCT_ID = "custom-a4-text-sheet";
 
   function blank() {
     return { cart: [], wishlist: [], user: null, users: {}, orders: [], addresses: [], recent: [], accountData: {} };
@@ -325,6 +326,28 @@
     return true;
   }
 
+  function addCustomA4ToCart(design, imageDataUrl) {
+    if (!requireLogin("Sign in to save your A4 design and place an order.")) return false;
+    var product = window.PT.findProduct(CUSTOM_A4_PRODUCT_ID);
+    if (!product || Number(product.stock) <= 0) { toast("The custom A4 sheet is currently out of stock.", false); return false; }
+    if (!design || !Array.isArray(design.objects) || !design.objects.length || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(String(imageDataUrl || ""))) {
+      toast("Add text and save your A4 design before continuing.", false); return false;
+    }
+    var line = state.cart.filter(function (item) { return item.id === CUSTOM_A4_PRODUCT_ID; })[0];
+    var savedDesign = JSON.parse(JSON.stringify(design));
+    if (line) {
+      line.qty = 1;
+      line.customDesign = savedDesign;
+      line.customDesignPreview = imageDataUrl;
+    } else {
+      state.cart.push({ id: CUSTOM_A4_PRODUCT_ID, qty: 1, customDesign: savedDesign, customDesignPreview: imageDataUrl });
+    }
+    pushRecent(CUSTOM_A4_PRODUCT_ID);
+    save(); renderChrome();
+    toast("Your A4 design is saved in the cart.", true);
+    return true;
+  }
+
   function setQty(id, qty) {
     var i;
     for (i = 0; i < state.cart.length; i++) {
@@ -388,12 +411,21 @@
       var available = Number(product && product.stock) || 0;
       if (available <= 0) { toast((product ? product.name : "A product") + " is out of stock. Remove it from your cart.", false); return Promise.resolve(null); }
       if (line.qty > available) { toast("Only " + available + " of " + product.name + " are available. Update your cart quantity.", false); return Promise.resolve(null); }
+      if (line.id === CUSTOM_A4_PRODUCT_ID && (!line.customDesign || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(String(line.customDesignPreview || "")))) {
+        toast("Please finish and save your A4 design before checkout.", false); return Promise.resolve(null);
+      }
     }
     var address = session().address;
     if (!address) { toast("Add a delivery address first.", false); navigateTo("#/checkout"); return Promise.resolve(null); }
 
     var payload = {
-      items: state.cart.map(function (l) { return { productId: l.id, quantity: l.qty }; }),
+      items: state.cart.map(function (l) {
+        var item = { productId: l.id, quantity: l.qty };
+        if (l.id === CUSTOM_A4_PRODUCT_ID && l.customDesign) {
+          item.customDesign = Object.assign({}, l.customDesign, { imageBase64: String(l.customDesignPreview).replace(/^data:image\/png;base64,/, "") });
+        }
+        return item;
+      }),
       paymentMethod: String(method || "UPI").toUpperCase(),
       address: address
     };
@@ -444,7 +476,8 @@
         qty: Number(it.qty) || 1,
         emoji: prod ? prod.emoji : "📦",
         bg: prod ? prod.bg : "#EEF2FF",
-        ink: prod ? prod.ink : "#4C5BD4"
+        ink: prod ? prod.ink : "#4C5BD4",
+        customDesign: it.customDesign || null
       };
     });
     return {
@@ -604,7 +637,7 @@
     fmtDate: fmtDate, fmtDateTime: fmtDateTime, uid: uid,
     state: state, save: save, session: session, setSession: setSession,
     computeTotals: computeTotals, cartCount: cartCount,
-    addToCart: addToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
+    addToCart: addToCart, addCustomA4ToCart: addCustomA4ToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
     requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut, switchAccount: switchAccount,
     findUser: findUser, placeOrder: placeOrder, buildServerOrder: buildServerOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
     navigateTo: navigateTo, renderChrome: renderChrome,

@@ -100,6 +100,9 @@
     if ((Number(product && product.stock) || 0) <= 0) {
       return '<button class="btn btn--soft" type="button" disabled aria-disabled="true">Out of stock</button>';
     }
+    if (product && product.id === "custom-a4-text-sheet") {
+      return '<a class="btn btn--primary" href="#/design-a4">Design your A4 sheet</a>';
+    }
     return (inCart > 0 && !hasVariants
       ? '<a class="btn btn--ghost" href="#/cart">Go to cart →</a>'
       : '<button class="btn btn--ghost" data-add="' + esc(product.id) + '" data-root="' + esc(rootId) + '">🛒 Add to cart</button>') +
@@ -132,6 +135,8 @@
       '<div class="pcard__price"><b>' + money(p.price) + '</b>' + (p.discount > 0 ? '<s>' + money(p.mrp) + '</s><em>' + p.discount + '% off</em>' : '') + '</div>' +
       ((Number(p.stock) || 0) <= 0
         ? '<button class="btn btn--soft btn--block" type="button" disabled aria-disabled="true">Out of stock</button>'
+        : p.id === "custom-a4-text-sheet"
+        ? '<a class="btn btn--soft btn--block" href="#/design-a4">Design your sheet</a>'
         : p.variants && p.variants.length
         ? '<a class="btn btn--soft btn--block" href="#/p/' + p.id + '">' + (p.category === "candle-making" || p.category === "resin-moulds" ? "Choose a design" : "Choose an option") + '</a>'
         : inCart > 0
@@ -676,10 +681,11 @@
       var p = D.findProduct(l.id);
       var wished = A.inWishlist(p.id);
       var stock = Number(p.stock) || 0;
+      var itemImage = l.customDesignPreview || p.img;
       var stockMessage = stock <= 0 ? "Out of stock — remove this item to continue" : l.qty > stock ? "Only " + stock + " available — reduce quantity" : stock <= 20 ? "Only " + stock + " left" : "In stock";
       var stockProblem = stock <= 0 || l.qty > stock;
       return '<article class="cline">' +
-        '<a class="cline__img" href="#/p/' + p.id + '"><img src="' + p.img + '" alt="" /></a>' +
+      '<a class="cline__img" href="#/p/' + p.id + '"><img src="' + itemImage + '" alt="" /></a>' +
         '<div class="cline__body">' +
         '<a class="cline__name" href="#/p/' + p.id + '">' + esc(p.name) + '</a>' +
         '<p class="cline__seller' + (stockProblem ? ' stock-out' : '') + '">' + esc(p.brand) + ' · ' + esc(stockMessage) + '</p>' +
@@ -805,7 +811,7 @@
 
     var orderItems = A.state.cart.map(function (l) {
       var p = D.findProduct(l.id);
-      return '<div class="mini"><img src="' + p.img + '" alt="" /><span>' + esc(p.name) + '</span><b>×' + l.qty + '</b></div>';
+      return '<div class="mini"><img src="' + (l.customDesignPreview || p.img) + '" alt="" /><span>' + esc(p.name) + (l.customDesign ? ' · Custom design' : '') + '</span><b>×' + l.qty + '</b></div>';
     }).join("");
 
     view.innerHTML =
@@ -1456,6 +1462,176 @@
       '</div>';
   }
 
+  function a4BlankDesign() { return { version: 1, width: 794, height: 1123, background: "#ffffff", objects: [] }; }
+  function a4DesignKey(owner) { return "uvid:custom-a4:" + encodeURIComponent(String(owner || "guest").toLowerCase()); }
+  function a4LoadDesign() {
+    var cartLine = A.state.cart.filter(function (line) { return line.id === "custom-a4-text-sheet" && line.customDesign; })[0];
+    if (cartLine) return JSON.parse(JSON.stringify(cartLine.customDesign));
+    var keys = [a4DesignKey(A.state.user || "guest")];
+    if (A.state.user) keys.push(a4DesignKey("guest"));
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var saved = JSON.parse(localStorage.getItem(keys[i]) || "null");
+        if (saved && saved.version === 1 && Array.isArray(saved.objects)) return saved;
+      } catch (_error) { /* ignore a damaged local draft */ }
+    }
+    return a4BlankDesign();
+  }
+  function a4SaveDraft(design) {
+    try { localStorage.setItem(a4DesignKey(A.state.user || "guest"), JSON.stringify(design)); return true; }
+    catch (_error) { return false; }
+  }
+  function customA4Designer() {
+    var product = D.findProduct("custom-a4-text-sheet");
+    if (!product) { view.innerHTML = emptyState("📄", "A4 design sheet unavailable", "Please refresh the storefront and try again.", '<a class="btn btn--primary" href="#/">Back to the store</a>'); return; }
+    var design = a4LoadDesign();
+    var selectedIndex = -1, dragging = false, dragOffsetX = 0, dragOffsetY = 0;
+    view.innerHTML = crumbs([{ label: "Home", href: "#/" }, { label: "Art & Craft", href: "#/c/art" }, { label: "Create an A4 sheet" }]) +
+      '<div class="a4-editor-page"><header class="card a4-editor__intro"><div><p class="about-page__eyebrow">CUSTOM A4 SHEET</p><h1>Create your own A4 text sheet</h1><p>Enter your text, choose a font and style, then drag it into position on the 210 × 297 mm page.</p></div><div class="a4-editor__price"><span>Price per sheet</span><b>' + money(product.price) + '</b></div></header>' +
+      '<div class="a4-editor"><section class="card a4-editor__tools"><h2>Text tools</h2><label for="a4Text">Text</label><textarea id="a4Text" rows="4" maxlength="3000" placeholder="Type the words for your sheet"></textarea>' +
+      '<div class="field"><label for="a4Font">Font</label><select id="a4Font"><option>Arial</option><option>Georgia</option><option>Times New Roman</option><option>Verdana</option><option>Trebuchet MS</option><option>Courier New</option></select></div>' +
+      '<div class="a4-editor__fields"><div class="field"><label for="a4Size">Text size (pt)</label><input id="a4Size" type="number" min="8" max="96" step="1" value="24"></div><div class="field"><label for="a4Color">Text colour</label><input id="a4Color" type="color" value="#1e293b"></div></div>' +
+      '<div class="a4-editor__fields a4-editor__toggles"><label><input id="a4Bold" type="checkbox"> Bold</label><label><input id="a4Italic" type="checkbox"> Italic</label><label><input id="a4Underline" type="checkbox"> Underline</label></div>' +
+      '<div class="field"><label for="a4Align">Alignment</label><select id="a4Align"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>' +
+      '<div class="a4-editor__button-row"><button class="btn btn--soft" type="button" id="a4AddText">Add text</button><button class="btn btn--ghost" type="button" id="a4DeleteText" disabled>Delete selected</button></div>' +
+      '<p class="a4-editor__hint">Select text on the page to edit it. Drag a text block to move it.</p><p class="a4-editor__saved" id="a4SavedStatus" role="status"></p></section>' +
+      '<section class="a4-editor__stage"><div class="a4-editor__stage-head"><b>A4 · Portrait</b><span>210 × 297 mm</span></div><canvas id="a4DesignCanvas" class="a4-editor__canvas" width="794" height="1123" aria-label="Editable A4 sheet preview"></canvas></section></div>' +
+      '<div class="a4-editor__actions"><button class="btn btn--ghost" type="button" id="a4SaveDesign">Save design</button><button class="btn btn--ghost" type="button" id="a4DownloadDesign">Download PNG</button><button class="btn btn--soft" type="button" id="a4AddToCart">Add to cart</button><button class="btn btn--primary" type="button" id="a4BuyNow"' + ((Number(product.stock) || 0) <= 0 ? ' disabled aria-disabled="true"' : '') + '>Buy now</button></div></div>';
+
+    var canvas = $("#a4DesignCanvas"), context = canvas.getContext("2d");
+    var textInput = $("#a4Text"), fontInput = $("#a4Font"), sizeInput = $("#a4Size"), colorInput = $("#a4Color"), alignInput = $("#a4Align");
+    var boldInput = $("#a4Bold"), italicInput = $("#a4Italic"), underlineInput = $("#a4Underline"), deleteButton = $("#a4DeleteText"), savedStatus = $("#a4SavedStatus");
+    function fontPx(item) { return Math.max(10, Number(item.fontSize) || 24) * 96 / 72; }
+    function setFont(item) { context.font = (item.italic ? "italic " : "") + (item.bold ? "bold " : "") + fontPx(item) + "px \"" + item.fontFamily + "\""; }
+    function wrappedLines(item) {
+      setFont(item);
+      var maxWidth = canvas.width - 112, output = [];
+      String(item.text || "").split("\n").forEach(function (paragraph) {
+        if (!paragraph) { output.push(""); return; }
+        var line = "";
+        paragraph.split(/\s+/).forEach(function (word) {
+          var candidate = line ? line + " " + word : word;
+          if (line && context.measureText(candidate).width > maxWidth) { output.push(line); line = word; }
+          else line = candidate;
+        });
+        output.push(line);
+      });
+      return output.length ? output : [""];
+    }
+    function textBounds(item) {
+      var lines = wrappedLines(item), widths = lines.map(function (line) { return context.measureText(line).width; });
+      var max = Math.max.apply(Math, widths.concat([1])), left = item.align === "center" ? item.x - max / 2 : item.align === "right" ? item.x - max : item.x;
+      return { lines: lines, widths: widths, left: left, top: item.y, width: max, height: lines.length * fontPx(item) * 1.25 };
+    }
+    function drawDesign() {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height);
+      design.objects.forEach(function (item, index) {
+        var bounds = textBounds(item), step = fontPx(item) * 1.25;
+        setFont(item); context.fillStyle = item.color; context.textAlign = item.align; context.textBaseline = "top";
+        item.x = Math.max(12, Math.min(canvas.width - 12, Number(item.x) || 0));
+        item.y = Math.max(12, Math.min(canvas.height - 12, Number(item.y) || 0));
+        bounds = textBounds(item);
+        bounds.lines.forEach(function (line, lineIndex) {
+          var lineY = item.y + lineIndex * step;
+          context.fillText(line, item.x, lineY, canvas.width - 112);
+          if (item.underline && line) {
+            var lineWidth = context.measureText(line).width;
+            var start = item.align === "center" ? item.x - lineWidth / 2 : item.align === "right" ? item.x - lineWidth : item.x;
+            context.beginPath(); context.moveTo(start, lineY + fontPx(item) + 2); context.lineTo(start + lineWidth, lineY + fontPx(item) + 2);
+            context.strokeStyle = item.color; context.lineWidth = Math.max(1, fontPx(item) / 18); context.stroke();
+          }
+        });
+        if (index === selectedIndex && drawDesign.showSelection !== false) {
+          context.save(); context.setLineDash([8, 6]); context.strokeStyle = "#2f8061"; context.lineWidth = 2;
+          context.strokeRect(bounds.left - 8, bounds.top - 7, bounds.width + 16, bounds.height + 14); context.restore();
+        }
+      });
+    }
+    function persistDraft() {
+      a4SaveDraft(design);
+      if (savedStatus) savedStatus.textContent = "Design saved on this device.";
+    }
+    function syncControls() {
+      var item = design.objects[selectedIndex];
+      deleteButton.disabled = !item;
+      if (!item) return;
+      textInput.value = item.text; fontInput.value = item.fontFamily; sizeInput.value = Math.round(item.fontSize);
+      colorInput.value = item.color; alignInput.value = item.align;
+      boldInput.checked = item.bold; italicInput.checked = item.italic; underlineInput.checked = item.underline;
+    }
+    function updateSelected() {
+      var item = design.objects[selectedIndex];
+      if (!item) return;
+      item.text = textInput.value.slice(0, 3000); item.fontFamily = fontInput.value;
+      item.fontSize = Math.max(8, Math.min(96, Number(sizeInput.value) || 24)); item.color = colorInput.value;
+      item.align = alignInput.value; item.bold = boldInput.checked; item.italic = italicInput.checked; item.underline = underlineInput.checked;
+      savedStatus.textContent = ""; drawDesign(); persistDraft();
+    }
+    function pointerPoint(event) {
+      var rect = canvas.getBoundingClientRect();
+      return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height };
+    }
+    canvas.addEventListener("pointerdown", function (event) {
+      var point = pointerPoint(event), hit = -1;
+      for (var i = design.objects.length - 1; i >= 0; i--) {
+        var bounds = textBounds(design.objects[i]);
+        if (point.x >= bounds.left - 10 && point.x <= bounds.left + bounds.width + 10 && point.y >= bounds.top - 10 && point.y <= bounds.top + bounds.height + 12) { hit = i; break; }
+      }
+      selectedIndex = hit;
+      if (hit >= 0) { var object = design.objects[hit]; dragOffsetX = point.x - object.x; dragOffsetY = point.y - object.y; dragging = true; canvas.setPointerCapture(event.pointerId); }
+      syncControls(); drawDesign();
+    });
+    canvas.addEventListener("pointermove", function (event) {
+      if (!dragging || selectedIndex < 0) return;
+      var point = pointerPoint(event), item = design.objects[selectedIndex];
+      item.x = Math.max(12, Math.min(canvas.width - 12, point.x - dragOffsetX));
+      item.y = Math.max(12, Math.min(canvas.height - 12, point.y - dragOffsetY));
+      drawDesign();
+    });
+    function finishDrag() { if (dragging) { dragging = false; persistDraft(); } }
+    canvas.addEventListener("pointerup", finishDrag); canvas.addEventListener("pointercancel", finishDrag);
+    [textInput, fontInput, sizeInput, colorInput, alignInput, boldInput, italicInput, underlineInput].forEach(function (control) {
+      control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", updateSelected);
+    });
+    $("#a4AddText").addEventListener("click", function () {
+      var text = textInput.value.trim() || "Your text";
+      design.objects.push({ id: "text-" + Date.now().toString(36), text: text, x: 64, y: 64 + design.objects.length * 58, fontFamily: fontInput.value, fontSize: Math.max(8, Math.min(96, Number(sizeInput.value) || 24)), color: colorInput.value, align: alignInput.value, bold: boldInput.checked, italic: italicInput.checked, underline: underlineInput.checked });
+      selectedIndex = design.objects.length - 1; syncControls(); drawDesign(); persistDraft();
+    });
+    deleteButton.addEventListener("click", function () {
+      if (selectedIndex < 0) return;
+      design.objects.splice(selectedIndex, 1); selectedIndex = -1; textInput.value = ""; syncControls(); drawDesign(); persistDraft();
+    });
+    $("#a4SaveDesign").addEventListener("click", function () {
+      if (!design.objects.length) { savedStatus.textContent = "Add at least one text element before saving."; return; }
+      persistDraft(); A.toast("Your A4 design has been saved.", true);
+    });
+    function imageDataUrl() {
+      if (!design.objects.length) { savedStatus.textContent = "Add at least one text element before continuing."; return null; }
+      drawDesign.showSelection = false;
+      drawDesign();
+      var image = canvas.toDataURL("image/png");
+      drawDesign.showSelection = true;
+      drawDesign();
+      if (image.length > 1_866_668) { savedStatus.textContent = "This design preview is too large to save. Reduce the amount of text and try again."; return null; }
+      return image;
+    }
+    $("#a4DownloadDesign").addEventListener("click", function () {
+      var image = imageDataUrl(); if (!image) return;
+      var link = document.createElement("a"); link.href = image; link.download = "uvid-custom-a4-design.png"; document.body.appendChild(link); link.click(); link.remove();
+    });
+    $("#a4AddToCart").addEventListener("click", function () {
+      var image = imageDataUrl(); if (!image) return;
+      persistDraft(); if (A.addCustomA4ToCart(design, image)) A.navigateTo("#/cart");
+    });
+    $("#a4BuyNow").addEventListener("click", function () {
+      var image = imageDataUrl(); if (!image) return;
+      persistDraft(); if (A.addCustomA4ToCart(design, image)) A.navigateTo("#/checkout");
+    });
+    drawDesign(); syncControls();
+  }
+
   /* ================= routing ================= */
 
   function rerender() {
@@ -1472,6 +1648,7 @@
       A.route("wishlist", function () { wishlistPage(); });
       A.route("checkout", function () { checkoutPage(); });
       A.route("pay/:orderId", function (params) { paymentPage(params.orderId); });
+      A.route("design-a4", function () { customA4Designer(); });
       A.route("orders", function () { ordersPage(); });
       A.route("orders/:id", function (params) { orderDetailPage(params.id); });
       A.route("account", function (params, query) { accountPage(query || {}); });

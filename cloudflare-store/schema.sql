@@ -154,7 +154,9 @@ CREATE TABLE IF NOT EXISTS order_items (
   variant_label TEXT,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   price_at_purchase REAL NOT NULL,
-  image_url TEXT
+  image_url TEXT,
+  custom_design_json TEXT,
+  custom_design_image BLOB
 );
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 

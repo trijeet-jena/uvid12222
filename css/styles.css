@@ -970,3 +970,45 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
   html { scroll-behavior: auto; }
 }
+
+/* ---------------- customer-designed A4 sheet ---------------- */
+.a4-editor-page { width: min(1180px, calc(100% - 40px)); margin: 0 auto 48px; }
+.a4-editor__intro { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin-bottom: 18px; padding: 26px; }
+.a4-editor__intro h1 { margin: 4px 0 8px; font-size: clamp(25px, 3vw, 36px); }
+.a4-editor__intro p:not(.about-page__eyebrow) { max-width: 680px; margin: 0; color: var(--ink-2); line-height: 1.55; }
+.a4-editor__price { display: grid; flex: 0 0 auto; gap: 4px; padding: 14px 20px; border-radius: 14px; background: #f4f1e7; }
+.a4-editor__price span { color: var(--ink-2); font-size: 13px; }
+.a4-editor__price b { color: var(--ink); font-size: 25px; }
+.a4-editor { display: grid; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr); align-items: start; gap: 22px; }
+.a4-editor__tools { display: grid; gap: 13px; padding: 20px; }
+.a4-editor__tools h2 { margin: 0 0 2px; font-size: 19px; }
+.a4-editor__tools > label { margin-bottom: -8px; font-weight: 650; }
+.a4-editor__tools textarea { width: 100%; min-height: 96px; resize: vertical; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.a4-editor__tools .field { display: grid; gap: 6px; margin: 0; }
+.a4-editor__tools .field label { font-weight: 650; }
+.a4-editor__tools .field input, .a4-editor__tools .field select { width: 100%; min-height: 42px; }
+.a4-editor__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.a4-editor__fields input[type="color"] { padding: 4px; }
+.a4-editor__toggles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.a4-editor__toggles label { display: flex; align-items: center; gap: 5px; font-size: 13px; }
+.a4-editor__toggles input { accent-color: var(--brand); }
+.a4-editor__button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.a4-editor__button-row .btn { min-height: 40px; padding: 9px 12px; }
+.a4-editor__hint, .a4-editor__saved { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+.a4-editor__saved { min-height: 18px; color: var(--green-d); }
+.a4-editor__stage { display: grid; justify-items: center; gap: 12px; min-width: 0; }
+.a4-editor__stage-head { display: flex; justify-content: space-between; width: min(100%, 540px); color: var(--ink-2); font-size: 14px; }
+.a4-editor__stage-head b { color: var(--ink); }
+.a4-editor__canvas { display: block; width: min(100%, 540px); height: auto; max-height: 76vh; border: 1px solid #dedfd8; background: #fff; box-shadow: 0 14px 38px rgba(39, 51, 43, .12); touch-action: none; }
+.a4-editor__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.a4-editor__actions .btn { min-height: 46px; }
+@media (max-width: 760px) {
+  .a4-editor-page { width: min(100% - 24px, 620px); }
+  .a4-editor__intro { align-items: flex-start; flex-direction: column; gap: 16px; padding: 19px; }
+  .a4-editor { grid-template-columns: 1fr; }
+  .a4-editor__stage { order: -1; }
+  .a4-editor__canvas { width: min(100%, 420px); max-height: none; }
+  .a4-editor__tools { padding: 16px; }
+  .a4-editor__actions { justify-content: stretch; }
+  .a4-editor__actions .btn { flex: 1 1 42%; }
+}

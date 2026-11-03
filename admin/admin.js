@@ -762,6 +762,7 @@
   });
 
   function openCodeProductModal(p) {
+    const customA4Price = p.id === "custom-a4-text-sheet";
     const codeMrp = Number(p.mrp) || Number(p.price) || 0;
     const codeDiscount = codeMrp > Number(p.price) ? Number(p.price) : "";
     const codeDiscountPercent = codeDiscount === "" || !codeMrp ? "" : (((codeMrp - codeDiscount) / codeMrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
@@ -769,38 +770,42 @@
       '<div class="modal__head"><h3>Edit code-managed product</h3><button class="iconbtn" data-close aria-label="Close">' + ICONS.x + "</button></div>" +
       '<form id="codeProductForm"><div class="modal__body">' +
       '<div class="pcell" style="margin-bottom:16px">' + pImg(p, 64) + '<div><b>' + esc(p.productName) + '</b><small>' + esc(categoryLabel(p.category)) + ' · Details and photo are maintained in the site code</small></div></div>' +
-      '<div class="form-grid"><label class="fld"><span>MRP (₹)</span><input id="codeMrp" type="number" value="' + esc(codeMrp) + '" readonly></label>' +
-      '<label class="fld"><span>Discount (%)</span><input id="codeDiscountPercent" type="number" min="0" max="100" step="0.01" value="' + esc(codeDiscountPercent) + '"><small>Enter a percentage to calculate the customer price.</small></label>' +
-      '<label class="fld"><span>Discount price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required></label>' +
+      '<div class="form-grid">' + (customA4Price
+        ? '<label class="fld"><span>Selling price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required><small>Change this price whenever you need.</small></label>'
+        : '<label class="fld"><span>MRP (₹)</span><input id="codeMrp" type="number" value="' + esc(codeMrp) + '" readonly></label>' +
+          '<label class="fld"><span>Discount (%)</span><input id="codeDiscountPercent" type="number" min="0" max="100" step="0.01" value="' + esc(codeDiscountPercent) + '"><small>Enter a percentage to calculate the customer price.</small></label>' +
+          '<label class="fld"><span>Discount price (₹)</span><input id="codePrice" type="number" min="0" step="0.01" value="' + esc(p.price) + '" required></label>') +
       '<label class="fld"><span>Available stock</span><input id="codeStock" type="number" min="0" step="1" value="' + esc(p.stockQuantity) + '" required></label></div>' +
       '<p class="form-error" id="codeProductErr" hidden></p></div>' +
       '<div class="modal__foot"><button type="button" class="btn btn--ghost" data-close>Cancel</button><button type="submit" class="btn btn--primary" id="codeProductSave">Save changes</button></div></form>'
     );
     const codePriceInput = $("#codePrice", back);
     const codePercentInput = $("#codeDiscountPercent", back);
-    codePercentInput.addEventListener("input", function () {
-      const percent = Number(codePercentInput.value);
-      if (codePercentInput.value === "" || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
-      codePriceInput.value = String(Math.round(codeMrp * (100 - percent)) / 100);
-    });
-    codePriceInput.addEventListener("input", function () {
-      const sale = Number(codePriceInput.value);
-      if (codePriceInput.value === "" || !Number.isFinite(sale) || !codeMrp) { codePercentInput.value = ""; return; }
-      codePercentInput.value = sale >= codeMrp ? "" : (((codeMrp - sale) / codeMrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
-    });
+    if (codePercentInput) {
+      codePercentInput.addEventListener("input", function () {
+        const percent = Number(codePercentInput.value);
+        if (codePercentInput.value === "" || !Number.isFinite(percent) || percent < 0 || percent > 100) return;
+        codePriceInput.value = String(Math.round(codeMrp * (100 - percent)) / 100);
+      });
+      codePriceInput.addEventListener("input", function () {
+        const sale = Number(codePriceInput.value);
+        if (codePriceInput.value === "" || !Number.isFinite(sale) || !codeMrp) { codePercentInput.value = ""; return; }
+        codePercentInput.value = sale >= codeMrp ? "" : (((codeMrp - sale) / codeMrp) * 100).toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+      });
+    }
     $("#codeProductForm", back).addEventListener("submit", async function (e) {
       e.preventDefault();
       const err = $("#codeProductErr", back); err.hidden = true;
       const price = Number($("#codePrice", back).value);
       const stockQuantity = Number($("#codeStock", back).value);
       if (!Number.isFinite(price) || price < 0) { err.textContent = "Enter a valid product price."; err.hidden = false; return; }
-      if (price > codeMrp) { err.textContent = "Discount price cannot be higher than the MRP."; err.hidden = false; return; }
-      if (codePercentInput.value !== "" && (!Number.isFinite(Number(codePercentInput.value)) || Number(codePercentInput.value) < 0 || Number(codePercentInput.value) > 100)) { err.textContent = "Discount must be between 0% and 100%."; err.hidden = false; return; }
+      if (!customA4Price && price > codeMrp) { err.textContent = "Discount price cannot be higher than the MRP."; err.hidden = false; return; }
+      if (codePercentInput && codePercentInput.value !== "" && (!Number.isFinite(Number(codePercentInput.value)) || Number(codePercentInput.value) < 0 || Number(codePercentInput.value) > 100)) { err.textContent = "Discount must be between 0% and 100%."; err.hidden = false; return; }
       if (!Number.isInteger(stockQuantity) || stockQuantity < 0) { err.textContent = "Stock must be a whole number 0 or higher."; err.hidden = false; return; }
       const undo = busy($("#codeProductSave", back), "Saving…");
       try {
         await api("PUT", "/api/admin/products/" + encodeURIComponent(p.id), { price: price, stockQuantity: stockQuantity });
-        undo(); closeModal(); toast("Discount price and stock saved", true); await repaint(VIEWS.products);
+        undo(); closeModal(); toast((customA4Price ? "Selling price" : "Discount price") + " and stock saved", true); await repaint(VIEWS.products);
       } catch (ex) { undo(); err.textContent = ex.message || "Could not save the product."; err.hidden = false; }
     });
   }
@@ -1527,6 +1532,15 @@
       : proofUrl && proofMime === "application/pdf"
         ? '<iframe src="' + esc(proofUrl) + '" title="Payment proof PDF for order ' + esc(order.id) + '"></iframe>'
         : "";
+    const customDesigns = items.map(function (item) {
+      if (!item.custom_design_json) return "";
+      const title = item.product_name || "Custom A4 text sheet";
+      if (Number(item.custom_design_image_available) !== 1) {
+        return '<section class="invoice__custom-design"><h3>Customer A4 design · ' + esc(title) + '</h3><p>The customer design is attached to this order, but its preview is not available.</p></section>';
+      }
+      const designUrl = "/api/admin/orders/" + encodeURIComponent(order.id) + "/items/" + encodeURIComponent(item.id) + "/custom-design-image";
+      return '<section class="invoice__custom-design"><h3>Customer A4 design · ' + esc(title) + '</h3><img src="' + esc(designUrl) + '" alt="Customer-saved A4 design for order ' + esc(order.id) + '" loading="eager"><a href="' + esc(designUrl) + '" download="' + esc(order.id) + '-custom-a4-design.png">Download the customer design</a></section>';
+    }).join("");
     return '<article class="invoice" id="invoicePrint">' +
       '<div class="invoice__top"><div class="invoice__seller"><div class="invoice__brand"><img src="../assets/logo.jpeg" alt="UVID Art and Craft logo" width="54" height="54"><div><strong>UVID Art and Craft</strong></div></div>' +
       '<address class="invoice__seller-address"><span>#114, Ravikirloskar Layout</span><span>Nagasandra Post, Bengaluru – 560073</span><span>Phone: +91 90750 12945 · +91 74061 55738</span><span>Email: uvidartandcraft@gmail.com</span></address></div>' +
@@ -1546,9 +1560,9 @@
         const image = imageUrl ? '<img src="' + esc(imageUrl) + '" alt="' + esc(item.product_name || "Product") + '" loading="eager">' : '<span class="invoice__no-image">—</span>';
         return '<tr><td class="invoice__rownum">' + (index + 1) + '</td><td class="invoice__image">' + image + '</td><td class="invoice__product"><b>' + esc(item.product_name || "Product") + '</b>' +
           (item.product_id ? '<small>Product ID: ' + esc(item.product_id) + '</small>' : "") + (item.variant_label ? '<small>' + esc(item.variant_label) + '</small>' : "") +
-          '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num"><b>' + money(price * quantity) + '</b></td></tr>';
+          (item.custom_design_json ? '<small>Customer A4 design attached below</small>' : '') + '</td><td class="invoice__num">' + money(price) + '</td><td class="invoice__qty">' + quantity + '</td><td class="invoice__num"><b>' + money(price * quantity) + '</b></td></tr>';
       }).join("") : '<tr><td colspan="6">No item details are available.</td></tr>') +
-      '</tbody></table></div><div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
+      '</tbody></table></div>' + customDesigns + '<div class="invoice__bottom"><p>' + itemCount + ' item' + (itemCount === 1 ? "" : "s") + '</p><div class="invoice__totals">' +
       '<div><span>Items subtotal</span><b>' + money(subtotal) + '</b></div>' +
       (discount ? '<div><span>Discount' + (order.coupon ? ' (' + esc(order.coupon) + ')' : '') + '</span><b>−' + money(discount) + '</b></div>' : '') +
       '<div><span>Delivery</span><b>' + (shippingFinalized ? (shipping ? money(shipping) : "Free") : '<span class="invoice__delivery-value"><input class="invoice__delivery-input" type="number" min="0" max="10000000" step="0.01" inputmode="decimal" placeholder="' + (subtotal > 5000 ? '0 · free delivery' : 'Enter charge') + '" value="' + (subtotal > 5000 ? '0' : '') + '" aria-label="Delivery charge in rupees" data-delivery-fee><span class="invoice__pending-quote">Awaiting store quote</span></span>') + '</b></div>' +
@@ -1589,7 +1603,16 @@
       }
     });
     const printButton = back.querySelector("[data-print-invoice]");
-    if (printButton) printButton.addEventListener("click", function () { window.print(); });
+    if (printButton) printButton.addEventListener("click", function () {
+      printButton.disabled = true;
+      Promise.all(Array.from(back.querySelectorAll("#invoicePrint img")).map(function (image) {
+        if (image.complete) return Promise.resolve();
+        return new Promise(function (resolve) {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener("error", resolve, { once: true });
+        });
+      })).then(function () { printButton.disabled = false; window.print(); });
+    });
     const emailButton = back.querySelector("[data-send-order-email]");
     if (emailButton) emailButton.addEventListener("click", async function () {
       const undo = busy(emailButton, "Sending…");
