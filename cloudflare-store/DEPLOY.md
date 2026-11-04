@@ -32,13 +32,17 @@ The existing bucket is already configured with those settings. The project's
 public URL is preconfigured in `wrangler.toml`; only its secret API key must be
 entered into Cloudflare.
 
-## Email sign-in and order alerts
+## Admin password login and order alerts
 
-Admin sign-in uses a one-time code sent only to the approved admin address.
+Admin sign-in uses the email in `ADMIN_EMAIL` as the user ID and the
+`ADMIN_PASSWORD` secret. Email one-time-code sign-in is disabled. Set both
+values in Cloudflare Worker secrets; never store the password in source code or
+share it in chat. The configured `ADMIN_EMAIL` also receives order alerts.
+
 After the customer sends their payment screenshot and order ID to WhatsApp and
-checks the confirmation box, an email goes to that same address with the order
-ID, items, final amount, and a note that payment is still pending verification.
-A second email is sent after an admin verifies the UPI transfer. The screenshot
+checks the confirmation box, an email goes to that address with the order ID,
+items, final amount, and a note that payment is still pending verification. A
+second email is sent after an admin verifies the UPI transfer. The screenshot
 is sent through WhatsApp; the website stores only the customer's confirmation
 timestamp. An admin checks the screenshot and transfer in PhonePe before
 marking the payment paid.
@@ -51,14 +55,15 @@ cannot be changed. The Worker uses `SMTP2GO_API_KEY` when set, then falls back
 to `BREVO_API_KEY`, then `RESEND_API_KEY`. Set `EMAIL_FROM` to the exact sender
 address verified in SMTP2GO. If you control the DNS for
 `uvidartandcraftsupplies.com`, you can use an address such as
-`orders@uvidartandcraftsupplies.com`. The admin inbox is
-`ishwaraj22dec@gmail.com`.
+`orders@uvidartandcraftsupplies.com`. The admin inbox is configured by
+`ADMIN_EMAIL`.
 
 Now add the admin email and email service settings as encrypted Cloudflare
 secrets. Run each command and enter the value when Wrangler prompts:
 
 ```powershell
 npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
+npx wrangler --config wrangler.toml secret put ADMIN_PASSWORD
 npx wrangler --config wrangler.toml secret put SESSION_SECRET
 npx wrangler --config wrangler.toml secret put SMTP2GO_API_KEY
 npx wrangler --config wrangler.toml secret put BREVO_API_KEY
@@ -67,8 +72,10 @@ npx wrangler --config wrangler.toml secret put EMAIL_FROM
 npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
-Set `ADMIN_EMAIL` to `ishwaraj22dec@gmail.com`. Set `EMAIL_FROM` to the exact
-sender address registered and verified in the selected email provider. Keep the existing `SESSION_SECRET`
+Set `ADMIN_EMAIL` to an email inbox you own; it is both the admin login ID and
+order-alert recipient. Set a unique `ADMIN_PASSWORD` of at least 12 characters and enter it
+directly when Wrangler prompts. Set `EMAIL_FROM` to the exact sender address
+registered and verified in the selected email provider. Keep the existing `SESSION_SECRET`
 value if one is already configured; changing it signs out existing customer
 and admin sessions. If it is not configured, set it to a random value at least
 32 characters long. Keep secret values private; do not put them in website
@@ -85,7 +92,7 @@ of the Brevo and Resend fallbacks.
 Deploy the backend:
 
 ```powershell
-npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=migrations/0018_admin_email_otp.sql
+npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=migrations/0033_admin_password_login_attempts.sql
 npx wrangler --config wrangler.toml deploy
 ```
 
@@ -108,7 +115,7 @@ https://uvid-store-api.your-account.workers.dev
    Netlify should redeploy automatically. If it does not, open Netlify's
    site and choose **Deploys → Trigger deploy**.
 5. Open `https://uvid09art12and48craft54.netlify.app/admin/`, enter the admin
-   Gmail address, retrieve the one-time code from that inbox, and sign in. Add
+   email and password, and sign in. Add
    a test product and a compressed photo, then
    refresh the storefront. Product details and image links are saved in D1;
    the uploaded photo file is saved in Supabase Storage and can be viewed on

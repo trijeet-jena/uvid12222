@@ -14,8 +14,6 @@ const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row l
 const CUSTOM_A4_PRODUCT_ID = "custom-a4-text-sheet";
 const CUSTOM_A4_FONTS = new Set(["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS", "Courier New"]);
 const COOKIE = "uvid_session";
-const ADMIN_OTP_TTL_MS = 5 * 60 * 1000;
-const ADMIN_OTP_MAX_REQUESTS_PER_HOUR = 10;
 const encoder = new TextEncoder();
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -96,7 +94,7 @@ async function verifySession(env, token) {
   try {
     const data = JSON.parse(new TextDecoder().decode(unb64url(parts[0])));
     if (!data.exp || Date.now() >= data.exp || !["ADMIN", "CUSTOMER"].includes(data.role)) return null;
-    if (data.role === "ADMIN" && data.authMethod !== "email_otp") return null;
+    if (data.role === "ADMIN" && data.authMethod !== "password") return null;
     return data;
   } catch { return null; }
 }
@@ -135,12 +133,6 @@ function constantTimeEqual(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-
-function randomOtp() {
-  const bytes = new Uint32Array(1);
-  crypto.getRandomValues(bytes);
-  return String(bytes[0] % 1_000_000).padStart(6, "0");
 }
 
 function escapeHtml(value) {
@@ -213,16 +205,6 @@ async function sendTransactionalEmail(env, message) {
     console.warn("[EMAIL] Could not deliver a message.", provider, cause?.name || "network error");
     return { sent: false, reason: "delivery_failed", provider };
   }
-}
-
-async function sendAdminOtpEmail(env, email, code) {
-  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:520px;margin:auto;padding:24px"><h2>UVID Admin sign-in</h2><p>Use this one-time code to sign in:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</p><p>This code expires in 5 minutes and can be used once. If you did not request it, you can ignore this email.</p></div>`;
-  return sendTransactionalEmail(env, {
-    to: email,
-    subject: "Your UVID Admin sign-in code",
-    text: `Your UVID Admin sign-in code is ${code}. It expires in 5 minutes and can be used once. If you did not request it, ignore this email.`,
-    html,
-  });
 }
 
 function orderItemCodes(metaJson, variantLabel, productId) {
@@ -959,74 +941,10 @@ async function handleApi(request, env, user, url) {
 
   if (path === "/api/auth/me" && method === "GET") return user ? json({ user }) : error("Not logged in.", 401);
   if (path === "/api/auth/logout" && method === "POST") return json({ ok:true },200,{"Set-Cookie":cookieHeader("",0)});
-  if (path === "/api/auth/admin/request-otp" && method === "POST") {
-    const b = await readBody();
-    const email = clean(b.email, 200).toLowerCase();
-    const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
-    if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
-    if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
-    if ((!env.SMTP2GO_API_KEY && !env.BREVO_API_KEY && !env.RESEND_API_KEY) || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
-
-    const code = randomOtp();
-    const codeHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
-    const sentAt = Date.now();
-    const challenge = await env.DB.prepare(`
-      INSERT INTO admin_email_otps (email,code_hash,sent_at_ms,expires_at_ms,attempt_count,request_window_start_ms,request_count)
-      VALUES (?,?,?,?,0,?,1)
-      ON CONFLICT(email) DO UPDATE SET
-        code_hash=excluded.code_hash,
-        sent_at_ms=excluded.sent_at_ms,
-        expires_at_ms=excluded.expires_at_ms,
-        attempt_count=0,
-        request_window_start_ms=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN excluded.sent_at_ms ELSE admin_email_otps.request_window_start_ms END,
-        request_count=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN 1 ELSE admin_email_otps.request_count+1 END
-      WHERE excluded.sent_at_ms-admin_email_otps.sent_at_ms>=60000
-        AND (excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 OR admin_email_otps.request_count<${ADMIN_OTP_MAX_REQUESTS_PER_HOUR})
-      RETURNING email
-    `).bind(email,codeHash,sentAt,sentAt+ADMIN_OTP_TTL_MS,sentAt).first();
-    if (!challenge) return error(`Wait a minute before requesting another code. A maximum of ${ADMIN_OTP_MAX_REQUESTS_PER_HOUR} codes can be sent per hour.`,429);
-
-    const delivery = await sendAdminOtpEmail(env,email,code);
-    if (!delivery.sent) {
-      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',sent_at_ms=0,expires_at_ms=0,attempt_count=5,request_count=MAX(0,request_count-1) WHERE email=? AND code_hash=?").bind(email,codeHash).run();
-      const message = delivery.reason === "provider_error"
-        ? "The email provider rejected the message. Check that the API key is active and the sender address or domain is verified."
-        : "The sign-in email could not be sent. Check the email service setup and try again.";
-      return error(message,delivery.reason === "not_configured" ? 503 : 502);
-    }
-    return json({ok:true,message:"A sign-in code was sent to the approved admin email."});
-  }
-  if (path === "/api/auth/admin/verify-otp" && method === "POST") {
-    const b = await readBody();
-    const email = clean(b.email, 200).toLowerCase();
-    const code = String(b.code || "").trim();
-    const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
-    if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
-    if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
-    const challenge = await env.DB.prepare("SELECT code_hash,expires_at_ms,attempt_count FROM admin_email_otps WHERE email=?").bind(email).first();
-    if (!challenge || Number(challenge.expires_at_ms) <= Date.now() || Number(challenge.attempt_count) >= 5) {
-      return error("The code expired or is no longer valid. Request a new sign-in code.",401);
-    }
-    if (!/^\d{6}$/.test(code)) {
-      await env.DB.prepare("UPDATE admin_email_otps SET attempt_count=attempt_count+1 WHERE email=? AND attempt_count<5").bind(email).run();
-      return error("Enter the 6-digit code sent to the admin email.",401);
-    }
-    const suppliedHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
-    if (!constantTimeEqual(suppliedHash, challenge.code_hash)) {
-      await env.DB.prepare("UPDATE admin_email_otps SET attempt_count=attempt_count+1 WHERE email=? AND attempt_count<5").bind(email).run();
-      return error("The sign-in code is incorrect. Check the email and try again.",401);
-    }
-    const consumed = await env.DB.prepare("DELETE FROM admin_email_otps WHERE email=? AND code_hash=? AND expires_at_ms>? AND attempt_count<5 RETURNING email")
-      .bind(email,suppliedHash,Date.now()).first();
-    if (!consumed) return error("The code expired or is no longer valid. Request a new sign-in code.",401);
-    const admin = {id:"admin",email:adminEmail,name:"UVID Admin",role:"ADMIN"};
-    const token = await issueSession(env,{...admin,authMethod:"email_otp"});
-    await audit(env,request,admin,"admin.login",null,{method:"email_otp"});
-    return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token)});
-  }
   if (path === "/api/auth/email/login" && method === "POST") {
     const b = await readBody(); const email = clean(b.email, 200).toLowerCase();
     if (!GMAIL_RE.test(email)) return error("Enter a valid Gmail address, such as name@gmail.com.");
+    if (email === clean(env.ADMIN_EMAIL, 254).toLowerCase()) return error("This Gmail address is reserved for admin sign-in.",403);
     let row = await env.DB.prepare("SELECT id,email,name,role FROM users WHERE email=? COLLATE NOCASE").bind(email).first();
     if (row && row.role !== "CUSTOMER") return error("This Gmail address is reserved for admin sign-in.",403);
     if (!row) {
@@ -1037,7 +955,41 @@ async function handleApi(request, env, user, url) {
     const token = await issueSession(env,{id:row.id,email:row.email,name:row.name,role:row.role});
     return json({ok:true,user:{id:row.id,email:row.email,name:row.name,role:row.role}},200,{"Set-Cookie":cookieHeader(token)});
   }
-  if (path === "/api/auth/admin/login" && method === "POST") return error("Password sign-in is disabled. Request a one-time email code instead.",410);
+  if (path === "/api/auth/admin/login" && method === "POST") {
+    const b = await readBody();
+    const email = clean(b.email, 254).toLowerCase();
+    const password = typeof b.password === "string" ? b.password : "";
+    const adminEmail = clean(env.ADMIN_EMAIL, 254).toLowerCase();
+    if (!adminEmail || !env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 12 || !env.SESSION_SECRET) {
+      return error("Admin password sign-in is not configured. Set the admin ID and password in the secure Worker settings.",503);
+    }
+    if (password.length > 512) return error("Invalid admin ID or password.",401);
+
+    const ip = clean(request.headers.get("CF-Connecting-IP") || "unknown", 100);
+    const ipHash = b64url(await hmac(env.SESSION_SECRET, `admin-password-rate|${ip}`));
+    const timestamp = Date.now();
+    await env.DB.prepare("DELETE FROM admin_password_login_attempts WHERE updated_at_ms<?").bind(timestamp - 86400000).run();
+    const attempts = await env.DB.prepare(`
+      INSERT INTO admin_password_login_attempts(ip_hash,window_start_ms,request_count,updated_at_ms)
+      VALUES(?,?,1,?)
+      ON CONFLICT(ip_hash) DO UPDATE SET
+        window_start_ms=CASE WHEN excluded.updated_at_ms-admin_password_login_attempts.window_start_ms>=900000 THEN excluded.updated_at_ms ELSE admin_password_login_attempts.window_start_ms END,
+        request_count=CASE WHEN excluded.updated_at_ms-admin_password_login_attempts.window_start_ms>=900000 THEN 1 ELSE admin_password_login_attempts.request_count+1 END,
+        updated_at_ms=excluded.updated_at_ms
+      RETURNING request_count
+    `).bind(ipHash,timestamp,timestamp).first();
+    if (!attempts || Number(attempts.request_count) > 10) return error("Too many sign-in attempts. Wait 15 minutes and try again.",429);
+
+    const suppliedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${email}|${password}`));
+    const expectedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${adminEmail}|${env.ADMIN_PASSWORD}`));
+    if (!constantTimeEqual(suppliedHash, expectedHash)) return error("Invalid admin ID or password.",401);
+
+    await env.DB.prepare("DELETE FROM admin_password_login_attempts WHERE ip_hash=?").bind(ipHash).run();
+    const admin = {id:"admin",email:adminEmail,name:"UVID Admin",role:"ADMIN"};
+    const token = await issueSession(env,{...admin,authMethod:"password"});
+    await audit(env,request,admin,"admin.login",null,{method:"password"});
+    return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token)});
+  }
   if (path === "/api/auth/admin/mfa/status" && method === "GET") return adminOnly || json({enabled:false});
   if (path.startsWith("/api/auth/admin/mfa/") && method === "POST") return adminOnly || error("Two-factor setup is not available on this free Worker backend.",501);
 

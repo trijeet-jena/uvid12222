@@ -299,7 +299,7 @@
   function showLogin(msg) {
     loginView.hidden = false;
     appView.hidden = true;
-    resetLoginStep();
+    $("#loginPassword").value = "";
     const err = $("#loginError");
     if (msg) { err.textContent = msg; err.hidden = false; } else { err.hidden = true; }
     setLive(false);
@@ -316,66 +316,27 @@
     router();
   }
 
-  /* ---- sign-in with a one-time code sent to the approved admin email ---- */
-  let otpPending = false;
-
-  function resetLoginStep() {
-    otpPending = false;
-    const email = $("#loginEmail"), otp = $("#otpField"), actions = $("#otpActions");
-    const btn = $("#loginBtn"), input = $("#loginOtp");
-    if (email) email.readOnly = false;
-    if (otp) otp.hidden = true;
-    if (actions) actions.hidden = true;
-    if (input) input.value = "";
-    if (btn) btn.textContent = "Email me a sign-in code";
-  }
-
+  /* ---- sign-in with the configured admin email and password ---- */
   $("#loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
     const err = $("#loginError"); err.hidden = true;
     const email = $("#loginEmail").value.trim().toLowerCase();
-    if (!email) { err.textContent = "Enter the approved admin Gmail address."; err.hidden = false; return; }
+    const password = $("#loginPassword").value;
+    if (!email || !password) { err.textContent = "Enter your admin email and password."; err.hidden = false; return; }
     const btn = $("#loginBtn");
-    const undo = busy(btn, otpPending ? "Verifying…" : "Sending code…");
+    const undo = busy(btn, "Signing in…");
     try {
-      if (!otpPending) {
-        await api("POST", "/api/auth/admin/request-otp", { email: email }, { quiet: true });
-        otpPending = true;
-        $("#loginEmail").readOnly = true;
-        $("#otpField").hidden = false;
-        $("#otpActions").hidden = false;
-        btn.textContent = "Verify code & sign in";
-        undo();
-        toast("A sign-in code was sent to the admin Gmail inbox.", true);
-        $("#loginOtp").focus();
-        return;
-      }
-      const code = String($("#loginOtp").value || "").trim();
-      if (!/^\d{6}$/.test(code)) throw new Error("Enter the 6-digit code sent to your email.");
-      const out = await api("POST", "/api/auth/admin/verify-otp", { email: email, code: code }, { quiet: true });
-      undo(); resetLoginStep();
+      const out = await api("POST", "/api/auth/admin/login", { email: email, password: password }, { quiet: true });
+      undo();
+      $("#loginPassword").value = "";
       toast("Welcome back, " + (out.user.name || "Admin"), true);
       startApp(out.user);
     } catch (ex) {
       undo();
+      $("#loginPassword").value = "";
       err.textContent = ex.message || "Could not sign in. Please try again.";
       err.hidden = false;
     }
-  });
-
-  $("#changeEmailBtn").addEventListener("click", function () {
-    resetLoginStep();
-    $("#loginError").hidden = true;
-    $("#loginEmail").focus();
-  });
-
-  $("#resendOtpBtn").addEventListener("click", async function () {
-    const button = $("#resendOtpBtn");
-    const undo = busy(button, "Sending…");
-    try {
-      await api("POST", "/api/auth/admin/request-otp", { email: $("#loginEmail").value.trim().toLowerCase() }, { quiet: true });
-      undo(); toast("A new sign-in code was sent.", true);
-    } catch (ex) { undo(); toast(ex.message || "Could not send another code.", false); }
   });
 
   $("#logoutBtn").addEventListener("click", async function () {
@@ -1628,7 +1589,7 @@
       try {
         await api("POST", "/api/admin/orders/" + encodeURIComponent(order.id) + "/email", {});
         undo();
-        toast(order.payment_status === "PAID" ? "Payment confirmation email sent to ishwaraj22dec@gmail.com." : "Order email sent to ishwaraj22dec@gmail.com.", true);
+        toast(order.payment_status === "PAID" ? "Payment confirmation email sent to the admin inbox." : "Order email sent to the admin inbox.", true);
       } catch (ex) {
         undo(); toast(ex.message || "Could not send the order email.", false);
       }
@@ -1642,7 +1603,7 @@
         const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
         const phoneSent = Boolean(result.notification && result.notification.sent);
         const message = "UPI payment confirmed. " + (emailSent
-          ? "Email alert sent to ishwaraj22dec@gmail.com."
+          ? "Email alert sent to the admin inbox."
           : "Email alert could not be sent; check the email service setup.") + (phoneSent
           ? " Phone alert sent to " + result.notification.count + " device(s)."
           : "");
@@ -1863,14 +1824,14 @@
       '<dl class="kv"><dt>Signed in as</dt><dd>' + esc(state.user ? state.user.name : "—") + "</dd>" +
       "<dt>Role</dt><dd>Administrator</dd>" +
       "<dt>Session</dt><dd>7 days · httpOnly cookie · SameSite</dd>" +
-      "<dt>Sign-in</dt><dd>Email one-time code</dd>" +
+      "<dt>Sign-in</dt><dd>Admin email and password</dd>" +
       "<dt>Live updates</dt><dd>" + ($("#livePill") && !$("#livePill").classList.contains("off") ? "Connected (SSE)" : "Reconnecting…") + "</dd></dl>" +
       '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">' +
       '<button class="btn btn--ghost" id="setLogout">Log out</button>' +
       '<a class="btn btn--primary" href="/" target="_blank" rel="noopener">Open storefront ' + "</a></div>" +
       "</div></section>" +
-      '<section class="panel"><div class="panel__head"><h4>Admin email sign-in</h4></div><div class="panel__body">' +
-      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">A one-time code is sent to the approved admin Gmail each time a new sign-in is needed. Codes expire after 5 minutes and can only be used once.</p>' +
+      '<section class="panel"><div class="panel__head"><h4>Admin password sign-in</h4></div><div class="panel__body">' +
+      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">The admin email and password are stored as secure Worker secrets. Sign-in attempts are limited to protect the account.</p>' +
       "</div></section>" +
       '<section class="panel"><div class="panel__head"><h4>Phone order notifications</h4></div><div class="panel__body">' +
       '<p style="margin-top:0;color:var(--muted);font-size:14.5px">' + esc(pushDescription) + '</p>' +
@@ -1882,7 +1843,7 @@
         : "") +
       '</div></section>' +
       '<section class="panel"><div class="panel__head"><h4>Security audit log</h4></div><div class="panel__body">' +
-      '<p style="margin-top:0;color:var(--muted);font-size:13.5px">Server-recorded admin actions (last 25). Passwords, codes and payment details are never logged.</p>' +
+      '<p style="margin-top:0;color:var(--muted);font-size:13.5px">Server-recorded admin actions (last 25). Passwords and payment details are never logged.</p>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>IP</th></tr></thead><tbody>' +
       auditRows + "</tbody></table></div></div></section>" +
       '<section class="panel"><div class="panel__head"><h4>How data flows</h4></div><div class="panel__body">' +

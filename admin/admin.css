@@ -71,10 +71,6 @@ img.login__mark, img.sidebar__mark { object-fit: contain; background: #fff; }
 .login__sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
 .login__back { display: inline-block; margin-top: 18px; font-size: 14px; color: var(--muted); }
 .login__back:hover { color: var(--brand); }
-.login__otp-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; }
-.login__text-button { border: 0; background: none; padding: 4px 0; color: var(--brand); font: inherit; font-size: 13px; cursor: pointer; }
-.login__text-button:hover { text-decoration: underline; }
-
 /* ---------------- app shell ---------------- */
 .app { display: flex; min-height: 100vh; }
 .sidebar {
