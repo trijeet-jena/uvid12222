@@ -168,7 +168,7 @@ async function sendTransactionalEmail(env, message) {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      console.warn("[EMAIL] Provider rejected a message.", response.status);
+      console.warn("[EMAIL] Provider rejected a message.", response.status, clean(result.name || result.code || "unknown_error", 100), clean(result.message || "No rejection details returned.", 300));
       return { sent: false, reason: "provider_error" };
     }
     return { sent: true, id: result.id || null };
@@ -951,8 +951,11 @@ async function handleApi(request, env, user, url) {
 
     const delivery = await sendAdminOtpEmail(env,email,code);
     if (!delivery.sent) {
-      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',expires_at_ms=0,attempt_count=5 WHERE email=? AND code_hash=?").bind(email,codeHash).run();
-      return error("The sign-in email could not be sent. Check the email service setup and try again.",delivery.reason === "not_configured" ? 503 : 502);
+      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',sent_at_ms=0,expires_at_ms=0,attempt_count=5 WHERE email=? AND code_hash=?").bind(email,codeHash).run();
+      const message = delivery.reason === "provider_error"
+        ? "Resend rejected the sending domain attached to its API key. Verify that domain or replace RESEND_API_KEY with a full-access key."
+        : "The sign-in email could not be sent. Check the email service setup and try again.";
+      return error(message,delivery.reason === "not_configured" ? 503 : 502);
     }
     return json({ok:true,message:"A sign-in code was sent to the approved admin email."});
   }
