@@ -320,13 +320,13 @@
   $("#loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
     const err = $("#loginError"); err.hidden = true;
-    const email = $("#loginEmail").value.trim().toLowerCase();
+    const userId = $("#loginEmail").value.trim().toLowerCase();
     const password = $("#loginPassword").value;
-    if (!email || !password) { err.textContent = "Enter your admin email and password."; err.hidden = false; return; }
+    if (!userId || !password) { err.textContent = "Enter your admin user ID and password."; err.hidden = false; return; }
     const btn = $("#loginBtn");
     const undo = busy(btn, "Signing in…");
     try {
-      const out = await api("POST", "/api/auth/admin/login", { email: email, password: password }, { quiet: true });
+      const out = await api("POST", "/api/auth/admin/login", { userId: userId, password: password }, { quiet: true });
       undo();
       $("#loginPassword").value = "";
       toast("Welcome back, " + (out.user.name || "Admin"), true);
@@ -1824,14 +1824,14 @@
       '<dl class="kv"><dt>Signed in as</dt><dd>' + esc(state.user ? state.user.name : "—") + "</dd>" +
       "<dt>Role</dt><dd>Administrator</dd>" +
       "<dt>Session</dt><dd>7 days · httpOnly cookie · SameSite</dd>" +
-      "<dt>Sign-in</dt><dd>Admin email and password</dd>" +
+      "<dt>Sign-in</dt><dd>Admin-only user ID and password</dd>" +
       "<dt>Live updates</dt><dd>" + ($("#livePill") && !$("#livePill").classList.contains("off") ? "Connected (SSE)" : "Reconnecting…") + "</dd></dl>" +
       '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">' +
       '<button class="btn btn--ghost" id="setLogout">Log out</button>' +
       '<a class="btn btn--primary" href="/" target="_blank" rel="noopener">Open storefront ' + "</a></div>" +
       "</div></section>" +
       '<section class="panel"><div class="panel__head"><h4>Admin password sign-in</h4></div><div class="panel__body">' +
-      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">The admin email and password are stored as secure Worker secrets. Sign-in attempts are limited to protect the account.</p>' +
+      '<p style="margin-top:0;color:var(--muted);font-size:14.5px">The admin-only user ID and password are stored as secure Worker secrets. Sign-in attempts are limited to protect the account.</p>' +
       "</div></section>" +
       '<section class="panel"><div class="panel__head"><h4>Phone order notifications</h4></div><div class="panel__body">' +
       '<p style="margin-top:0;color:var(--muted);font-size:14.5px">' + esc(pushDescription) + '</p>' +

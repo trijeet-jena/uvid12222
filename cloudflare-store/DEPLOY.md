@@ -34,10 +34,11 @@ entered into Cloudflare.
 
 ## Admin password login and order alerts
 
-Admin sign-in uses the email in `ADMIN_EMAIL` as the user ID and the
-`ADMIN_PASSWORD` secret. Email one-time-code sign-in is disabled. Set both
-values in Cloudflare Worker secrets; never store the password in source code or
-share it in chat. The configured `ADMIN_EMAIL` also receives order alerts.
+Admin sign-in uses the local `ADMIN_USER_ID` and `ADMIN_PASSWORD` secrets.
+`ADMIN_USER_ID` is only a login name for this admin panel and does not need to
+be a real email inbox. Email one-time-code sign-in is disabled. `ADMIN_EMAIL`
+remains the actual inbox for order alerts. Keep the password out of source code
+and chat.
 
 After the customer sends their payment screenshot and order ID to WhatsApp and
 checks the confirmation box, an email goes to that address with the order ID,
@@ -63,6 +64,7 @@ secrets. Run each command and enter the value when Wrangler prompts:
 
 ```powershell
 npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
+npx wrangler --config wrangler.toml secret put ADMIN_USER_ID
 npx wrangler --config wrangler.toml secret put ADMIN_PASSWORD
 npx wrangler --config wrangler.toml secret put SESSION_SECRET
 npx wrangler --config wrangler.toml secret put SMTP2GO_API_KEY
@@ -72,9 +74,11 @@ npx wrangler --config wrangler.toml secret put EMAIL_FROM
 npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
-Set `ADMIN_EMAIL` to an email inbox you own; it is both the admin login ID and
-order-alert recipient. Set a unique `ADMIN_PASSWORD` of at least 12 characters and enter it
-directly when Wrangler prompts. Set `EMAIL_FROM` to the exact sender address
+Keep `ADMIN_EMAIL` set to the real inbox that receives order alerts. Set
+`ADMIN_USER_ID` to the desired local admin ID, such as
+`uvidartandcraft@gmail.com`; it does not need to be a real Gmail mailbox. Set a
+unique `ADMIN_PASSWORD` of at least 12 characters and enter it directly when
+Wrangler prompts. Set `EMAIL_FROM` to the exact sender address
 registered and verified in the selected email provider. Keep the existing `SESSION_SECRET`
 value if one is already configured; changing it signs out existing customer
 and admin sessions. If it is not configured, set it to a random value at least

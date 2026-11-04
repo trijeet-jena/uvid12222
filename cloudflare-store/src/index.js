@@ -944,7 +944,7 @@ async function handleApi(request, env, user, url) {
   if (path === "/api/auth/email/login" && method === "POST") {
     const b = await readBody(); const email = clean(b.email, 200).toLowerCase();
     if (!GMAIL_RE.test(email)) return error("Enter a valid Gmail address, such as name@gmail.com.");
-    if (email === clean(env.ADMIN_EMAIL, 254).toLowerCase()) return error("This Gmail address is reserved for admin sign-in.",403);
+    if (email === clean(env.ADMIN_EMAIL, 254).toLowerCase() || email === clean(env.ADMIN_USER_ID, 254).toLowerCase()) return error("This Gmail address is reserved for admin sign-in.",403);
     let row = await env.DB.prepare("SELECT id,email,name,role FROM users WHERE email=? COLLATE NOCASE").bind(email).first();
     if (row && row.role !== "CUSTOMER") return error("This Gmail address is reserved for admin sign-in.",403);
     if (!row) {
@@ -957,10 +957,10 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/auth/admin/login" && method === "POST") {
     const b = await readBody();
-    const email = clean(b.email, 254).toLowerCase();
+    const userId = clean(b.userId, 254).toLowerCase();
     const password = typeof b.password === "string" ? b.password : "";
-    const adminEmail = clean(env.ADMIN_EMAIL, 254).toLowerCase();
-    if (!adminEmail || !env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 12 || !env.SESSION_SECRET) {
+    const adminUserId = clean(env.ADMIN_USER_ID, 254).toLowerCase();
+    if (!adminUserId || !env.ADMIN_PASSWORD || env.ADMIN_PASSWORD.length < 12 || !env.SESSION_SECRET) {
       return error("Admin password sign-in is not configured. Set the admin ID and password in the secure Worker settings.",503);
     }
     if (password.length > 512) return error("Invalid admin ID or password.",401);
@@ -980,12 +980,12 @@ async function handleApi(request, env, user, url) {
     `).bind(ipHash,timestamp,timestamp).first();
     if (!attempts || Number(attempts.request_count) > 10) return error("Too many sign-in attempts. Wait 15 minutes and try again.",429);
 
-    const suppliedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${email}|${password}`));
-    const expectedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${adminEmail}|${env.ADMIN_PASSWORD}`));
+    const suppliedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${userId}|${password}`));
+    const expectedHash = b64url(await hmac(env.SESSION_SECRET, `admin-password|${adminUserId}|${env.ADMIN_PASSWORD}`));
     if (!constantTimeEqual(suppliedHash, expectedHash)) return error("Invalid admin ID or password.",401);
 
     await env.DB.prepare("DELETE FROM admin_password_login_attempts WHERE ip_hash=?").bind(ipHash).run();
-    const admin = {id:"admin",email:adminEmail,name:"UVID Admin",role:"ADMIN"};
+    const admin = {id:"admin",email:clean(env.ADMIN_EMAIL,254).toLowerCase(),name:"UVID Admin",role:"ADMIN"};
     const token = await issueSession(env,{...admin,authMethod:"password"});
     await audit(env,request,admin,"admin.login",null,{method:"password"});
     return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token)});
