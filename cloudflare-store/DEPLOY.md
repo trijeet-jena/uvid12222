@@ -43,12 +43,14 @@ is sent through WhatsApp; the website stores only the customer's confirmation
 timestamp. An admin checks the screenshot and transfer in PhonePe before
 marking the payment paid.
 
-Create a Resend account, add a domain you control, and follow the DNS records
-Resend provides until the domain is verified. Create a sending-only API key.
-Use a sender address on that verified domain. If you control the DNS for
-`uvidartandcraftsupplies.com`, one option is
-`UVID Admin <orders@uvidartandcraftsupplies.com>`. Otherwise choose a domain
-you control. The admin inbox is `ishwaraj22dec@gmail.com`.
+Brevo's free plan includes transactional email sending. In Brevo, register and
+verify a sender email address, then create an API key (not an SMTP key). Domain
+authentication is recommended for reliable delivery. The Worker will use
+`BREVO_API_KEY` when it is set; if it is absent, the existing Resend key remains
+available as a fallback. Set `EMAIL_FROM` to the exact sender address you
+registered in Brevo. If you control the DNS for `uvidartandcraftsupplies.com`,
+you can use an address such as `orders@uvidartandcraftsupplies.com`. The admin
+inbox is `ishwaraj22dec@gmail.com`.
 
 Now add the admin email and email service settings as encrypted Cloudflare
 secrets. Run each command and enter the value when Wrangler prompts:
@@ -56,19 +58,25 @@ secrets. Run each command and enter the value when Wrangler prompts:
 ```powershell
 npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
 npx wrangler --config wrangler.toml secret put SESSION_SECRET
+npx wrangler --config wrangler.toml secret put BREVO_API_KEY
 npx wrangler --config wrangler.toml secret put RESEND_API_KEY
 npx wrangler --config wrangler.toml secret put EMAIL_FROM
 npx wrangler --config wrangler.toml secret put SUPABASE_SECRET_KEY
 ```
 
 Set `ADMIN_EMAIL` to `ishwaraj22dec@gmail.com`. Set `EMAIL_FROM` to the exact
-sender address shown as verified in Resend. Keep the existing `SESSION_SECRET`
+sender address registered and verified in the selected email provider. Keep the existing `SESSION_SECRET`
 value if one is already configured; changing it signs out existing customer
 and admin sessions. If it is not configured, set it to a random value at least
 32 characters long. Keep secret values private; do not put them in website
 files, GitHub, or chat. Copy a new `sb_secret_...` key from your
 Supabase project's **Project Settings → API Keys**. Enter it directly when
 Wrangler prompts for `SUPABASE_SECRET_KEY`. Customer sign-in remains unchanged.
+
+For Brevo, set `BREVO_API_KEY` to the API key from Brevo's **SMTP & API → API
+Keys** page and `EMAIL_FROM` to the exact verified sender email address. Enter
+the key directly when Wrangler prompts; never put it in source control or chat.
+Once configured, Brevo is selected automatically ahead of the Resend fallback.
 
 Deploy the backend:
 

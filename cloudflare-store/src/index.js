@@ -150,32 +150,50 @@ function escapeHtml(value) {
 }
 
 async function sendTransactionalEmail(env, message) {
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return { sent: false, reason: "not_configured" };
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+  const brevoKey = clean(env.BREVO_API_KEY, 1000);
+  const resendKey = clean(env.RESEND_API_KEY, 1000);
+  const provider = brevoKey ? "brevo" : (resendKey ? "resend" : "");
+  const apiKey = provider === "brevo" ? brevoKey : resendKey;
+  if (!apiKey || !env.EMAIL_FROM) return { sent: false, reason: "not_configured" };
+
+  const fromValue = clean(env.EMAIL_FROM, 300);
+  const fromMatch = fromValue.match(/^(.+?)\s*<\s*([^<>]+)\s*>$/);
+  const senderEmail = clean(fromMatch ? fromMatch[2] : fromValue, 254);
+  const senderName = clean(fromMatch ? fromMatch[1] : "UVID Art and Craft Supplies", 100);
+  const requestUrl = provider === "brevo" ? "https://api.brevo.com/v3/smtp/email" : "https://api.resend.com/emails";
+  const requestHeaders = provider === "brevo"
+    ? { "api-key": apiKey, "Content-Type": "application/json", "Accept": "application/json" }
+    : { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" };
+  const requestBody = provider === "brevo"
+    ? {
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: message.to }],
+        subject: message.subject,
+        ...(message.html ? { htmlContent: message.html } : { textContent: message.text }),
+      }
+    : {
         from: env.EMAIL_FROM,
         to: [message.to],
         subject: message.subject,
         text: message.text,
         html: message.html,
-      }),
+      };
+  try {
+    const response = await fetch(requestUrl, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(10000),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      console.warn("[EMAIL] Provider rejected a message.", response.status, clean(result.name || result.code || "unknown_error", 100), clean(result.message || "No rejection details returned.", 300));
-      return { sent: false, reason: "provider_error" };
+      console.warn("[EMAIL] Provider rejected a message.", provider, response.status, clean(result.name || result.code || "unknown_error", 100), clean(result.message || "No rejection details returned.", 300));
+      return { sent: false, reason: "provider_error", provider };
     }
-    return { sent: true, id: result.id || null };
+    return { sent: true, id: result.messageId || result.id || null, provider };
   } catch (cause) {
-    console.warn("[EMAIL] Could not deliver a message.", cause?.name || "network error");
-    return { sent: false, reason: "delivery_failed" };
+    console.warn("[EMAIL] Could not deliver a message.", provider, cause?.name || "network error");
+    return { sent: false, reason: "delivery_failed", provider };
   }
 }
 
@@ -929,7 +947,7 @@ async function handleApi(request, env, user, url) {
     const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
     if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
     if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
-    if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
+    if ((!env.BREVO_API_KEY && !env.RESEND_API_KEY) || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
 
     const code = randomOtp();
     const codeHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
@@ -954,7 +972,7 @@ async function handleApi(request, env, user, url) {
     if (!delivery.sent) {
       await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',sent_at_ms=0,expires_at_ms=0,attempt_count=5,request_count=MAX(0,request_count-1) WHERE email=? AND code_hash=?").bind(email,codeHash).run();
       const message = delivery.reason === "provider_error"
-        ? "Resend rejected the sending domain attached to its API key. Verify that domain or replace RESEND_API_KEY with a full-access key."
+        ? "The email provider rejected the message. Check that the API key is active and the sender address or domain is verified."
         : "The sign-in email could not be sent. Check the email service setup and try again.";
       return error(message,delivery.reason === "not_configured" ? 503 : 502);
     }
