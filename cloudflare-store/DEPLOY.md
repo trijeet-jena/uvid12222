@@ -43,14 +43,16 @@ is sent through WhatsApp; the website stores only the customer's confirmation
 timestamp. An admin checks the screenshot and transfer in PhonePe before
 marking the payment paid.
 
-Brevo's free plan includes transactional email sending. In Brevo, register and
-verify a sender email address, then create an API key (not an SMTP key). Domain
-authentication is recommended for reliable delivery. The Worker will use
-`BREVO_API_KEY` when it is set; if it is absent, the existing Resend key remains
-available as a fallback. Set `EMAIL_FROM` to the exact sender address you
-registered in Brevo. If you control the DNS for `uvidartandcraftsupplies.com`,
-you can use an address such as `orders@uvidartandcraftsupplies.com`. The admin
-inbox is `ishwaraj22dec@gmail.com`.
+SMTP2GO's free plan supports transactional email. In SMTP2GO, verify either a
+sender domain or a single sender email address, then create an API key with
+permission for `/email/send`. Domain verification is recommended for SPF/DKIM
+alignment; the single sender email option is a simpler fallback if domain DNS
+cannot be changed. The Worker uses `SMTP2GO_API_KEY` when set, then falls back
+to `BREVO_API_KEY`, then `RESEND_API_KEY`. Set `EMAIL_FROM` to the exact sender
+address verified in SMTP2GO. If you control the DNS for
+`uvidartandcraftsupplies.com`, you can use an address such as
+`orders@uvidartandcraftsupplies.com`. The admin inbox is
+`ishwaraj22dec@gmail.com`.
 
 Now add the admin email and email service settings as encrypted Cloudflare
 secrets. Run each command and enter the value when Wrangler prompts:
@@ -58,6 +60,7 @@ secrets. Run each command and enter the value when Wrangler prompts:
 ```powershell
 npx wrangler --config wrangler.toml secret put ADMIN_EMAIL
 npx wrangler --config wrangler.toml secret put SESSION_SECRET
+npx wrangler --config wrangler.toml secret put SMTP2GO_API_KEY
 npx wrangler --config wrangler.toml secret put BREVO_API_KEY
 npx wrangler --config wrangler.toml secret put RESEND_API_KEY
 npx wrangler --config wrangler.toml secret put EMAIL_FROM
@@ -73,10 +76,11 @@ files, GitHub, or chat. Copy a new `sb_secret_...` key from your
 Supabase project's **Project Settings → API Keys**. Enter it directly when
 Wrangler prompts for `SUPABASE_SECRET_KEY`. Customer sign-in remains unchanged.
 
-For Brevo, set `BREVO_API_KEY` to the API key from Brevo's **SMTP & API → API
-Keys** page and `EMAIL_FROM` to the exact verified sender email address. Enter
-the key directly when Wrangler prompts; never put it in source control or chat.
-Once configured, Brevo is selected automatically ahead of the Resend fallback.
+For SMTP2GO, create a key from **Sending → API Keys** with access limited to
+`/email/send`. Set `SMTP2GO_API_KEY` to that value and `EMAIL_FROM` to the exact
+verified sender address. Enter the key directly when Wrangler prompts; never
+put it in source control or chat. Once configured, SMTP2GO is selected ahead
+of the Brevo and Resend fallbacks.
 
 Deploy the backend:
 

@@ -150,34 +150,47 @@ function escapeHtml(value) {
 }
 
 async function sendTransactionalEmail(env, message) {
+  const smtp2goKey = clean(env.SMTP2GO_API_KEY, 1000);
   const brevoKey = clean(env.BREVO_API_KEY, 1000);
   const resendKey = clean(env.RESEND_API_KEY, 1000);
-  const provider = brevoKey ? "brevo" : (resendKey ? "resend" : "");
-  const apiKey = provider === "brevo" ? brevoKey : resendKey;
+  const provider = smtp2goKey ? "smtp2go" : (brevoKey ? "brevo" : (resendKey ? "resend" : ""));
+  const apiKey = provider === "smtp2go" ? smtp2goKey : (provider === "brevo" ? brevoKey : resendKey);
   if (!apiKey || !env.EMAIL_FROM) return { sent: false, reason: "not_configured" };
 
   const fromValue = clean(env.EMAIL_FROM, 300);
   const fromMatch = fromValue.match(/^(.+?)\s*<\s*([^<>]+)\s*>$/);
   const senderEmail = clean(fromMatch ? fromMatch[2] : fromValue, 254);
   const senderName = clean(fromMatch ? fromMatch[1] : "UVID Art and Craft Supplies", 100);
-  const requestUrl = provider === "brevo" ? "https://api.brevo.com/v3/smtp/email" : "https://api.resend.com/emails";
-  const requestHeaders = provider === "brevo"
-    ? { "api-key": apiKey, "Content-Type": "application/json", "Accept": "application/json" }
-    : { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" };
-  const requestBody = provider === "brevo"
+  const requestUrl = provider === "smtp2go"
+    ? "https://api.smtp2go.com/v3/email/send"
+    : (provider === "brevo" ? "https://api.brevo.com/v3/smtp/email" : "https://api.resend.com/emails");
+  const requestHeaders = provider === "smtp2go"
+    ? { "X-Smtp2go-Api-Key": apiKey, "Content-Type": "application/json", "Accept": "application/json" }
+    : (provider === "brevo"
+      ? { "api-key": apiKey, "Content-Type": "application/json", "Accept": "application/json" }
+      : { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" });
+  const requestBody = provider === "smtp2go"
     ? {
+        sender: `${senderName} <${senderEmail}>`,
+        to: [message.to],
+        subject: message.subject,
+        text_body: message.text,
+        html_body: message.html,
+      }
+    : (provider === "brevo"
+      ? {
         sender: { name: senderName, email: senderEmail },
         to: [{ email: message.to }],
         subject: message.subject,
         ...(message.html ? { htmlContent: message.html } : { textContent: message.text }),
       }
-    : {
-        from: env.EMAIL_FROM,
-        to: [message.to],
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      };
+      : {
+          from: env.EMAIL_FROM,
+          to: [message.to],
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+        });
   try {
     const response = await fetch(requestUrl, {
       method: "POST",
@@ -186,11 +199,16 @@ async function sendTransactionalEmail(env, message) {
       signal: AbortSignal.timeout(10000),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      console.warn("[EMAIL] Provider rejected a message.", provider, response.status, clean(result.name || result.code || "unknown_error", 100), clean(result.message || "No rejection details returned.", 300));
+    const smtp2goResult = result?.data || {};
+    const smtp2goFailed = provider === "smtp2go" && (Number(smtp2goResult.failed || 0) > 0 || ("succeeded" in smtp2goResult && Number(smtp2goResult.succeeded) < 1));
+    if (!response.ok || smtp2goFailed) {
+      const providerError = provider === "smtp2go"
+        ? clean(JSON.stringify(smtp2goResult.failures?.[0] || result.error || "No rejection details returned."), 300)
+        : clean(result.name || result.code || result.message || "No rejection details returned.", 300);
+      console.warn("[EMAIL] Provider rejected a message.", provider, response.status, clean(result.name || result.code || "unknown_error", 100), providerError);
       return { sent: false, reason: "provider_error", provider };
     }
-    return { sent: true, id: result.messageId || result.id || null, provider };
+    return { sent: true, id: smtp2goResult.email_id || result.messageId || result.id || null, provider };
   } catch (cause) {
     console.warn("[EMAIL] Could not deliver a message.", provider, cause?.name || "network error");
     return { sent: false, reason: "delivery_failed", provider };
@@ -947,7 +965,7 @@ async function handleApi(request, env, user, url) {
     const adminEmail = clean(env.ADMIN_EMAIL, 200).toLowerCase();
     if (!adminEmail || !env.SESSION_SECRET) return error("Admin email sign-in is not configured on the backend yet.",503);
     if (email !== adminEmail) return error("This email is not authorized for admin sign-in.",403);
-    if ((!env.BREVO_API_KEY && !env.RESEND_API_KEY) || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
+    if ((!env.SMTP2GO_API_KEY && !env.BREVO_API_KEY && !env.RESEND_API_KEY) || !env.EMAIL_FROM) return error("Admin email delivery is not configured yet. Configure the email sender first.",503);
 
     const code = randomOtp();
     const codeHash = b64url(await hmac(env.SESSION_SECRET, `admin-email-otp|${email}|${code}`));
