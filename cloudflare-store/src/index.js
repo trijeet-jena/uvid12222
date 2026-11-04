@@ -951,7 +951,7 @@ async function handleApi(request, env, user, url) {
 
     const delivery = await sendAdminOtpEmail(env,email,code);
     if (!delivery.sent) {
-      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',sent_at_ms=0,expires_at_ms=0,attempt_count=5 WHERE email=? AND code_hash=?").bind(email,codeHash).run();
+      await env.DB.prepare("UPDATE admin_email_otps SET code_hash='',sent_at_ms=0,expires_at_ms=0,attempt_count=5,request_count=MAX(0,request_count-1) WHERE email=? AND code_hash=?").bind(email,codeHash).run();
       const message = delivery.reason === "provider_error"
         ? "Resend rejected the sending domain attached to its API key. Verify that domain or replace RESEND_API_KEY with a full-access key."
         : "The sign-in email could not be sent. Check the email service setup and try again.";
