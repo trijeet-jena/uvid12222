@@ -15,6 +15,7 @@ const CUSTOM_A4_PRODUCT_ID = "custom-a4-text-sheet";
 const CUSTOM_A4_FONTS = new Set(["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS", "Courier New"]);
 const COOKIE = "uvid_session";
 const ADMIN_OTP_TTL_MS = 5 * 60 * 1000;
+const ADMIN_OTP_MAX_REQUESTS_PER_HOUR = 10;
 const encoder = new TextEncoder();
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -944,10 +945,10 @@ async function handleApi(request, env, user, url) {
         request_window_start_ms=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN excluded.sent_at_ms ELSE admin_email_otps.request_window_start_ms END,
         request_count=CASE WHEN excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 THEN 1 ELSE admin_email_otps.request_count+1 END
       WHERE excluded.sent_at_ms-admin_email_otps.sent_at_ms>=60000
-        AND (excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 OR admin_email_otps.request_count<5)
+        AND (excluded.sent_at_ms-admin_email_otps.request_window_start_ms>=3600000 OR admin_email_otps.request_count<${ADMIN_OTP_MAX_REQUESTS_PER_HOUR})
       RETURNING email
     `).bind(email,codeHash,sentAt,sentAt+ADMIN_OTP_TTL_MS,sentAt).first();
-    if (!challenge) return error("Wait a minute before requesting another code. A maximum of five codes can be sent per hour.",429);
+    if (!challenge) return error(`Wait a minute before requesting another code. A maximum of ${ADMIN_OTP_MAX_REQUESTS_PER_HOUR} codes can be sent per hour.`,429);
 
     const delivery = await sendAdminOtpEmail(env,email,code);
     if (!delivery.sent) {
