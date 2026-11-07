@@ -390,7 +390,7 @@
   }
 
   /* ---------------- orders ---------------- */
-  var STATUS_STAGES = ["Placed", "Packed", "Shipped", "Out for delivery", "Delivered"];
+  var STATUS_STAGES = ["Order received", "Packed", "Shipped", "Out for delivery", "Delivered"];
 
   function etaDate(days) {
     var d = new Date();
@@ -417,6 +417,7 @@
     }
     var address = session().address;
     if (!address) { toast("Add a delivery address first.", false); navigateTo("#/checkout"); return Promise.resolve(null); }
+    address = Object.assign({}, address, { email: accountEmail(state.user) });
 
     var payload = {
       items: state.cart.map(function (l) {
@@ -429,12 +430,53 @@
       paymentMethod: String(method || "UPI").toUpperCase(),
       address: address
     };
+    var checkoutSignature = JSON.stringify({
+      items: payload.items.map(function (item) { return { productId: item.productId, quantity: item.quantity, customDesign: item.customDesign || null }; }),
+      address: [address.id, address.name, address.phone, address.line, address.city, address.state, address.pin, address.email]
+    });
+    var checkoutSession = session();
+    var checkoutToken = checkoutSession.checkoutSignature === checkoutSignature ? String(checkoutSession.checkoutToken || "") : "";
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(checkoutToken)) checkoutToken = "";
+    function makeCheckoutToken() {
+      return (window.crypto && typeof window.crypto.randomUUID === "function") ? window.crypto.randomUUID().replace(/-/g, "") : (uid("checkout") + uid("retry")).replace(/[^A-Z0-9]/gi, "");
+    }
+    if (!checkoutToken) {
+      checkoutToken = makeCheckoutToken();
+      setSession({ checkoutSignature: checkoutSignature, checkoutToken: checkoutToken });
+    }
+    payload.checkoutToken = checkoutToken;
 
-    return fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify(payload)
+    function sendOrderRequest() {
+      return fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload)
+      });
+    }
+    function retryInvalidCheckoutToken(response) {
+      if (response.status !== 400) return Promise.resolve(response);
+      return response.clone().json().then(function (data) {
+        if (!data || data.error !== "Refresh checkout and try again.") return response;
+        checkoutToken = makeCheckoutToken();
+        payload.checkoutToken = checkoutToken;
+        setSession({ checkoutSignature: checkoutSignature, checkoutToken: checkoutToken });
+        return sendOrderRequest();
+      }).catch(function () { return response; });
+    }
+    return sendOrderRequest().then(retryInvalidCheckoutToken).then(function (response) {
+      if (response.status !== 401 || !state.user) return response;
+      var email = accountEmail(state.user);
+      if (!email) return response;
+      return queueAuthRequest(function () {
+        return fetch("/api/auth/email/login", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+          body: JSON.stringify({ email: email })
+        });
+      }).then(function (loginResponse) {
+        if (!loginResponse.ok) return response;
+        return sendOrderRequest().then(retryInvalidCheckoutToken);
+      }).catch(function () { return response; });
     }).then(function (res) {
       return res.json().then(function (data) { return { status: res.status, data: data }; });
     }).then(function (r) {
@@ -444,9 +486,16 @@
         toast(msg, false);
         return null;
       }
+      if (r.data && r.data.checkoutToken && r.data.checkoutToken !== checkoutToken) {
+        checkoutToken = String(r.data.checkoutToken);
+        setSession({ checkoutSignature: checkoutSignature, checkoutToken: checkoutToken });
+      }
       var order = buildServerOrder(r.data, method, address);
-      state.orders.unshift(order);
-      state.cart = [];
+      order.checkoutToken = checkoutToken;
+      order.checkoutCartItems = payload.items.map(function (item) { return { productId: item.productId, quantity: item.quantity }; });
+      var existingIndex = state.orders.findIndex(function (item) { return item.id === order.id; });
+      if (existingIndex >= 0) state.orders[existingIndex] = order;
+      else state.orders.unshift(order);
       save(); renderChrome();
       return order;
     }).catch(function () {
@@ -459,10 +508,12 @@
   function buildServerOrder(data, method, address) {
     var srv = data.order || {};
     var items = data.items || [];
-    var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+    var stageMap = { AWAITING_PAYMENT: 0, AWAITING_PAYMENT_VERIFICATION: 0, CONFIRMED: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
     var cancelled = srv.status === "CANCELLED";
     var si = stageMap[srv.status] != null ? stageMap[srv.status] : 0;
-    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
+    var rejected = srv.payment_status === "REJECTED";
+    var verified = srv.payment_status === "PAID" || srv.payment_status === "VERIFIED";
+    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : srv.status === "AWAITING_PAYMENT_VERIFICATION" ? (rejected ? "Payment rejected" : "Awaiting payment verification") : srv.status === "CONFIRMED" ? "Order received" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
     var subtotal = 0;
     var mapped = items.map(function (it) {
       var prod = window.PT.findProduct(it.productId);
@@ -474,7 +525,7 @@
         price: price,
         mrp: prod && prod.mrp != null && prod.mrp >= price ? prod.mrp : price,
         qty: Number(it.qty) || 1,
-        emoji: prod ? prod.emoji : "📦",
+        emoji: prod ? prod.emoji : ".",
         bg: prod ? prod.bg : "#EEF2FF",
         ink: prod ? prod.ink : "#4C5BD4",
         productCode: it.productCode || it.catalogueSku || it.productId,
@@ -499,11 +550,16 @@
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
-      paymentConfirmed: srv.payment_status === "PAID",
+      paymentStatus: verified ? "Paid ✓" : rejected ? "Payment proof rejected" : srv.payment_status === "PENDING_VERIFICATION" ? "Awaiting payment verification" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment" : "Pay on delivery"),
+      paymentConfirmed: verified,
       paymentProofSent: Boolean(srv.payment_proof_file_name),
-      paymentProofSubmitted: Boolean(srv.payment_proof_sent_at),
+      paymentProofSubmitted: Boolean(srv.payment_proof_sent_at) && !rejected,
       paymentProofFileName: srv.payment_proof_file_name || null,
+      paymentProofMime: srv.payment_proof_mime || null,
+      paymentProofRejected: rejected,
+      paymentRejectionReason: srv.payment_rejection_reason || null,
+      paymentReferenceId: srv.payment_reference_id || null,
+      paymentVerifiedAt: srv.payment_verified_at || null,
       shippingFinalized: Number(srv.shipping_finalized) !== 0,
       status: statusLabel,
       stages: STATUS_STAGES,
@@ -513,6 +569,23 @@
       user: state.user || "guest",
       _srv: true
     };
+  }
+
+  function completeOrderSubmission(order) {
+    if (!order || !order._srv) return;
+    var lines = Array.isArray(order.checkoutCartItems) && order.checkoutCartItems.length
+      ? order.checkoutCartItems
+      : (order.items || []).map(function (item) { return { productId: item.id, quantity: item.qty }; });
+    lines.forEach(function (item) {
+      var line = state.cart.filter(function (cartLine) { return cartLine.id === item.productId; })[0];
+      if (!line) return;
+      line.qty -= Number(item.quantity || 0);
+      if (line.qty <= 0) state.cart.splice(state.cart.indexOf(line), 1);
+    });
+    var currentSession = session();
+    if (order.checkoutToken && currentSession.checkoutToken === order.checkoutToken) setSession({ checkoutSignature: null, checkoutToken: null });
+    save();
+    renderChrome();
   }
 
   function sqlTimeToIso(sql) {
@@ -540,6 +613,8 @@
       }).then(function (r) {
         if (r.status !== 200) { toast((r.d && r.d.error) || "Could not cancel this order.", false); return; }
         target.status = "Cancelled";
+        var currentSession = session();
+        if (target.checkoutToken && currentSession.checkoutToken === target.checkoutToken) setSession({ checkoutSignature: null, checkoutToken: null });
         save();
         toast("Order " + orderId + " cancelled. Refund in 3–5 days.", true);
         if (window.PT.View && window.PT.View.rerender) window.PT.View.rerender();
@@ -646,7 +721,7 @@
     computeTotals: computeTotals, cartCount: cartCount,
     addToCart: addToCart, addCustomA4ToCart: addCustomA4ToCart, setQty: setQty, toggleWishlist: toggleWishlist, inWishlist: inWishlist,
     requireLogin: requireLogin, openAuth: openAuth, closeAuth: closeAuth, signOut: signOut, switchAccount: switchAccount,
-    findUser: findUser, placeOrder: placeOrder, buildServerOrder: buildServerOrder, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
+    findUser: findUser, placeOrder: placeOrder, buildServerOrder: buildServerOrder, completeOrderSubmission: completeOrderSubmission, cancelOrder: cancelOrder, STATUS_STAGES: STATUS_STAGES,
     navigateTo: navigateTo, renderChrome: renderChrome,
     addSearch: addSearch, route: route, pushRecent: pushRecent
   };

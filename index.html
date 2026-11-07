@@ -749,16 +749,22 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 .drawer__brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .drawer__links { display: flex; flex-direction: column; gap: 2px; }
 .drawer__links a { padding: 12px 14px; border-radius: var(--rad-sm); font-weight: 600; font-size: 14.5px; color: var(--ink-2); }
-.drawer__links .category-menu__item--child { padding-left: 30px; font-size: 13.5px; color: var(--ink-3); }
+.drawer__section-title { margin: 12px 14px 4px; color: var(--ink-3); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.drawer__category-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 0; border-radius: var(--rad-sm); background: transparent; color: var(--ink-2); font: inherit; font-size: 14.5px; font-weight: 700; text-align: left; cursor: pointer; }
+.drawer__category-toggle:hover, .drawer__category-toggle.is-open { background: var(--paper-2); color: var(--ink); }
+.drawer__category-chevron { transition: transform .18s ease; }
+.drawer__category-toggle.is-open .drawer__category-chevron { transform: rotate(180deg); }
+.drawer__category-list { display: flex; flex-direction: column; gap: 2px; padding-bottom: 4px; }
+.drawer__category-list[hidden] { display: none; }
+.drawer__links .category-menu__item { display: block; padding: 10px 14px; border-radius: var(--rad-sm); font-weight: 600; font-size: 14px; color: var(--ink-2); }
+.drawer__links .category-menu__item--child { padding-left: 28px; font-size: 13px; color: var(--ink-3); }
 .drawer__links a:hover { background: var(--paper-2); color: var(--ink); }
 .drawer hr { border: 0; border-top: 1px dashed var(--line-2); margin: 14px 0; }
+.drawer__social { display: flex; align-items: center; gap: 10px; }
+.drawer__social--whatsapp { color: #12824b !important; }
+.drawer__social--instagram { color: #bd2b73 !important; }
 
-.bottomnav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 65; display: none; background: rgba(255, 255, 255, 0.97); backdrop-filter: blur(12px); border-top: 1px solid var(--line); padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); }
-.bottomnav__in { display: grid; grid-template-columns: repeat(5, 1fr); max-width: 560px; margin: 0 auto; }
-.bnav { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; font-size: 10.6px; font-weight: 600; color: var(--ink-3); border: 0; background: none; border-radius: 12px; }
-.bnav svg { width: 22px; height: 22px; }
-.bnav--on { color: var(--green-d); }
-.bnav__badge { position: absolute; top: 0; right: calc(50% - 22px); min-width: 16px; height: 16px; border-radius: 99px; background: var(--tang); color: #fff; font-size: 9.5px; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
+.mobile-quicknav { display: none; }
 
 /* ---------------- toast ---------------- */
 .toast {
@@ -873,43 +879,36 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .shelf--deals .hgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  :root { --h-push: 14px; --b-push: 84px; }
+  :root { --h-push: 14px; --b-push: 0px; }
   body { font-size: 14.5px; }
   .header__row {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) auto;
-    grid-template-areas: "menu brand actions" "search search search";
+    grid-template-columns: minmax(0, 1fr) 36px;
+    grid-template-areas: "brand menu" "mobile-nav mobile-nav" "search search";
     gap: 8px 10px;
     padding: 8px var(--h-push) 10px;
   }
   .burger { grid-area: menu; width: 36px; height: 42px; align-items: center; justify-content: center; padding: 8px; }
   .header .brand { grid-area: brand; min-width: 0; }
   .search { grid-area: search; width: 100%; max-width: none; }
-  .hactions { grid-area: actions; margin-left: 0; gap: 4px; }
+  .hactions { display: none; }
   .header .brand { gap: 7px; }
   .header .brand__tag { display: block; font-size: 8.5px; line-height: 1.1; letter-spacing: .055em; }
   .header .brand__name { font-size: 20px; }
   .header .brand__mark { width: 48px; height: 48px; flex-basis: 48px; font-size: 16px; }
   .hicon span.lbl, .chip__meta { display: none; }
-  /* wishlist/orders/cart live in the bottom nav on phones —
-     drop the duplicate header icons so search gets the space */
-  .hactions > .hicon { display: none; }
-  .hactions > .category-menu { display: block; }
-  .hactions { gap: 3px; }
-  .header-whatsapp, .header-instagram { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 7px; border-radius: 50%; }
-  .header-whatsapp__label { display: none; }
-  .header-instagram__label { display: none; }
-  .category-menu__toggle { gap: 4px; padding: 8px 7px; font-size: 11px; }
-  .category-menu__toggle .lbl { display: inline; }
-  .category-menu__panel { right: -42px; }
-  .chip { padding: 4px; }
+  .mobile-quicknav { grid-area: mobile-nav; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; width: 100%; }
+  .mobile-quicknav__item { position: relative; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 48px; padding: 4px 2px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ink-2); font: inherit; font-size: 10px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .mobile-quicknav__item svg { width: 20px; height: 20px; flex: 0 0 auto; }
+  .mobile-quicknav__item.is-active { border-color: #c9dfd1; background: #edf6f0; color: var(--green-d); }
+  .mobile-quicknav__badge { position: absolute; top: 0; right: calc(50% - 20px); min-width: 15px; height: 15px; padding: 0 3px; border-radius: 99px; background: var(--tang); color: #fff; font-size: 9px; line-height: 15px; text-align: center; }
+  .mobile-quicknav__badge[hidden] { display: none; }
   .search__box { padding: 9px 13px; }
   .search__box input { font-size: 14px; }
-  .search__drop { position: fixed; left: 10px; right: 10px; top: 112px; max-height: min(62dvh, 420px); }
+  .search__drop { position: absolute; left: 0; right: 0; top: calc(100% + 8px); max-height: min(62dvh, 420px); }
   .burger { display: inline-flex; flex-direction: column; gap: 5px; background: none; border: 0; }
   .burger span { width: 21px; height: 2.2px; background: var(--ink); border-radius: 2px; transition: transform .2s ease; }
-  .bottomnav { display: block; }
-  .toast { bottom: 96px; max-width: 92vw; }
+  .toast { bottom: 20px; max-width: 92vw; }
   .view { padding-top: 14px; }
   .crumbs { font-size: 12px; }
   .hero { padding: 22px 16px; }
@@ -975,7 +974,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   .hicon { padding: 8px 9px; }
   .search__box { padding: 8px 11px; }
   .search__box input { font-size: 13.5px; }
-  .search__drop { top: 108px; }
+  .search__drop { top: calc(100% + 8px); }
   .grid { gap: 8px; }
   .pcard__name { font-size: 12.4px; }
   .pcard__price b { font-size: 14px; }
@@ -1122,6 +1121,23 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         </a>
         <button class="chip" id="accountChip" aria-label="Account"></button>
       </div>
+      <nav class="mobile-quicknav" aria-label="Quick navigation">
+        <a class="mobile-quicknav__item" href="#/" data-mnav="home" aria-label="Home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10.5 9-7.5 9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z"/></svg><span>Home</span>
+        </a>
+        <a class="mobile-quicknav__item" href="#/search" data-mnav="browse" aria-label="Browse products">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><span>Browse</span>
+        </a>
+        <a class="mobile-quicknav__item" href="#/wishlist" data-mnav="wishlist" aria-label="Wishlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.7-10-9.3C.3 8 2.4 4.5 6 4.5c2.2 0 3.6 1.1 4.5 2.6l1.5 2.4 1.5-2.4c.9-1.5 2.3-2.6 4.5-2.6 3.6 0 5.7 3.5 4 7.2C19.5 16.3 12 21 12 21z"/></svg><span>Wishlist</span>
+        </a>
+        <a class="mobile-quicknav__item" href="#/cart" data-mnav="cart" aria-label="Cart">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20.5" r="1.4"/><circle cx="17.5" cy="20.5" r="1.4"/><path d="M2.5 3.5h2.2l2.5 11.2a1.8 1.8 0 0 0 1.8 1.4h7.9a1.8 1.8 0 0 0 1.8-1.4l1.5-7.2H6"/></svg><span>Cart</span><span class="mobile-quicknav__badge" id="mobileCartCount" hidden>0</span>
+        </a>
+        <button class="mobile-quicknav__item" id="mobileAccountChip" type="button" aria-label="Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Profile</span>
+        </button>
+      </nav>
     </div>
   </header>
 
@@ -1177,14 +1193,21 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       <img class="brand__mark brand__mark--img" src="./assets/logo.jpeg" alt="UVID logo" width="40" height="40" />
       <b>U<span style="color:var(--tang)">VID</span></b>
     </div>
-    <nav class="drawer__links" aria-label="Categories">
+    <nav class="drawer__links" aria-label="Store navigation">
       <a href="#/">🏠 Home</a>
-      <div id="mobileCategoryLinks"></div>
+      <a href="#/search">🛍️ Browse products</a>
+      <button class="drawer__category-toggle" id="mobileCategoryToggle" type="button" aria-expanded="false" aria-controls="mobileCategoryLinks">
+        <span>🗂️ Categories</span><span class="drawer__category-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div class="drawer__category-list" id="mobileCategoryLinks" hidden></div>
       <hr />
       <a href="#/wishlist">♥ Wishlist</a>
       <a href="#/orders">📦 My orders</a>
       <a href="#/cart">🛒 Cart</a>
       <a href="#/account">👤 My account</a>
+      <hr />
+      <a class="drawer__social drawer__social--whatsapp" href="https://wa.me/917406155738?text=Hello%2C%20I%20need%20support%20with%20my%20order." target="_blank" rel="noopener noreferrer">WhatsApp support</a>
+      <a class="drawer__social drawer__social--instagram" href="https://www.instagram.com/uvid_art_and_crafts?psln=MWZvbmZlbDZiejZ6cA==" target="_blank" rel="noopener noreferrer">Instagram</a>
     </nav>
   </aside>
 
@@ -1199,34 +1222,6 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       </div>
     </div>
   </div>
-
-  <!-- mobile bottom nav -->
-  <nav class="bottomnav" aria-label="Quick navigation">
-    <div class="bottomnav__in">
-      <a class="bnav bnav--on" href="#/" data-nav="home">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10.5 9-7.5 9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9.5Z"/></svg>
-        Home
-      </a>
-      <a class="bnav" href="#/search" data-nav="browse">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
-        Browse
-      </a>
-      <a class="bnav" href="#/wishlist" data-nav="wishlist">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 21s-7.5-4.7-10-9.3C.3 8 2.4 4.5 6 4.5c2.2 0 3.6 1.1 4.5 2.6l1.5 2.4 1.5-2.4c.9-1.5 2.3-2.6 4.5-2.6 3.6 0 5.7 3.5 4 7.2C19.5 16.3 12 21 12 21z"/></svg>
-        Wishlist
-        <span class="bnav__badge" id="wishCountM" hidden>0</span>
-      </a>
-      <a class="bnav" href="#/orders" data-nav="orders">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3.3 8.3 8.7 4.9 8.7-4.9"/></svg>
-        Orders
-      </a>
-      <a class="bnav" href="#/cart" data-nav="cart">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20.5" r="1.4"/><circle cx="17.5" cy="20.5" r="1.4"/><path d="M2.5 3.5h2.2l2.5 11.2a1.8 1.8 0 0 0 1.8 1.4h7.9a1.8 1.8 0 0 0 1.8-1.4l1.5-7.2H6"/></svg>
-        Cart
-        <span class="bnav__badge" id="cartCountM" hidden>0</span>
-      </a>
-    </div>
-  </nav>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -2445,7 +2440,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   /* ---------------- orders ---------------- */
-  var STATUS_STAGES = ["Placed", "Packed", "Shipped", "Out for delivery", "Delivered"];
+  var STATUS_STAGES = ["Order received", "Packed", "Shipped", "Out for delivery", "Delivered"];
 
   function etaDate(days) {
     var d = new Date();
@@ -2517,7 +2512,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
     var cancelled = srv.status === "CANCELLED";
     var si = stageMap[srv.status] != null ? stageMap[srv.status] : 0;
-    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
+    var statusLabel = srv.status === "AWAITING_PAYMENT" ? "Awaiting payment" : srv.status === "AWAITING_PAYMENT_VERIFICATION" ? "Awaiting payment verification" : (cancelled ? "Cancelled" : STATUS_STAGES[si]);
     var subtotal = 0;
     var mapped = items.map(function (it) {
       var prod = window.PT.findProduct(it.productId);
@@ -2554,7 +2549,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         total: Number(srv.total_amount) || 0
       },
       payment: String(method || srv.payment_method || "UPI").toLowerCase(),
-      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (Number(srv.shipping_finalized) === 0 ? "Delivery charge awaiting store quote" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment verification" : "Pay on delivery")),
+      paymentStatus: srv.payment_status === "PAID" ? "Paid ✓" : (srv.payment_status === "PENDING_VERIFICATION" ? "Awaiting payment verification" : (String(srv.payment_method || method || "").toUpperCase() === "UPI" ? "Awaiting payment" : "Pay on delivery")),
       paymentConfirmed: srv.payment_status === "PAID",
       paymentProofSent: Boolean(srv.payment_proof_file_name),
       paymentProofSubmitted: Boolean(srv.payment_proof_sent_at),
@@ -2872,7 +2867,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
   }
 
   function statusPill(status) {
-    var cls = { "Awaiting payment": "amber", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
+    var cls = { "Awaiting payment": "amber", "Awaiting payment verification": "amber", "Order received": "green", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
     return '<span class="pill pill--' + cls + '">' + esc(status) + '</span>';
   }
 
@@ -3641,9 +3636,9 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>Confirmed after address review</b></div>' +
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
-      '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
+      '<p class="safe-note">The amount shown is the items subtotal. The store will review your address and confirm any delivery charge after your order is placed.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
-      '<p class="safe-note">After the store confirms your final total, pay by UPI and upload your payment screenshot or receipt on the next screen. The store will verify payment before processing.</p>' +
+      '<p class="safe-note">Pay the items subtotal by UPI, upload your payment proof, then confirm your order. The admin will receive it after you confirm.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -3708,6 +3703,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     $("#placeOrder").addEventListener("click", function () {
       if (placeButton.disabled) return;
       if (!A.session().address) { A.toast("Add a delivery address first.", false); window.scrollTo(0, 0); return; }
+      if (addresses.length) {
+        var selectedAddressRadio = $('.addr-list input[name="addrSel"]:checked');
+        var selectedSavedAddress = selectedAddressRadio && addresses.filter(function (address) { return address.id === selectedAddressRadio.value; })[0];
+        if (selectedSavedAddress) A.setSession({ addressId: selectedSavedAddress.id, address: selectedSavedAddress });
+      }
       Promise.resolve(A.placeOrder("UPI")).then(function (order) {
         if (order) A.navigateTo("#/pay/" + order.id);
       });
@@ -3723,8 +3723,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     }
     if (order.paymentProofSent) {
       return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
-        'Payment proof uploaded. Confirm your order below.' +
-        (order.shippingFinalized ? '' : ' The store will confirm the delivery charge after reviewing your address.') + '</p>' +
+        'Payment proof uploaded. Confirm your order below.' + '</p>' +
         '<button class="btn btn--primary btn--block" type="button" id="confirmPaymentProof">Confirm order</button>';
     }
     return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
@@ -3747,8 +3746,8 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
     if (!order.shippingFinalized) {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Payment details</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. Please wait to pay until the final total appears. If you have already paid, upload your payment proof below so it can be attached to this order.</p>' +
-        '<div class="upi-wait__amount"><span>Items subtotal · delivery charge pending</span><b>' + money(order.totals.subtotal) + '</b></div>' +
+        '<p>Pay the items subtotal shown below, then upload your payment proof and confirm your order. The store will review the address and confirm any delivery charge after your order is placed.</p>' +
+        '<div class="upi-wait__amount"><span>Items subtotal</span><b>' + money(order.totals.subtotal) + '</b></div>' +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         paymentProofContent(order) +
         '</div>';
@@ -3792,7 +3791,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
         if (result.order && result.order.payment_proof_file_name) order.paymentProofFileName = result.order.payment_proof_file_name;
         order.status = "Awaiting payment";
         order.stageIndex = 0;
-        order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+        order.paymentStatus = "Awaiting order confirmation";
         A.save();
         clearInterval(paymentTimer);
         paymentPage(order.id);
@@ -3874,7 +3873,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
             return;
           }
           if (serverOrder.payment_proof_file_name && !hadPaymentProof) {
-            order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+            order.paymentStatus = "Awaiting order confirmation";
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
@@ -3903,10 +3902,10 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
-          order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+          order.paymentStatus = order.paymentProofSent ? "Awaiting order confirmation" : "Awaiting payment";
           statusEl.textContent = order.shippingFinalized
             ? (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to verify your payment." : "After paying, upload your payment screenshot or receipt here. Payment is confirmed after store verification.")
-            : (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to confirm the final delivery total." : "Waiting for the store to confirm delivery.");
+            : (order.paymentProofSent ? "Payment proof uploaded. Confirm your order to submit it." : "Pay the items subtotal, upload your proof, then confirm your order.");
           A.save();
         })
         .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
@@ -3930,7 +3929,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       '<div class="success card">' +
       '<div class="success__burst" aria-hidden="true">' + '<i></i><i></i><i></i><i></i><i></i><i></i>' + '</div>' +
       '<div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
-      '<h1>' + (proofSubmitted ? "Your order has been confirmed!" : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
+      '<h1>' + (proofSubmitted ? "Your order has been placed." : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
       '<p class="success__sub">' + (proofSubmitted && !paymentConfirmed ? "Your payment proof was submitted. The store will verify the transfer before processing your order." + (!order.shippingFinalized ? " The delivery charge will be confirmed after the address review." : "") : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.")) + '</p>' +
       '<p class="success__sub" id="upiPaymentStatus">Current order status: <b>' + esc(order.status || "Placed") + '</b>.</p>' +
       '<div class="success__meta card-inset">' +
@@ -4611,20 +4610,20 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
 
   function renderBadges() {
     var n = A.cartCount(), w = A.state.wishlist.length;
-    [["cartCount", n], ["cartCountM", n], ["wishCount", w], ["wishCountM", w]].forEach(function (pair) {
+    [["cartCount", n], ["wishCount", w], ["mobileCartCount", n]].forEach(function (pair) {
       var el = document.getElementById(pair[0]);
       if (el) { el.textContent = pair[1] > 99 ? "99+" : pair[1]; el.hidden = pair[1] === 0; }
     });
-    /* active state in bottom nav */
     var path = (location.hash || "#/").split("?")[0];
-    $$(".bnav").forEach(function (b) {
-      var id = b.getAttribute("data-nav");
+    $$(".mobile-quicknav__item[data-mnav]").forEach(function (b) {
+      var id = b.getAttribute("data-mnav");
       var on = (id === "home" && path === "#/") ||
         (id === "browse" && (path === "#/search" || path.indexOf("#/c/") === 0)) ||
         (id === "wishlist" && path === "#/wishlist") ||
-        (id === "orders" && path.indexOf("#/orders") === 0) ||
         (id === "cart" && path === "#/cart");
-      b.classList.toggle("bnav--on", on);
+      b.classList.toggle("is-active", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
     });
   }
 
@@ -4636,24 +4635,31 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var d = $("#mobileDrawer");
     if (d) d.classList.remove("drawer--open");
     if (b) b.classList.remove("backdrop--show");
+    var burger = $("#burger");
+    if (burger) {
+      burger.setAttribute("aria-expanded", "false");
+      burger.setAttribute("aria-label", "Open menu");
+    }
   }
 
   function renderHeaderCategories() {
     var categories = D.CATEGORIES || [];
-    function categoryLink(category) {
+    function categoryLink(category, child) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
+      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
     }
-    var html = categories.filter(function (category) {
+    var parents = categories.filter(function (category) {
       return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
-    }).map(function (parent) {
-      return categoryLink(parent, false);
-    }).join("");
-    ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
-      var container = document.getElementById(id);
-      if (container) container.innerHTML = html;
     });
+    var headerHtml = parents.map(function (parent) { return categoryLink(parent, false); }).join("");
+    var mobileHtml = categories.map(function (category) {
+      return categoryLink(category, Boolean(category.parentSlug && categories.some(function (parent) { return parent.slug === category.parentSlug; })));
+    }).join("");
+    var headerContainer = document.getElementById("headerCategoryLinks");
+    var mobileContainer = document.getElementById("mobileCategoryLinks");
+    if (headerContainer) headerContainer.innerHTML = headerHtml;
+    if (mobileContainer) mobileContainer.innerHTML = mobileHtml;
   }
 
   function closeHeaderCategories() {
@@ -4696,6 +4702,14 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     var categoryPanel = $("#headerCategoryMenu");
     renderHeaderCategories();
     document.addEventListener("pt:catalog", renderHeaderCategories);
+    var categoryToggle = $("#mobileCategoryToggle");
+    var categoryList = $("#mobileCategoryLinks");
+    if (categoryToggle && categoryList) categoryToggle.addEventListener("click", function () {
+      var open = categoryList.hidden;
+      categoryList.hidden = !open;
+      categoryToggle.classList.toggle("is-open", open);
+      categoryToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
     if (categoryToggle && categoryPanel) {
       categoryToggle.addEventListener("click", function () {
         var open = categoryPanel.hidden;
@@ -4723,6 +4737,7 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
       d.classList.toggle("drawer--open", open);
       $("#backdrop").classList.toggle("backdrop--show", open);
       burger.setAttribute("aria-expanded", open ? "true" : "false");
+      burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
     });
     $$("#mobileDrawer a").forEach(function (a) {
       a.addEventListener("click", closeDrawer);
@@ -4734,6 +4749,11 @@ input, select, textarea { font-family: inherit; font-size: 15px; }
     });
     var chip = $("#accountChip");
     if (chip) chip.addEventListener("click", function () {
+      if (A.state.user) A.navigateTo("#/account");
+      else A.openAuth("login", "");
+    });
+    var mobileAccount = $("#mobileAccountChip");
+    if (mobileAccount) mobileAccount.addEventListener("click", function () {
       if (A.state.user) A.navigateTo("#/account");
       else A.openAuth("login", "");
     });

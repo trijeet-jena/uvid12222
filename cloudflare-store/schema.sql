@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS customer_addresses (
   line TEXT NOT NULL,
   city TEXT NOT NULL,
   pin TEXT NOT NULL,
+  state TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id, created_at);
@@ -117,10 +118,18 @@ CREATE TABLE IF NOT EXISTS orders (
   coupon TEXT,
   discount REAL NOT NULL DEFAULT 0,
   shipping REAL NOT NULL DEFAULT 0,
+  payment_proof_sent_at TEXT,
+  checkout_token TEXT,
+  payment_reference_id TEXT,
+  payment_verified_at TEXT,
+  payment_rejection_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_customer_checkout_token
+  ON orders(customer_id, checkout_token)
+  WHERE checkout_token IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS order_delivery_quotes (
   order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
@@ -197,3 +206,12 @@ CREATE TABLE IF NOT EXISTS admin_push_subscriptions (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_admin_push_subscriptions_updated ON admin_push_subscriptions(updated_at);
+
+CREATE TABLE IF NOT EXISTS admin_password_login_attempts (
+  ip_hash TEXT PRIMARY KEY,
+  window_start_ms INTEGER NOT NULL,
+  request_count INTEGER NOT NULL DEFAULT 0,
+  updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_password_login_attempts_updated_idx
+  ON admin_password_login_attempts(updated_at_ms);

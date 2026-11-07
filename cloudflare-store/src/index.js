@@ -13,7 +13,9 @@ const IMAGE_LIMIT = 5_500_000; // stay below Supabase's recommended 6 MB standar
 const D1_IMAGE_LIMIT = 1_400_000; // legacy fallback stays below D1's 2 MB row limit
 const CUSTOM_A4_PRODUCT_ID = "custom-a4-text-sheet";
 const CUSTOM_A4_FONTS = new Set(["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS", "Courier New"]);
-const COOKIE = "uvid_session";
+const LEGACY_COOKIE = "uvid_session";
+const CUSTOMER_COOKIE = "uvid_customer_session";
+const ADMIN_COOKIE = "uvid_admin_session";
 const encoder = new TextEncoder();
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -24,6 +26,7 @@ const error = (message, status = 400) => json({ error: message }, status);
 const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const clean = (v, max = 2000) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max);
 const parseJson = (v, fallback) => { try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+const paymentVerified = (order) => order?.payment_status === "PAID" || order?.payment_status === "VERIFIED";
 function decodeCustomA4Design(value, productId) {
   if (productId !== CUSTOM_A4_PRODUCT_ID) {
     if (value != null) throw Object.assign(new Error("Custom artwork is only supported for the A4 design sheet."), { status: 400 });
@@ -98,8 +101,13 @@ async function verifySession(env, token) {
     return data;
   } catch { return null; }
 }
-function cookieHeader(token, maxAge = 604800) {
-  return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+function cookieHeader(token, maxAge = 604800, name = LEGACY_COOKIE) {
+  return `${name}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+function logoutResponse(...cookieNames) {
+  const response = json({ ok: true });
+  for (const name of cookieNames) response.headers.append("Set-Cookie", cookieHeader("", 0, name));
+  return response;
 }
 function checkOrigin(request, env) {
   const origin = request.headers.get("Origin");
@@ -117,7 +125,7 @@ async function bodyJson(request, max = 7_600_000) {
 }
 function need(user, role) {
   if (!user) return error("Please sign in to continue.", 401);
-  if (role && user.role !== role) return error("Admin access required.", 403);
+  if (role && user.role !== role) return error(role === "ADMIN" ? "Admin access required." : "Customer sign-in required.", 403);
   return null;
 }
 async function audit(env, request, user, action, target = null, detail = {}) {
@@ -220,18 +228,21 @@ function orderItemCodes(metaJson, variantLabel, productId) {
 async function sendOrderEmail(env, order, type, items = []) {
   const email = clean(env.ADMIN_EMAIL, 200).toLowerCase();
   if (!email) return { sent: false, reason: "not_configured" };
+  const isPaid = type === "paid";
+  const isSubmitted = type === "submitted";
+  const isLegacyPlaced = type === "placed";
   const address = parseJson(order.address_json, {}) || {};
   const itemSubtotal = items.reduce((sum, item) => sum + (Number(item.priceAtPurchase) || 0) * (Number(item.qty) || 0), 0);
   const amount = Number(order.total_amount || 0);
   const discount = Number(order.discount || 0);
   const shipping = Number(order.shipping || 0);
-  const shippingPending = type === "placed" && Number(order.shipping_finalized) === 0;
-  const paymentLabel = order.payment_status === "PAID" ? "Paid" : "Awaiting payment";
-  const subject = type === "paid" ? `Payment confirmed for ${order.id}` : `Customer confirmed order ${order.id}`;
+  const shippingPending = (isSubmitted || isLegacyPlaced) && Number(order.shipping_finalized) === 0;
+  const paymentLabel = paymentVerified(order) ? "Verified" : (isSubmitted ? "Pending verification" : "Awaiting payment");
+  const subject = isPaid ? `Payment verified for ${order.id}` : isSubmitted ? `Order placed · ${order.id}` : `Customer confirmed order ${order.id}`;
   const statusText = shippingPending
     ? `Items subtotal: ₹${itemSubtotal.toFixed(2)}. Delivery charge is awaiting the store quote; the final total is not set yet. Payment status: ${paymentLabel}.`
-    : `${type === "paid" ? "Payment confirmed" : "Order total"}: ₹${amount.toFixed(2)}. Payment status: ${paymentLabel}.`;
-  const proofNotice = type === "placed" && order.payment_proof_sent_at
+    : `${isPaid ? "Payment verified" : isSubmitted ? "Customer-reported amount" : "Order total"}: ₹${amount.toFixed(2)}. Payment status: ${paymentLabel}.`;
+  const proofNotice = (isSubmitted || isLegacyPlaced) && order.payment_proof_sent_at
     ? (order.payment_proof_file_name
       ? `Customer uploaded payment proof (${clean(order.payment_proof_file_name, 160)}). Open the order invoice in Admin to view it, then verify the transfer in PhonePe before processing the order.`
       : "Customer reported sending payment proof and the order ID on WhatsApp. Verify the transfer in PhonePe before processing the order.")
@@ -252,11 +263,12 @@ async function sendOrderEmail(env, order, type, items = []) {
     return `Code: ${code}${sku ? ` | Catalogue SKU: ${sku}` : ""} | ${name}${variant && !variant.startsWith(code) ? ` (${variant})` : ""} | Qty: ${qty} | Unit: ₹${price.toFixed(2)} | Line total: ₹${(price * qty).toFixed(2)}`;
   });
   const text = [
-    type === "paid" ? `Payment confirmed for order ${order.id}.` : `The customer confirmed order ${order.id}. The order is now Placed.`,
+    isPaid ? `Payment verified for order ${order.id}. The order is confirmed.` : isSubmitted ? `The customer placed order ${order.id} after uploading payment proof. Verify the transfer before processing.` : `The customer confirmed order ${order.id}. The order is now Placed.`,
     `Customer: ${buyerName}${buyerEmail ? ` | ${buyerEmail}` : ""}${buyerPhone ? ` | ${buyerPhone}` : ""}`,
     addressText ? `Delivery address: ${addressText}` : "",
     statusText,
     proofNotice,
+    order.payment_reference_id ? `UPI transaction/reference ID: ${clean(order.payment_reference_id, 100)}` : "",
     itemLines.length ? `Items:\n${itemLines.join("\n")}` : "",
     `Items subtotal: ₹${itemSubtotal.toFixed(2)}`,
     discount ? `Discount: −₹${discount.toFixed(2)}` : "",
@@ -272,7 +284,9 @@ async function sendOrderEmail(env, order, type, items = []) {
     const price = Number(item.priceAtPurchase) || 0;
     return `<tr><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(code)}${sku ? `<br><small>SKU: ${escapeHtml(sku)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee">${escapeHtml(name)}${variant && !variant.startsWith(code) ? `<br><small>${escapeHtml(variant)}</small>` : ""}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:center">${qty}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${price.toFixed(2)}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap">₹${(price * qty).toFixed(2)}</td></tr>`;
   }).join("");
-  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:760px;margin:auto;padding:24px"><h2>${type === "paid" ? "Payment confirmed" : "Customer confirmed order"}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${type === "paid" ? "Payment confirmed." : "The customer confirmed this order. Its status is now Placed."}</p><p>${escapeHtml(statusText)}</p>${proofNotice ? `<p><b>Payment proof:</b> ${escapeHtml(proofNotice)}</p>` : ""}<h3>Customer</h3><p>${escapeHtml(buyerName)}${buyerEmail ? `<br>${escapeHtml(buyerEmail)}` : ""}${buyerPhone ? `<br>${escapeHtml(buyerPhone)}` : ""}${addressText ? `<br>${escapeHtml(addressText)}` : ""}</p><h3>Order invoice details</h3>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product code / SKU</th><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product</th><th style="padding:7px 8px;background:#f2f5f2">Qty</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Unit price</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Line total</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No item details available.</p>"}<table style="margin:14px 0 0 auto;border-collapse:collapse;min-width:260px"><tr><td style="padding:4px 8px">Items subtotal</td><td style="padding:4px 8px;text-align:right">₹${itemSubtotal.toFixed(2)}</td></tr>${discount ? `<tr><td style="padding:4px 8px">Discount</td><td style="padding:4px 8px;text-align:right">−₹${discount.toFixed(2)}</td></tr>` : ""}<tr><td style="padding:4px 8px">Delivery</td><td style="padding:4px 8px;text-align:right">${shippingPending ? "Awaiting store quote" : shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</td></tr><tr><td style="border-top:2px solid #2f8061;padding:9px 8px;font-weight:bold">${shippingPending ? "Final total pending" : "Final total"}</td><td style="border-top:2px solid #2f8061;padding:9px 8px;text-align:right;font-weight:bold">${shippingPending ? "Pending delivery quote" : `₹${amount.toFixed(2)}`}</td></tr></table><p style="color:#666;font-size:13px;margin-top:24px">UVID Art &amp; Craft Supplies</p></div>`;
+  const title = isPaid ? "Payment verified" : isSubmitted ? "Order placed · payment verification required" : "Customer confirmed order";
+  const summary = isPaid ? "Payment verified by the store. The order is confirmed." : isSubmitted ? "The customer uploaded payment proof and confirmed the order. Verify the UPI transfer in PhonePe before processing it." : "The customer confirmed this order. Its status is now Placed.";
+  const html = `<div style="font-family:Arial,sans-serif;color:#26231f;max-width:760px;margin:auto;padding:24px"><h2>${title}</h2><p><b>Order ID:</b> ${escapeHtml(order.id)}</p><p>${summary}</p><p>${escapeHtml(statusText)}</p>${proofNotice ? `<p><b>Payment proof:</b> ${escapeHtml(proofNotice)}</p>` : ""}${order.payment_reference_id ? `<p><b>UPI transaction/reference ID:</b> ${escapeHtml(clean(order.payment_reference_id, 100))}</p>` : ""}<h3>Customer</h3><p>${escapeHtml(buyerName)}${buyerEmail ? `<br>${escapeHtml(buyerEmail)}` : ""}${buyerPhone ? `<br>${escapeHtml(buyerPhone)}` : ""}${addressText ? `<br>${escapeHtml(addressText)}` : ""}</p><h3>Order invoice details</h3>${rows ? `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product code / SKU</th><th style="text-align:left;padding:7px 8px;background:#f2f5f2">Product</th><th style="padding:7px 8px;background:#f2f5f2">Qty</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Unit price</th><th style="text-align:right;padding:7px 8px;background:#f2f5f2">Line total</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No item details available.</p>"}<table style="margin:14px 0 0 auto;border-collapse:collapse;min-width:260px"><tr><td style="padding:4px 8px">Items subtotal</td><td style="padding:4px 8px;text-align:right">₹${itemSubtotal.toFixed(2)}</td></tr>${discount ? `<tr><td style="padding:4px 8px">Discount</td><td style="padding:4px 8px;text-align:right">−₹${discount.toFixed(2)}</td></tr>` : ""}<tr><td style="padding:4px 8px">Delivery</td><td style="padding:4px 8px;text-align:right">${shippingPending ? "Awaiting store quote" : shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</td></tr><tr><td style="border-top:2px solid #2f8061;padding:9px 8px;font-weight:bold">${shippingPending ? "Final total pending" : "Final total"}</td><td style="border-top:2px solid #2f8061;padding:9px 8px;text-align:right;font-weight:bold">${shippingPending ? "Pending delivery quote" : `₹${amount.toFixed(2)}`}</td></tr></table><p style="color:#666;font-size:13px;margin-top:24px">UVID Art &amp; Craft Supplies</p></div>`;
   return sendTransactionalEmail(env, { to: email, subject, text, html });
 }
 
@@ -618,15 +632,22 @@ function imageBytes(value) {
 function decodePaymentProof(body) {
   const encoded = String(body?.base64 || "");
   if (!encoded || encoded.length > 1_866_668 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 === 1) {
-    throw Object.assign(new Error("This payment proof file is empty or invalid."), { status: 400 });
+    throw Object.assign(new Error("Choose a JPG, JPEG, PNG or WebP payment screenshot."), { status: 400 });
   }
   let binary;
   try { binary = atob(encoded); } catch { throw Object.assign(new Error("This payment proof file is invalid."), { status: 400 }); }
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   if (!bytes.length) throw Object.assign(new Error("This payment proof file is empty."), { status: 400 });
-  if (bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Payment proof files must be 1.4 MB or smaller."), { status: 413 });
-  const mime = clean(body?.mimeType, 120).toLowerCase();
-  const safeMime = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : "application/octet-stream";
+  if (bytes.length > D1_IMAGE_LIMIT) throw Object.assign(new Error("Payment screenshots must be 1.4 MB or smaller."), { status: 413 });
+  const reportedMime = clean(body?.mimeType, 120).toLowerCase().replace("image/jpg", "image/jpeg");
+  const detectedMime = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? "image/jpeg"
+    : bytes.length > 8 && [137,80,78,71,13,10,26,10].every((n, i) => bytes[i] === n) ? "image/png"
+    : bytes.length > 12 && String.fromCharCode(...bytes.slice(0,4)) === "RIFF" && String.fromCharCode(...bytes.slice(8,12)) === "WEBP" ? "image/webp"
+    : null;
+  if (!detectedMime || (reportedMime && reportedMime !== detectedMime)) {
+    throw Object.assign(new Error("The file content must be a valid JPG, JPEG, PNG or WebP image."), { status: 400 });
+  }
+  const safeMime = detectedMime;
   const fileName = clean(body?.fileName, 220).replace(/[\\/]/g, "_").replace(/\.{2,}/g, ".") || "payment-proof";
   return { bytes, mime: safeMime, fileName };
 }
@@ -711,16 +732,16 @@ async function stats(env) {
   const outOfStock = databaseOutOfStock + codeOutOfStock;
   const recentProducts = (await env.DB.prepare("SELECT id,product_name,category,price,stock_quantity,status,image_url,updated_at,emoji,meta_json FROM products WHERE status!='ARCHIVED' ORDER BY updated_at DESC,created_at DESC LIMIT 6").all()).results || [];
   for (const product of recentProducts) product.imageUrl = resolvedProductImage(product, env);
-  const recentOrders = (await env.DB.prepare("SELECT o.id,o.total_amount,o.status,o.created_at,u.name AS customerName,u.mobile_number FROM orders o LEFT JOIN users u ON u.id=o.customer_id ORDER BY o.created_at DESC LIMIT 6").all()).results || [];
+  const recentOrders = (await env.DB.prepare("SELECT o.id,o.total_amount,o.status,o.created_at,u.name AS customerName,u.mobile_number FROM orders o LEFT JOIN users u ON u.id=o.customer_id WHERE NOT (o.payment_method='UPI' AND o.payment_proof_sent_at IS NULL AND COALESCE(o.payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND o.status!='CANCELLED') ORDER BY o.created_at DESC LIMIT 6").all()).results || [];
   return { products, inStock: products - outOfStock, outOfStock,
     lowStock: await q("SELECT COUNT(*) n FROM products WHERE stock_quantity>0 AND stock_quantity<=5 AND status!='ARCHIVED'") + CODE_PRODUCTS.filter((product) => { const n = codeState.get(product.id)?.stockQuantity || 0; return n > 0 && n <= 5; }).length,
     inactive: await q("SELECT COUNT(*) n FROM products WHERE status='ARCHIVED'"),
-    orders: await q("SELECT COUNT(*) n FROM orders"),
-    openOrders: await q("SELECT COUNT(*) n FROM orders WHERE status IN ('AWAITING_PAYMENT','PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY')"),
-    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')").first())?.n || 0),
+    orders: await q("SELECT COUNT(*) n FROM orders WHERE NOT (payment_method='UPI' AND payment_proof_sent_at IS NULL AND COALESCE(payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND status!='CANCELLED')"),
+    openOrders: await q("SELECT COUNT(*) n FROM orders WHERE (status IN ('AWAITING_PAYMENT_VERIFICATION','CONFIRMED','PLACED','PACKED','SHIPPED','OUT_FOR_DELIVERY') OR (payment_method='UPI' AND payment_proof_sent_at IS NOT NULL AND status='AWAITING_PAYMENT')) AND NOT (payment_method='UPI' AND payment_proof_sent_at IS NULL AND COALESCE(payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND status!='CANCELLED')"),
+    revenue: Number((await env.DB.prepare("SELECT COALESCE(SUM(total_amount),0) n FROM orders WHERE status!='CANCELLED' AND (payment_method!='UPI' OR payment_status IN ('PAID','VERIFIED'))").first())?.n || 0),
     customers: await q("SELECT COUNT(*) n FROM users WHERE role='CUSTOMER'"), recentProducts, recentOrders };
 }
-const REVENUE_ORDER_FILTER = "status!='CANCELLED' AND (payment_method!='UPI' OR payment_status='PAID')";
+const REVENUE_ORDER_FILTER = "status!='CANCELLED' AND (payment_method!='UPI' OR payment_status IN ('PAID','VERIFIED'))";
 function indiaDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
@@ -769,15 +790,20 @@ async function revenueReport(env, requestedMonth) {
     daily: daily.map((row) => ({ day: row.day, amount: Number(row.amount || 0) })),
   };
 }
-async function orderList(env, customerId = null, status = null, includeCustomerDetails = false) {
+async function orderList(env, customerId = null, status = null, includeCustomerDetails = false, visibility = "all", orderId = null) {
   const customerColumns = includeCustomerDetails ? ",u.name AS customer_name,u.email AS customer_email,u.mobile_number AS customer_mobile_number" : "";
   const customerJoin = includeCustomerDetails ? " LEFT JOIN users u ON u.id=o.customer_id" : "";
   const proofColumns = includeCustomerDetails
     ? ",CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.mime END AS payment_proof_mime,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.file_name END AS payment_proof_file_name,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.byte_size END AS payment_proof_byte_size,CASE WHEN o.payment_proof_sent_at IS NOT NULL THEN pp.created_at END AS payment_proof_created_at"
     : ",pp.mime AS payment_proof_mime,pp.file_name AS payment_proof_file_name,pp.byte_size AS payment_proof_byte_size,pp.created_at AS payment_proof_created_at";
   let sql = `SELECT o.*,COALESCE(q.finalized,1) AS shipping_finalized${customerColumns}${proofColumns} FROM orders o LEFT JOIN order_delivery_quotes q ON q.order_id=o.id${customerJoin} LEFT JOIN order_payment_proofs pp ON pp.order_id=o.id`, args = [];
-  if (customerId != null) { sql += " WHERE o.customer_id=?"; args.push(customerId); }
-  else if (status) { sql += " WHERE o.status=?"; args.push(status); }
+  const filters = [];
+  if (customerId != null) { filters.push("o.customer_id=?"); args.push(customerId); }
+  if (status) { filters.push("o.status=?"); args.push(status); }
+  if (orderId != null) { filters.push("o.id=?"); args.push(orderId); }
+  if (visibility === "placed") filters.push("NOT (o.payment_method='UPI' AND o.payment_proof_sent_at IS NULL AND COALESCE(o.payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND o.status!='CANCELLED')");
+  if (visibility === "checkout-requests") filters.push("o.payment_method='UPI' AND o.status='AWAITING_PAYMENT' AND o.payment_proof_sent_at IS NULL AND COALESCE(o.payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED')");
+  if (filters.length) sql += " WHERE " + filters.join(" AND ");
   sql += " ORDER BY o.created_at DESC LIMIT 200";
   const orders = (await env.DB.prepare(sql).bind(...args).all()).results || [];
   if (!orders.length) return [];
@@ -852,10 +878,32 @@ async function sendPaidOrderPush(env, order, customerName) {
   return { sent: count > 0, count, reason: count ? null : "delivery_failed" };
 }
 async function placeOrder(env, user, body) {
+  const suppliedCheckoutToken = clean(body.checkoutToken, 80);
+  const checkoutToken = /^[A-Za-z0-9_-]{20,80}$/.test(suppliedCheckoutToken)
+    ? suppliedCheckoutToken
+    : await hashBytes(encoder.encode(`uvid-checkout|${user.id}|${suppliedCheckoutToken}|${JSON.stringify({ items: body.items || [], address: body.address || {}, paymentMethod: body.paymentMethod || "UPI" })}`));
+  const existing = await env.DB.prepare("SELECT id FROM orders WHERE customer_id=? AND checkout_token=?").bind(user.id, checkoutToken).first();
+  if (existing) {
+    const saved = (await orderList(env, user.id, null, true, "all", existing.id))[0];
+    if (!saved) throw Object.assign(new Error("The saved checkout order could not be loaded. Refresh and try again."), { status: 409 });
+    return { order: saved, idempotent: true, checkoutToken, items: saved.items.map((item) => ({
+      productId: item.product_id, name: item.product_name, description: item.product_description || "", variantLabel: item.variant_label,
+      qty: Number(item.quantity) || 0, priceAtPurchase: Number(item.price_at_purchase) || 0, imageUrl: item.image_url || "",
+      productCode: item.product_code || item.product_id, catalogueSku: item.catalogue_sku || null, hsnCode: item.hsn_code || null,
+      gstRate: item.gst_rate ?? null, unit: item.product_unit || null, customDesign: parseJson(item.custom_design_json, null),
+    })) };
+  }
   const items = Array.isArray(body.items) ? body.items : [];
   if (!items.length || items.length > 40) throw Object.assign(new Error("Add 1–40 items to the order."), { status: 400 });
-  const address = body.address && typeof body.address === "object" ? body.address : {};
-  if (!clean(address.line, 300) || !clean(address.city, 100) || !/^\d{6}$/.test(String(address.pin || ""))) throw Object.assign(new Error("Enter a delivery address, city and 6-digit PIN."), { status: 400 });
+  const suppliedAddress = body.address && typeof body.address === "object" ? body.address : {};
+  const address = {
+    name: clean(suppliedAddress.name, 120), phone: String(suppliedAddress.phone || "").replace(/\D/g, ""),
+    email: clean(user.email, 200).toLowerCase(), line: clean(suppliedAddress.line, 300), city: clean(suppliedAddress.city, 100),
+    state: clean(suppliedAddress.state, 100), pin: String(suppliedAddress.pin || "").replace(/\D/g, ""),
+  };
+  if (address.name.length < 2 || !/^\d{10}$/.test(address.phone) || address.line.length < 5 || !address.city || !/^\d{6}$/.test(address.pin)) {
+    throw Object.assign(new Error("Enter your name, 10-digit mobile, complete address, city and 6-digit PIN."), { status: 400 });
+  }
   const wants = new Map(), customDesigns = new Map();
   let seenCustomA4 = false;
   for (const item of items) {
@@ -888,19 +936,33 @@ async function placeOrder(env, user, body) {
   if (method !== "UPI") throw Object.assign(new Error("Only UPI QR payment is available."), { status: 400 });
   const batches = [
     env.DB.prepare("INSERT INTO order_id_counter (id,last_value) VALUES (1,1) ON CONFLICT(id) DO UPDATE SET last_value=last_value+1 RETURNING last_value"),
-    env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping) SELECT 'UVID'||printf('%03d',last_value),?,?, 'AWAITING_PAYMENT',?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
-      .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping),
+    env.DB.prepare("INSERT INTO orders (id,customer_id,total_amount,status,payment_method,payment_status,address_json,eta,coupon,discount,shipping,checkout_token) SELECT 'UVID'||printf('%03d',last_value),?,?, 'AWAITING_PAYMENT',?,?,?,?,?,?,?,? FROM order_id_counter WHERE id=1")
+      .bind(user.id,Math.round((subtotal+shipping)*100)/100,method,"PENDING",JSON.stringify(address),new Date(Date.now()+3*86400000).toISOString().slice(0,10),null,discount,shipping,checkoutToken),
     env.DB.prepare("INSERT INTO order_delivery_quotes (order_id,finalized) SELECT 'UVID'||printf('%03d',last_value),0 FROM order_id_counter WHERE id=1")
   ];
   for (const line of lines) {
     batches.push(env.DB.prepare("INSERT INTO order_items (order_id,product_id,product_name,variant_label,quantity,price_at_purchase,image_url,custom_design_json,custom_design_image) SELECT 'UVID'||printf('%03d',last_value),?,?,?,?,?,?,?,? FROM order_id_counter WHERE id=1").bind(line.p.id,line.p.product_name,line.p.variant_label,line.qty,line.p.price,line.p.image_url,line.customDesign?.json||null,line.customDesign?.image||null));
     if (!line.p.codeManaged) batches.push(env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?,status=CASE WHEN stock_quantity-?<=0 THEN 'OUT_OF_STOCK' ELSE status END,updated_at=? WHERE id=?").bind(line.qty,line.qty,now(),line.p.id));
   }
-  const batchResults = await env.DB.batch(batches);
+  let batchResults;
+  try { batchResults = await env.DB.batch(batches); }
+  catch (cause) {
+    const duplicate = await env.DB.prepare("SELECT id FROM orders WHERE customer_id=? AND checkout_token=?").bind(user.id, checkoutToken).first();
+    if (duplicate) {
+      const saved = (await orderList(env, user.id, null, true, "all", duplicate.id))[0];
+      if (saved) return { order: saved, idempotent: true, checkoutToken, items: saved.items.map((item) => ({
+        productId: item.product_id, name: item.product_name, description: item.product_description || "", variantLabel: item.variant_label,
+        qty: Number(item.quantity) || 0, priceAtPurchase: Number(item.price_at_purchase) || 0, imageUrl: item.image_url || "",
+        productCode: item.product_code || item.product_id, catalogueSku: item.catalogue_sku || null, hsnCode: item.hsn_code || null,
+        gstRate: item.gst_rate ?? null, unit: item.product_unit || null, customDesign: parseJson(item.custom_design_json, null),
+      })) };
+    }
+    throw cause;
+  }
   const orderNumber = Number(batchResults[0]?.results?.[0]?.last_value);
   if (!Number.isSafeInteger(orderNumber) || orderNumber < 1) throw new Error("Could not allocate an order number.");
   const id = "UVID" + String(orderNumber).padStart(3, "0");
-  return { order: (await orderList(env,user.id)).find((o) => o.id === id), items: lines.map((l) => {
+  return { order: (await orderList(env,user.id)).find((o) => o.id === id), checkoutToken, items: lines.map((l) => {
     const meta = parseJson(l.p.meta_json, {}) || {};
     const specs = meta.specs || {};
     return {
@@ -940,7 +1002,8 @@ async function handleApi(request, env, user, url) {
   const customerOnly = need(user, "CUSTOMER");
 
   if (path === "/api/auth/me" && method === "GET") return user ? json({ user }) : error("Not logged in.", 401);
-  if (path === "/api/auth/logout" && method === "POST") return json({ ok:true },200,{"Set-Cookie":cookieHeader("",0)});
+  if (path === "/api/auth/logout" && method === "POST") return logoutResponse(CUSTOMER_COOKIE,LEGACY_COOKIE);
+  if (path === "/api/auth/admin/logout" && method === "POST") return logoutResponse(ADMIN_COOKIE,LEGACY_COOKIE);
   if (path === "/api/auth/email/login" && method === "POST") {
     const b = await readBody(); const email = clean(b.email, 200).toLowerCase();
     if (!GMAIL_RE.test(email)) return error("Enter a valid Gmail address, such as name@gmail.com.");
@@ -953,7 +1016,7 @@ async function handleApi(request, env, user, url) {
       row = { id: out.meta?.last_row_id, email, name, role:"CUSTOMER" };
     }
     const token = await issueSession(env,{id:row.id,email:row.email,name:row.name,role:row.role});
-    return json({ok:true,user:{id:row.id,email:row.email,name:row.name,role:row.role}},200,{"Set-Cookie":cookieHeader(token)});
+    return json({ok:true,user:{id:row.id,email:row.email,name:row.name,role:row.role}},200,{"Set-Cookie":cookieHeader(token,604800,CUSTOMER_COOKIE)});
   }
   if (path === "/api/auth/admin/login" && method === "POST") {
     const b = await readBody();
@@ -988,7 +1051,7 @@ async function handleApi(request, env, user, url) {
     const admin = {id:"admin",email:clean(env.ADMIN_EMAIL,254).toLowerCase(),name:"UVID Admin",role:"ADMIN"};
     const token = await issueSession(env,{...admin,authMethod:"password"});
     await audit(env,request,admin,"admin.login",null,{method:"password"});
-    return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token)});
+    return json({ok:true,user:admin},200,{"Set-Cookie":cookieHeader(token,604800,ADMIN_COOKIE)});
   }
   if (path === "/api/auth/admin/mfa/status" && method === "GET") return adminOnly || json({enabled:false});
   if (path.startsWith("/api/auth/admin/mfa/") && method === "POST") return adminOnly || error("Two-factor setup is not available on this free Worker backend.",501);
@@ -1003,7 +1066,7 @@ async function handleApi(request, env, user, url) {
   if (path === "/api/products/categories" && method === "GET") return json({categories:await categories(env)});
   if (path === "/api/addresses" && method === "GET") {
     if (customerOnly) return customerOnly;
-    const addresses = (await env.DB.prepare("SELECT id,name,phone,line,city,pin,created_at AS createdAt FROM customer_addresses WHERE customer_id=? ORDER BY created_at DESC,id DESC").bind(user.id).all()).results || [];
+    const addresses = (await env.DB.prepare("SELECT id,name,phone,line,city,state,pin,created_at AS createdAt FROM customer_addresses WHERE customer_id=? ORDER BY created_at DESC,id DESC").bind(user.id).all()).results || [];
     return json({addresses});
   }
   if (path === "/api/addresses" && method === "POST") {
@@ -1011,15 +1074,15 @@ async function handleApi(request, env, user, url) {
     const b = await readBody();
     const address = {
       id: crypto.randomUUID(), name: clean(b.name,120), phone: String(b.phone || "").replace(/\D/g,""),
-      line: clean(b.line,300), city: clean(b.city,100), pin: String(b.pin || "").replace(/\D/g,"")
+      line: clean(b.line,300), city: clean(b.city,100), state: clean(b.state,100), pin: String(b.pin || "").replace(/\D/g,"")
     };
     if (address.name.length < 2) return error("Enter your full name.");
     if (!/^\d{10}$/.test(address.phone)) return error("Phone must be 10 digits.");
     if (address.line.length < 5) return error("Enter a complete street address.");
     if (!address.city) return error("Enter your city.");
     if (!/^\d{6}$/.test(address.pin)) return error("PIN must be 6 digits.");
-    await env.DB.prepare("INSERT INTO customer_addresses (id,customer_id,name,phone,line,city,pin) VALUES (?,?,?,?,?,?,?)")
-      .bind(address.id,user.id,address.name,address.phone,address.line,address.city,address.pin).run();
+    await env.DB.prepare("INSERT INTO customer_addresses (id,customer_id,name,phone,line,city,state,pin) VALUES (?,?,?,?,?,?,?,?)")
+      .bind(address.id,user.id,address.name,address.phone,address.line,address.city,address.state,address.pin).run();
     return json({ok:true,address},201);
   }
   let addressMatch = path.match(/^\/api\/addresses\/([^/]+)$/);
@@ -1123,7 +1186,13 @@ async function handleApi(request, env, user, url) {
   }
   if (path === "/api/admin/stats" && method === "GET") return adminOnly || json({stats:await stats(env)});
   if (path === "/api/admin/revenue" && method === "GET") return adminOnly || json({ report: await revenueReport(env, url.searchParams.get("month")) });
-  if (path === "/api/admin/orders" && method === "GET") return adminOnly || json({orders:await orderList(env,null,url.searchParams.get("status"),true)});
+  if (path === "/api/admin/orders" && method === "GET") {
+    if (adminOnly) return adminOnly;
+    const requestedStatus = url.searchParams.get("status");
+    const orders = await orderList(env,null,requestedStatus === "PLACED" ? null : requestedStatus,true,"placed");
+    return json({orders:requestedStatus === "PLACED" ? orders.filter((order) => order.status === "PLACED" || order.status === "CONFIRMED") : orders});
+  }
+  if (path === "/api/admin/checkout-requests" && method === "GET") return adminOnly || json({orders:[]});
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment-proof$/);
   if (match && method === "GET") {
     if (adminOnly) return adminOnly;
@@ -1191,7 +1260,8 @@ async function handleApi(request, env, user, url) {
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!current) return error("Order not found.",404);
     if (current.status === "CANCELLED") return error("A cancelled order cannot be repriced.",409);
-    if (current.payment_status === "PAID") return error("This order is already paid, so its delivery charge cannot be changed.",409);
+    if (paymentVerified(current)) return error("This order is already paid, so its delivery charge cannot be changed.",409);
+    if (current.payment_proof_sent_at && current.payment_status !== "REJECTED") return error("This order's payment proof is already submitted. Its delivery charge cannot be changed now.",409);
     const amounts = await env.DB.prepare("SELECT COALESCE(SUM(price_at_purchase*quantity),0) AS subtotal FROM order_items WHERE order_id=?").bind(id).first();
     const subtotal = Number(amounts?.subtotal || 0);
     const shipping = subtotal > 5000 ? 0 : requestedShipping;
@@ -1204,6 +1274,24 @@ async function handleApi(request, env, user, url) {
     await audit(env,request,user,"order.delivery_quote_saved",id,{shipping,total});
     return json({ok:true,order:(await orderList(env,null,null,true)).find((item)=>item.id===id)});
   }
+  match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment\/reject$/);
+  if (match && method === "PUT") {
+    if (adminOnly) return adminOnly;
+    const id = decodeURIComponent(match[1]);
+    const b = await readBody();
+    const reason = clean(b.reason, 1000);
+    if (reason.length < 5) return error("Enter a clear reason of at least 5 characters for the customer.");
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+    if (!order) return error("Order not found.",404);
+    if (order.status === "CANCELLED" || paymentVerified(order)) return error("This payment can no longer be rejected.",409);
+    if (!["PENDING_VERIFICATION","PENDING"].includes(order.payment_status) || !order.payment_proof_sent_at) return error("The customer has not submitted payment proof for review.",409);
+    const timestamp = now();
+    const result = await env.DB.prepare("UPDATE orders SET status='AWAITING_PAYMENT_VERIFICATION',payment_status='REJECTED',payment_rejection_reason=?,payment_verified_at=NULL,updated_at=? WHERE id=? AND payment_status IN ('PENDING_VERIFICATION','PENDING') AND payment_proof_sent_at IS NOT NULL")
+      .bind(reason,timestamp,id).run();
+    if (!Number(result.meta?.changes || 0)) return error("This payment changed while you were reviewing it. Refresh the order and try again.",409);
+    await audit(env,request,user,"order.payment_rejected",id,{reason});
+    return json({ok:true,order:(await orderList(env,null,null,true)).find((item)=>item.id===id)});
+  }
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/payment$/);
   if (match && method === "PUT") {
     if (adminOnly) return adminOnly;
@@ -1213,19 +1301,22 @@ async function handleApi(request, env, user, url) {
     if (order.payment_method !== "UPI") return error("This order is not a UPI payment.",409);
     if (order.status === "CANCELLED") return error("A cancelled order cannot be marked paid.",409);
     const paymentProof = await env.DB.prepare("SELECT order_id FROM order_payment_proofs WHERE order_id=?").bind(id).first();
-    if (order.payment_status !== "PAID" && (!paymentProof || !order.payment_proof_sent_at)) return error("The customer has not submitted payment proof yet.",409);
+    if (order.payment_status === "REJECTED") return error("The customer needs to upload and submit a replacement payment screenshot first.",409);
+    if (!paymentVerified(order) && (!paymentProof || !order.payment_proof_sent_at || !["PENDING_VERIFICATION","PENDING"].includes(order.payment_status))) return error("The customer has not submitted payment proof for verification yet.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     if (quote && Number(quote.finalized) !== 1) return error("Set the delivery charge before confirming payment.",409);
-    const alreadyPaid = order.payment_status === "PAID";
-    await env.DB.prepare("UPDATE orders SET payment_status='PAID',status=CASE WHEN status='AWAITING_PAYMENT' THEN 'PLACED' ELSE status END,updated_at=? WHERE id=?").bind(now(),id).run();
-    await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"PAID"});
+    const alreadyPaid = paymentVerified(order);
+    const verifiedAt = now();
+    await env.DB.prepare("UPDATE orders SET payment_status='VERIFIED',status=CASE WHEN status IN ('AWAITING_PAYMENT','AWAITING_PAYMENT_VERIFICATION','PLACED','CONFIRMED') THEN 'PLACED' ELSE status END,payment_verified_at=COALESCE(payment_verified_at,?),payment_rejection_reason=NULL,updated_at=? WHERE id=?")
+      .bind(verifiedAt,verifiedAt,id).run();
+    await audit(env,request,user,"order.payment_confirmed",id,{method:order.payment_method,paymentStatus:"VERIFIED",verifiedAt});
     const notification = alreadyPaid
       ? { sent: false, count: 0, reason: "already_paid" }
       : await sendPaidOrderPush(env, order, parseJson(order.address_json, {}).name || "Customer");
     const emailItems = alreadyPaid ? [] : await orderEmailItems(env,id);
     const emailNotification = alreadyPaid
       ? { sent: false, reason: "already_paid" }
-      : await sendOrderEmail(env,{...order,status:"PLACED",payment_status:"PAID"},"paid",emailItems);
+      : await sendOrderEmail(env,{...order,status:"CONFIRMED",payment_status:"VERIFIED",payment_verified_at:verifiedAt},"paid",emailItems);
     if(!emailNotification.sent && !alreadyPaid) console.warn("[ORDER EMAIL] Payment confirmation was not delivered.",emailNotification.reason);
     return json({ok:true,notification,emailNotification,order:(await orderList(env,null,null,true)).find((item)=>item.id===id)});
   }
@@ -1235,7 +1326,7 @@ async function handleApi(request, env, user, url) {
     const id = decodeURIComponent(match[1]);
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!order) return error("Order not found.",404);
-    if (order.payment_status !== "PAID") return error("Confirm the payment before sending a paid-order notification.",409);
+    if (!paymentVerified(order)) return error("Confirm the payment before sending a paid-order notification.",409);
     const notification = await sendPaidOrderPush(env, order, parseJson(order.address_json, {}).name || "Customer");
     if (!notification.sent) {
       const message = notification.reason === "not_configured"
@@ -1255,10 +1346,10 @@ async function handleApi(request, env, user, url) {
     const order = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
     if (!order) return error("Order not found.",404);
     if (order.status === "CANCELLED") return error("A cancelled order cannot receive an order email.",409);
-    if (order.payment_method === "UPI" && order.payment_status !== "PAID" && !order.payment_proof_sent_at) return error("The customer must confirm the payment proof before an order email can be sent.",409);
+    if (order.payment_method === "UPI" && !paymentVerified(order) && !order.payment_proof_sent_at) return error("The customer must submit a payment screenshot before an order email can be sent.",409);
     const quote = await env.DB.prepare("SELECT finalized FROM order_delivery_quotes WHERE order_id=?").bind(id).first();
     const items = await orderEmailItems(env,id);
-    const type = order.payment_status === "PAID" ? "paid" : "placed";
+    const type = paymentVerified(order) ? "paid" : order.payment_status === "PENDING_VERIFICATION" ? "submitted" : "placed";
     const emailNotification = await sendOrderEmail(env,{...order,shipping_finalized:Number(quote?.finalized ?? 1)},type,items);
     if (!emailNotification.sent) {
       const message = emailNotification.reason === "not_configured"
@@ -1272,11 +1363,11 @@ async function handleApi(request, env, user, url) {
   match = path.match(/^\/api\/admin\/orders\/([^/]+)\/status$/);
   if(match && method === "PUT"){
     if(adminOnly) return adminOnly; const b=await readBody(),status=clean(b.status,30).toUpperCase();
-    if(!["AWAITING_PAYMENT","PLACED","PACKED","SHIPPED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"].includes(status)) return error("Invalid order status.");
+    if(!["AWAITING_PAYMENT","AWAITING_PAYMENT_VERIFICATION","CONFIRMED","PLACED","PACKED","SHIPPED","OUT_FOR_DELIVERY","DELIVERED","CANCELLED"].includes(status)) return error("Invalid order status.");
     const orderId = decodeURIComponent(match[1]);
     const current = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(orderId).first();
     if (!current) return error("Order not found.",404);
-    if (current.payment_method === "UPI" && current.payment_status !== "PAID" && status !== "CANCELLED") return error("Confirm the UPI payment after checking the transaction before progressing this order.",409);
+    if (current.payment_method === "UPI" && !paymentVerified(current) && status !== "CANCELLED") return error("Verify the UPI payment after checking the transaction before progressing this order.",409);
     const timestamp=now();
     const statusUpdate=env.DB.prepare("UPDATE orders SET status=?,updated_at=? WHERE id=?").bind(status,timestamp,orderId);
     if (status === "CANCELLED" && current.status !== "CANCELLED") {
@@ -1301,15 +1392,15 @@ async function handleApi(request, env, user, url) {
       COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.line'),''),a.line) AS address_line,
       COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.city'),''),a.city) AS address_city,
       COALESCE(NULLIF(json_extract(CASE WHEN json_valid(o.address_json) THEN o.address_json ELSE '{}' END,'$.pin'),''),a.pin) AS address_pin,
-      (SELECT COUNT(*) FROM orders WHERE customer_id=u.id) AS orderCount,
-      (SELECT COALESCE(SUM(total_amount),0) FROM orders WHERE customer_id=u.id) AS spend,
+      (SELECT COUNT(*) FROM orders WHERE customer_id=u.id AND NOT (payment_method='UPI' AND payment_proof_sent_at IS NULL AND COALESCE(payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND status!='CANCELLED')) AS orderCount,
+      (SELECT COALESCE(SUM(total_amount),0) FROM orders WHERE customer_id=u.id AND NOT (payment_method='UPI' AND payment_proof_sent_at IS NULL AND COALESCE(payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND status!='CANCELLED')) AS spend,
       u.created_at
     FROM users u
     LEFT JOIN customer_addresses a ON a.id=(SELECT id FROM customer_addresses WHERE customer_id=u.id ORDER BY created_at DESC,id DESC LIMIT 1)
-    LEFT JOIN orders o ON o.id=(SELECT id FROM orders WHERE customer_id=u.id ORDER BY created_at DESC,id DESC LIMIT 1)
+    LEFT JOIN orders o ON o.id=(SELECT id FROM orders WHERE customer_id=u.id AND NOT (payment_method='UPI' AND payment_proof_sent_at IS NULL AND COALESCE(payment_status,'PENDING') NOT IN ('PAID','VERIFIED','REJECTED') AND status!='CANCELLED') ORDER BY created_at DESC,id DESC LIMIT 1)
     WHERE u.role='CUSTOMER' ORDER BY u.created_at DESC
   `).all()).results||[]});
-  if(path==="/api/admin/audit" && method==="GET") return adminOnly || json({entries:(await env.DB.prepare("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?").bind(Math.min(100,Math.max(1,Number(url.searchParams.get("limit"))||25))).all()).results||[]});
+  if(path==="/api/admin/audit" && method==="GET") return adminOnly || json({entries:(await env.DB.prepare("SELECT * FROM audit_logs WHERE action NOT IN ('order.payment_proof_uploaded','order.payment_proof_removed') ORDER BY created_at DESC LIMIT ?").bind(Math.min(100,Math.max(1,Number(url.searchParams.get("limit"))||25))).all()).results||[]});
   if(path==="/api/admin/seminar" && method==="GET") return adminOnly || json({seminar:await env.DB.prepare("SELECT * FROM seminar_details WHERE id=1").first(),registrations:(await env.DB.prepare("SELECT * FROM seminar_registrations ORDER BY created_at DESC LIMIT 500").all()).results||[]});
   if(path==="/api/admin/seminar/details" && method==="POST"){
     if(adminOnly) return adminOnly; const b=await readBody();
@@ -1325,22 +1416,33 @@ async function handleApi(request, env, user, url) {
   }
   if(path==="/api/orders" && method==="GET") return customerOnly || json({orders:await orderList(env,user.id)});
   match=path.match(/^\/api\/orders\/([^/]+)\/payment-proof$/);
-  if(match && method==="POST"){
+  if(match && ["GET","POST","DELETE"].includes(method)){
     if(customerOnly) return customerOnly;
     const id=decodeURIComponent(match[1]);
-    const b=await bodyJson(request,1_950_000);
-    const {bytes,mime,fileName}=decodePaymentProof(b);
     const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
     if(!order) return error("Order not found.",404);
     if(order.payment_method!=="UPI") return error("This order is not a UPI payment.",409);
+    if(method==="GET"){
+      const proof=await env.DB.prepare("SELECT mime,file_name,byte_size,data,created_at FROM order_payment_proofs WHERE order_id=?").bind(id).first();
+      if(!proof) return error("No payment screenshot is available for this order.",404);
+      return paymentProofResponse(proof);
+    }
     if(order.status==="CANCELLED") return error("A cancelled order cannot receive payment proof.",409);
-    if(order.payment_status==="PAID") return error("This order is already paid.",409);
-    if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer receive payment proof.",409);
-    if(order.payment_proof_sent_at) return error("This payment proof has already been submitted. Contact the store if you need to replace it.",409);
+    if(paymentVerified(order)) return error("This order's payment is already verified.",409);
+    if(!["AWAITING_PAYMENT","AWAITING_PAYMENT_VERIFICATION","PLACED"].includes(order.status)) return error("This order can no longer receive payment proof.",409);
+    if(method==="DELETE"){
+      if(order.payment_proof_sent_at && order.payment_status!=="REJECTED") return error("A submitted payment screenshot cannot be removed while it is under review.",409);
+      const removed=await env.DB.prepare("DELETE FROM order_payment_proofs WHERE order_id=?").bind(id).run();
+      if(!Number(removed.meta?.changes||0)) return error("No uploaded payment screenshot was found.",404);
+      return json({ok:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+    }
+    const b=await bodyJson(request,1_950_000);
+    const {bytes,mime,fileName}=decodePaymentProof(b);
+    if(order.payment_proof_sent_at && order.payment_status!=="REJECTED") return error("This payment screenshot is already submitted for verification.",409);
     const timestamp=now();
     await env.DB.prepare("INSERT INTO order_payment_proofs (order_id,mime,file_name,byte_size,data,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(order_id) DO UPDATE SET mime=excluded.mime,file_name=excluded.file_name,byte_size=excluded.byte_size,data=excluded.data,created_at=excluded.created_at")
       .bind(id,mime,fileName,bytes.length,bytes,timestamp).run();
-    await audit(env,request,user,"order.payment_proof_uploaded",id,{fileName,mime,byteSize:bytes.length});
+    if(order.payment_status==="REJECTED") await env.DB.prepare("UPDATE orders SET payment_proof_sent_at=NULL,updated_at=? WHERE id=? AND customer_id=?").bind(timestamp,id,user.id).run();
     const savedOrder=(await orderList(env,user.id)).find((item)=>item.id===id);
     return json({ok:true,order:savedOrder});
   }
@@ -1352,19 +1454,28 @@ async function handleApi(request, env, user, url) {
     if(!order) return error("Order not found.",404);
     if(order.payment_method!=="UPI") return error("This order is not a UPI payment.",409);
     if(order.status==="CANCELLED") return error("A cancelled order cannot be confirmed.",409);
-    if(order.payment_status==="PAID") return error("This order has already been confirmed as paid.",409);
-    if(!["AWAITING_PAYMENT","PLACED"].includes(order.status)) return error("This order can no longer be submitted.",409);
+    if(paymentVerified(order)) return error("This order's payment is already verified.",409);
+    if(order.payment_status==="PENDING_VERIFICATION" && order.payment_proof_sent_at){
+      return json({ok:true,alreadySubmitted:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+    }
+    if(!["AWAITING_PAYMENT","AWAITING_PAYMENT_VERIFICATION","PLACED"].includes(order.status)) return error("This order can no longer be submitted.",409);
     const proof=await env.DB.prepare("SELECT order_id,file_name FROM order_payment_proofs WHERE order_id=?").bind(id).first();
     if(!proof) return error("Upload your payment proof file before confirming the order.",409);
+    const b=await readBody();
+    const paymentReferenceId=clean(b.paymentReferenceId || b.referenceId,100).replace(/[^A-Za-z0-9\-_/ .]/g,"") || null;
     const timestamp=now();
-    const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_proof_sent_at=COALESCE(payment_proof_sent_at,?),updated_at=? WHERE id=? AND customer_id=? AND status IN ('AWAITING_PAYMENT','PLACED') AND payment_status!='PAID' AND payment_proof_sent_at IS NULL")
-      .bind(timestamp,timestamp,id,user.id).run();
-    if(!Number(updated.meta?.changes||0)) return error("This order was already submitted or changed. Refresh the page to see its latest status.",409);
-    await audit(env,request,user,"order.payment_proof_confirmed",id,{fileName:proof.file_name||null});
+    const updated=await env.DB.prepare("UPDATE orders SET status='PLACED',payment_status='PENDING_VERIFICATION',payment_reference_id=?,payment_verified_at=NULL,payment_rejection_reason=NULL,payment_proof_sent_at=?,updated_at=? WHERE id=? AND customer_id=? AND status IN ('AWAITING_PAYMENT','AWAITING_PAYMENT_VERIFICATION','PLACED') AND payment_status NOT IN ('PAID','VERIFIED') AND payment_proof_sent_at IS NULL")
+      .bind(paymentReferenceId,timestamp,timestamp,id,user.id).run();
+    if(!Number(updated.meta?.changes||0)){
+      const current=await env.DB.prepare("SELECT payment_status,payment_proof_sent_at FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
+      if(current?.payment_status==="PENDING_VERIFICATION" && current.payment_proof_sent_at) return json({ok:true,alreadySubmitted:true,order:(await orderList(env,user.id)).find((item)=>item.id===id)});
+      return error("This order was already submitted or changed. Refresh the page to see its latest status.",409);
+    }
+    await audit(env,request,user,"order.payment_proof_confirmed",id,{fileName:proof.file_name||null,paymentReferenceId});
     const savedOrder=(await orderList(env,user.id)).find((item)=>item.id===id);
     let emailNotification={sent:false,reason:"notification_error"};
     try {
-      emailNotification=await sendOrderEmail(env,savedOrder,"placed",await orderEmailItems(env,id));
+      emailNotification=await sendOrderEmail(env,savedOrder,"submitted",await orderEmailItems(env,id));
       if(!emailNotification.sent) console.warn("[ORDER EMAIL] Customer-submitted order notification was not delivered.",emailNotification.reason);
     } catch (cause) {
       console.warn("[ORDER EMAIL] Customer-submitted order notification could not be prepared.",cause?.name||"notification error");
@@ -1375,7 +1486,7 @@ async function handleApi(request, env, user, url) {
   if(match && method==="POST" && path.endsWith("/cancel")){
     if(customerOnly) return customerOnly; const id=decodeURIComponent(match[1]);
     const order=await env.DB.prepare("SELECT * FROM orders WHERE id=? AND customer_id=?").bind(id,user.id).first();
-    if(!order) return error("Order not found.",404); if(!["AWAITING_PAYMENT","PLACED"].includes(order.status) || order.payment_status === "PAID") return error("This order can no longer be cancelled.",409);
+    if(!order) return error("Order not found.",404); if(!["AWAITING_PAYMENT","AWAITING_PAYMENT_VERIFICATION","PLACED"].includes(order.status) || paymentVerified(order)) return error("This order can no longer be cancelled.",409);
     const items=(await env.DB.prepare("SELECT * FROM order_items WHERE order_id=?").bind(id).all()).results||[];
     const batch=[env.DB.prepare("UPDATE orders SET status='CANCELLED',updated_at=? WHERE id=?").bind(now(),id),...items.map(i=>env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?,status='ACTIVE',updated_at=? WHERE id=?").bind(i.quantity,now(),i.product_id))];
     await env.DB.batch(batch); return json({ok:true,order:(await orderList(env,user.id)).find(o=>o.id===id)});
@@ -1507,7 +1618,20 @@ export default {
       if (path.startsWith("/api/images/") || path.startsWith("/uploads/")) {
         const response=await serveImage(request,env,path); if(response) return response;
       }
-      const token=cookieValue(request,COOKIE); let user=await verifySession(env,token);
+      const adminApiPath = path.startsWith("/api/admin/") || path.startsWith("/api/auth/admin/");
+      const authMePath = path === "/api/auth/me";
+      const candidateTokens = adminApiPath
+        ? [cookieValue(request,ADMIN_COOKIE),cookieValue(request,LEGACY_COOKIE)]
+        : authMePath
+          ? [cookieValue(request,ADMIN_COOKIE),cookieValue(request,LEGACY_COOKIE),cookieValue(request,CUSTOMER_COOKIE)]
+          : [cookieValue(request,CUSTOMER_COOKIE),cookieValue(request,LEGACY_COOKIE)];
+      let user = null;
+      for (const candidateToken of candidateTokens) {
+        user = await verifySession(env,candidateToken);
+        if (user) break;
+      }
+      if (adminApiPath && user?.role !== "ADMIN") user = null;
+      if (!adminApiPath && !authMePath && user?.role !== "CUSTOMER") user = null;
       if (user?.role === "ADMIN" && clean(user.email, 200).toLowerCase() !== clean(env.ADMIN_EMAIL, 200).toLowerCase()) user=null;
       if (path.startsWith("/api/")) {
         if (!env.SESSION_SECRET) return error("Set the SESSION_SECRET Worker secret before using the store API.",503);

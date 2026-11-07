@@ -15,6 +15,7 @@
   var addressLoadedKey = "";
   var addressPendingKey = "";
   var dailyShowcaseTimer = null;
+  var successPaymentTimer = null;
 
   function addressRequest(method, path, body) {
     var options = { method: method, credentials: "same-origin", headers: body ? { "Content-Type": "application/json" } : undefined };
@@ -32,7 +33,7 @@
   }
 
   function addressFingerprint(address) {
-    return [address.name, address.phone, address.line, address.city, address.pin]
+    return [address.name, address.phone, address.line, address.city, address.state, address.pin]
       .map(function (value) { return String(value || "").trim().toLowerCase(); }).join("\u001f");
   }
 
@@ -146,7 +147,7 @@
   }
 
   function statusPill(status) {
-    var cls = { "Awaiting payment": "amber", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
+    var cls = { "Awaiting payment": "amber", "Awaiting payment verification": "amber", "Order received": "green", "Placed": "blue", "Packed": "amber", "Shipped": "violet", "Out for delivery": "teal", "Delivered": "green", "Cancelled": "red" }[status] || "blue";
     return '<span class="pill pill--' + cls + '">' + esc(status) + '</span>';
   }
 
@@ -850,7 +851,7 @@
     if (line.length < 5) return { err: "Address looks too short." };
     if (!city) return { err: "Please enter your city." };
     if (pin.length !== 6) return { err: "PIN must be 6 digits." };
-    return { addr: { id: A.uid("adr"), name: name, phone: phone, line: line, city: city, pin: pin } };
+    return { addr: { id: A.uid("adr"), name: name, phone: phone, line: line, city: city, state: "", pin: pin } };
   }
 
   function checkoutPage() {
@@ -865,6 +866,7 @@
     var s = A.session();
     var addresses = A.state.addresses;
     var selected = s.addressId || (addresses[0] ? addresses[0].id : null);
+    var selectedAddress = addresses.filter(function (address) { return address.id === selected; })[0] || null;
     if (selected && !s.address) {
       var a0 = addresses.filter(function (x) { return x.id === selected; })[0];
       if (a0) A.setSession({ address: a0 });
@@ -881,7 +883,7 @@
         return '<label class="addr card-inset' + (on ? " addr--on" : "") + '">' +
           '<input type="radio" name="addrSel" value="' + a.id + '"' + (on ? " checked" : "") + ' />' +
           '<span class="addr__body"><b>' + esc(a.name) + '</b> · ' + esc(a.phone) +
-          '<span>' + esc(a.line) + ', ' + esc(a.city) + ' — ' + esc(a.pin) + '</span></span>' +
+          '<span>' + esc(a.line) + ', ' + esc(a.city) + (a.state ? ', ' + esc(a.state) : '') + ' — ' + esc(a.pin) + '</span></span>' +
           (on ? '<em class="addr__tag">Delivering here</em>' : "") + '</label>';
       }).join("") +
         '<button class="btn btn--ghost btn--sm" id="addAddrBtn">+ Add new address</button></div>' +
@@ -915,9 +917,9 @@
       (t.mrpTotal - t.subtotal > 0 ? '<div class="prow prow--green"><span>Discounts</span><b>− ' + money(t.mrpTotal - t.subtotal) + '</b></div>' : "") +
       '<div class="prow"><span>Delivery</span><b>Confirmed after address review</b></div>' +
       '<div class="prow prow--total"><span>Items subtotal</span><b>' + money(t.subtotal) + '</b></div>' +
-      '<p class="safe-note">The store will set your delivery charge after reviewing the address. You can pay once the final total is ready.</p>' +
+      '<p class="safe-note">The amount shown is the items subtotal. The store will review your address and confirm any delivery charge after your order is placed.</p>' +
       '<button class="btn btn--primary btn--block btn--lg" id="placeOrder" disabled>UPI QR not ready</button>' +
-      '<p class="safe-note">After the store confirms your final total, pay by UPI and upload your payment screenshot or receipt on the next screen. The store will verify payment before processing.</p>' +
+      '<p class="safe-note">Pay the items subtotal by UPI, upload your payment proof, then confirm your order. The admin will receive it after you confirm.</p>' +
       '</div></aside></div></div>';
 
     $("#backToCart").addEventListener("click", function () { A.navigateTo("#/cart"); });
@@ -982,36 +984,62 @@
     $("#placeOrder").addEventListener("click", function () {
       if (placeButton.disabled) return;
       if (!A.session().address) { A.toast("Add a delivery address first.", false); window.scrollTo(0, 0); return; }
+      if (addresses.length) {
+        var selectedAddressRadio = $('.addr-list input[name="addrSel"]:checked');
+        var selectedSavedAddress = selectedAddressRadio && addresses.filter(function (address) { return address.id === selectedAddressRadio.value; })[0];
+        if (selectedSavedAddress) A.setSession({ addressId: selectedSavedAddress.id, address: selectedSavedAddress });
+      }
+      placeButton.disabled = true;
+      placeButton.textContent = "Preparing order…";
       Promise.resolve(A.placeOrder("UPI")).then(function (order) {
         if (order) A.navigateTo("#/pay/" + order.id);
+        else setQrReady(true);
       });
     });
   }
 
   /* ================= PAYMENT / SUCCESS ================= */
 
+  function paymentProofUploadForm(order, replacing) {
+    return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>' + (replacing ? 'Replace payment screenshot' : 'Upload payment proof') + '</b><span>JPG, JPEG, PNG or WebP image · maximum 1.4 MB.</span></label>' +
+      '<input id="paymentProofFile" name="paymentProofFile" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">' + (replacing ? 'Upload replacement' : 'Upload payment proof') + '</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">' + (replacing ? 'Upload a new screenshot if you need to replace this file.' : 'Upload your payment screenshot here to continue.') + '</p></form>';
+  }
+  function paymentProofPreviewHtml(order) {
+    if (!order.paymentProofSent) return '';
+    var url = '/api/orders/' + encodeURIComponent(order.id) + '/payment-proof';
+    return '<div class="payment-proof-preview"><img src="' + esc(url) + '" alt="Your uploaded payment screenshot" loading="eager"><a href="' + esc(url) + '" target="_blank" rel="noopener">Open original screenshot</a></div>';
+  }
   function paymentProofContent(order) {
+    var rejected = order.paymentProofRejected ? '<p class="upi-wait__status upi-wait__status--error payment-proof-rejected" role="alert"><b>Payment proof rejected.</b> ' + esc(order.paymentRejectionReason || 'Upload a new screenshot and submit your order again.') + '</p>' : '';
     if (order.paymentProofSubmitted) {
-      return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
-        'Payment proof submitted. Your order is placed and is awaiting store verification.' + '</p>';
+      return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">Your order has been placed. Payment proof was received and is waiting for store verification.</p>' + paymentProofPreviewHtml(order);
     }
     if (order.paymentProofSent) {
-      return '<p class="upi-wait__status upi-wait__status--success" id="upiPaymentStatus" role="status">' +
-        'Payment proof uploaded. Confirm your order below.' +
-        (order.shippingFinalized ? '' : ' The store will confirm the delivery charge after reviewing your address.') + '</p>' +
+      return rejected + paymentProofPreviewHtml(order) + paymentProofUploadForm(order, true) +
+        '<button class="btn btn--ghost btn--block" type="button" id="removePaymentProof">Remove uploaded screenshot</button>' +
+        '<div class="field payment-reference-field"><label for="paymentReferenceId">UPI transaction/reference ID (optional)</label><input id="paymentReferenceId" maxlength="100" value="' + esc(order.paymentReferenceId || '') + '" placeholder="Enter UPI reference ID" /></div>' +
         '<button class="btn btn--primary btn--block" type="button" id="confirmPaymentProof">Confirm order</button>';
     }
-    return '<form class="payment-proof-upload" id="paymentProofForm"><label for="paymentProofFile"><b>Upload payment proof</b><span>' +
-      (order.shippingFinalized ? 'Choose your screenshot or payment receipt in any file format (up to 1.4 MB).' : 'If you have already paid, choose your screenshot or payment receipt in any file format (up to 1.4 MB).') +
-      '</span></label><input id="paymentProofFile" name="paymentProofFile" type="file" required><button class="btn btn--primary btn--block" id="uploadPaymentProof" type="submit">Upload payment proof</button><p class="upi-wait__status" id="upiPaymentStatus" role="status">Upload your payment screenshot or receipt here to continue.</p></form>';
+    return rejected + paymentProofUploadForm(order, false);
+  }
+
+  function paymentOrderSummary(order) {
+    var items = Array.isArray(order.items) ? order.items : [];
+    var lines = items.map(function (item) {
+      var name = item.name || "Product";
+      var quantity = Number(item.qty) || 1;
+      var lineTotal = (Number(item.price) || 0) * quantity;
+      return '<li><span>' + esc(name) + ' <small>× ' + quantity + '</small></span><b>' + money(lineTotal) + '</b></li>';
+    }).join("");
+    var total = order.shippingFinalized ? '<li class="payment-order-summary__total"><span>Total payable</span><b>' + money(order.totals.total) + '</b></li>' : '<li class="payment-order-summary__total"><span>Items subtotal · delivery pending</span><b>' + money(order.totals.subtotal) + '</b></li>';
+    return '<section class="payment-order-summary card-inset" aria-label="Order summary"><h2>Order summary · ' + esc(order.id) + '</h2><ul>' + (lines || '<li><span>Order items</span><b>—</b></li>') + total + '</ul></section>';
   }
 
   function paymentPage(orderId) {
+    if (successPaymentTimer) { clearInterval(successPaymentTimer); successPaymentTimer = null; }
     var order = A.state.orders.filter(function (o) { return o.id === orderId; })[0];
     if (!order) { view.innerHTML = emptyState("🧾", "Order not found", "", '<a class="btn btn--primary" href="#/">Home</a>'); return; }
     if (order.status === "Cancelled") { view.innerHTML = emptyState("↩️", "Order cancelled", "This order is cancelled. Contact the store if you already transferred payment.", '<a class="btn btn--primary" href="#/orders">My orders</a>'); return; }
-    if (order.paymentProofSubmitted) { successHtml(order); return; }
-
     var isCod = String(order.payment).toLowerCase() === "cod";
     if (order._srv && isCod) { successHtml(order); return; }
     if (!order._srv) {
@@ -1021,8 +1049,9 @@
 
     if (!order.shippingFinalized) {
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Payment details</h1>' +
-        '<p>The store is checking your address and will add the delivery charge. Please wait to pay until the final total appears. If you have already paid, upload your payment proof below so it can be attached to this order.</p>' +
-        '<div class="upi-wait__amount"><span>Items subtotal · delivery charge pending</span><b>' + money(order.totals.subtotal) + '</b></div>' +
+        '<p>Pay the items subtotal shown below, then upload your payment proof and confirm your order. The store will review the address and confirm any delivery charge after your order is placed.</p>' +
+        '<div class="upi-wait__amount"><span>Items subtotal</span><b>' + money(order.totals.subtotal) + '</b></div>' +
+        paymentOrderSummary(order) +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         paymentProofContent(order) +
         '</div>';
@@ -1030,6 +1059,7 @@
       view.innerHTML = '<div class="paywait card upi-wait"><h1>Complete your UPI payment</h1>' +
         '<p>Scan this UPI QR and pay the exact amount below. Then choose your payment proof file and upload it. The store will verify your payment before processing the order.</p>' +
         '<div class="upi-wait__amount"><span>Amount to pay</span><b>' + money(order.totals.total) + '</b></div>' +
+        paymentOrderSummary(order) +
         '<div class="upi-wait__qr"><img id="upiPaymentQr" src="/assets/upi-qr.png" alt="UVID UPI payment QR code" /><p id="upiPaymentQrError" hidden>The UPI QR could not be loaded. Please contact the store before paying.</p></div>' +
         paymentProofContent(order) +
         '</div>';
@@ -1045,6 +1075,12 @@
       var file = fileInput && fileInput.files && fileInput.files[0];
       if (!file) { if (status) status.textContent = "Choose a payment proof file first."; return; }
       if (file.size > 1400000) { if (status) { status.textContent = "This file is over 1.4 MB. Choose a smaller file."; status.classList.add("upi-wait__status--error"); } return; }
+      var extension = String(file.name || "").split(".").pop().toLowerCase();
+      var acceptedTypes = ["image/jpeg", "image/png", "image/webp"];
+      if ((file.type && acceptedTypes.indexOf(file.type.toLowerCase().replace("image/jpg", "image/jpeg")) < 0) || (!file.type && ["jpg", "jpeg", "png", "webp"].indexOf(extension) < 0)) {
+        if (status) { status.textContent = "Choose a JPG, JPEG, PNG or WebP image."; status.classList.add("upi-wait__status--error"); }
+        return;
+      }
       uploadButton.disabled = true;
       uploadButton.textContent = "Uploading…";
       if (status) { status.classList.remove("upi-wait__status--error"); status.textContent = "Uploading " + file.name + "…"; }
@@ -1063,17 +1099,45 @@
         if (!response.ok) throw new Error(result.error || "Could not upload the payment proof.");
         order.paymentProofSent = true;
         order.paymentProofFileName = file.name;
-        if (result.order && result.order.payment_proof_file_name) order.paymentProofFileName = result.order.payment_proof_file_name;
-        order.status = "Awaiting payment";
+        if (result.order) {
+          order.paymentProofFileName = result.order.payment_proof_file_name || file.name;
+          order.paymentProofMime = result.order.payment_proof_mime || file.type || null;
+          order.paymentProofRejected = result.order.payment_status === "REJECTED";
+          order.paymentRejectionReason = result.order.payment_rejection_reason || null;
+        }
+        order.paymentProofSubmitted = false;
+        if (!order.paymentProofRejected) order.status = "Awaiting payment";
         order.stageIndex = 0;
-        order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+        order.paymentStatus = order.paymentProofRejected ? "Payment proof rejected" : "Awaiting order confirmation";
         A.save();
         clearInterval(paymentTimer);
         paymentPage(order.id);
       } catch (error) {
         uploadButton.disabled = false;
-        uploadButton.textContent = "Upload payment proof";
+        uploadButton.textContent = order.paymentProofSent ? "Upload replacement" : "Upload payment proof";
         if (status) { status.textContent = error.message || "Could not upload the payment proof. Please try again."; status.classList.add("upi-wait__status--error"); }
+      }
+    });
+    var removeProofButton = $("#removePaymentProof");
+    if (removeProofButton) removeProofButton.addEventListener("click", async function () {
+      removeProofButton.disabled = true;
+      removeProofButton.textContent = "Removing…";
+      try {
+        var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/payment-proof", { method: "DELETE", credentials: "same-origin" });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not remove the payment screenshot.");
+        order.paymentProofSent = false;
+        order.paymentProofSubmitted = false;
+        order.paymentProofFileName = null;
+        order.paymentProofMime = null;
+        A.save();
+        clearInterval(paymentTimer);
+        paymentPage(order.id);
+      } catch (error) {
+        removeProofButton.disabled = false;
+        removeProofButton.textContent = "Remove uploaded screenshot";
+        var status = $("#upiPaymentStatus");
+        if (status) { status.textContent = error.message || "Could not remove the payment screenshot."; status.classList.add("upi-wait__status--error"); }
       }
     });
     var confirmProofButton = $("#confirmPaymentProof");
@@ -1083,7 +1147,7 @@
       var status = $("#upiPaymentStatus");
       try {
         var response = await fetch("/api/orders/" + encodeURIComponent(order.id) + "/confirm-payment-proof", {
-          method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}"
+          method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paymentReferenceId: $("#paymentReferenceId") ? $("#paymentReferenceId").value : "" })
         });
         var result = await response.json();
         if (!response.ok) throw new Error(result.error || "Could not confirm your order.");
@@ -1091,14 +1155,18 @@
         order.paymentProofSent = true;
         order.status = "Placed";
         order.stageIndex = 0;
-        order.paymentStatus = result.order && result.order.payment_status === "PAID" ? "Paid ✓" : "Awaiting payment verification";
-        order.paymentConfirmed = Boolean(result.order && result.order.payment_status === "PAID");
+        order.paymentStatus = "Pending verification";
+        order.paymentConfirmed = false;
+        order.paymentProofRejected = false;
+        order.paymentRejectionReason = null;
+        order.paymentReferenceId = result.order && result.order.payment_reference_id || null;
         if (result.order) {
           order.shippingFinalized = Number(result.order.shipping_finalized) !== 0;
           order.totals.shipping = Number(result.order.shipping) || 0;
           order.totals.total = Number(result.order.total_amount) || order.totals.total;
         }
         A.save();
+        A.completeOrderSubmission(order);
         clearInterval(paymentTimer);
         successHtml(order);
       } catch (error) {
@@ -1131,24 +1199,39 @@
             paymentPage(order.id);
             return;
           }
-          var stageMap = { AWAITING_PAYMENT: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+          if (serverOrder.payment_status === "REJECTED") {
+            var wasRejected = Boolean(order.paymentProofRejected);
+            order.paymentProofRejected = true;
+            order.paymentProofSubmitted = false;
+            order.paymentProofSent = Boolean(serverOrder.payment_proof_file_name);
+            order.paymentProofFileName = serverOrder.payment_proof_file_name || null;
+            order.paymentProofMime = serverOrder.payment_proof_mime || null;
+            order.paymentRejectionReason = serverOrder.payment_rejection_reason || "Upload a new screenshot and submit your order again.";
+            order.paymentStatus = "Payment proof rejected";
+            order.status = "Payment rejected";
+            A.save();
+            if (!wasRejected) { clearInterval(paymentTimer); paymentPage(order.id); }
+            else if (statusEl) statusEl.textContent = "Payment proof rejected: " + order.paymentRejectionReason + " Upload a new screenshot and submit the order again.";
+            return;
+          }
+          var stageMap = { AWAITING_PAYMENT: 0, AWAITING_PAYMENT_VERIFICATION: 0, CONFIRMED: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
           var stageIndex = stageMap[serverOrder.status] != null ? stageMap[serverOrder.status] : 0;
-          var latestStatus = serverOrder.status === "AWAITING_PAYMENT" ? "Awaiting payment" : A.STATUS_STAGES[stageIndex];
+          var latestStatus = serverOrder.status === "AWAITING_PAYMENT" ? "Awaiting payment" : serverOrder.status === "AWAITING_PAYMENT_VERIFICATION" ? "Awaiting payment verification" : A.STATUS_STAGES[stageIndex];
           var orderStatusChanged = order.status !== latestStatus;
           order.status = latestStatus;
           order.stageIndex = stageIndex;
           if (serverOrder.payment_proof_sent_at) {
             order.paymentProofSubmitted = true;
             order.paymentProofSent = true;
-            order.paymentStatus = serverOrder.payment_status === "PAID" ? "Paid ✓" : "Awaiting payment verification";
-            order.paymentConfirmed = serverOrder.payment_status === "PAID";
+            order.paymentStatus = serverOrder.payment_status === "PAID" || serverOrder.payment_status === "VERIFIED" ? "Paid ✓" : "Pending verification";
+            order.paymentConfirmed = serverOrder.payment_status === "PAID" || serverOrder.payment_status === "VERIFIED";
             A.save();
             clearInterval(paymentTimer);
             successHtml(order);
             return;
           }
           if (serverOrder.payment_proof_file_name && !hadPaymentProof) {
-            order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+            order.paymentStatus = "Awaiting order confirmation";
             A.save();
             clearInterval(paymentTimer);
             paymentPage(order.id);
@@ -1164,7 +1247,7 @@
             paymentPage(order.id);
             return;
           }
-          if (serverOrder.payment_status === "PAID") {
+          if (serverOrder.payment_status === "PAID" || serverOrder.payment_status === "VERIFIED") {
             var wasPaymentConfirmed = order.paymentConfirmed;
             order.paymentConfirmed = true;
             order.paymentStatus = "Paid ✓";
@@ -1177,10 +1260,10 @@
           order.shippingFinalized = Number(serverOrder.shipping_finalized) !== 0;
           order.totals.shipping = Number(serverOrder.shipping) || 0;
           order.totals.total = Number(serverOrder.total_amount) || 0;
-          order.paymentStatus = order.shippingFinalized ? "Awaiting payment verification" : "Delivery charge awaiting store quote";
+          order.paymentStatus = order.paymentProofSent ? "Awaiting order confirmation" : "Awaiting payment";
           statusEl.textContent = order.shippingFinalized
             ? (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to verify your payment." : "After paying, upload your payment screenshot or receipt here. Payment is confirmed after store verification.")
-            : (order.paymentProofSent ? "Payment proof uploaded. Waiting for the store to confirm the final delivery total." : "Waiting for the store to confirm delivery.");
+            : (order.paymentProofSent ? "Payment proof uploaded. Confirm your order to submit it." : "Pay the items subtotal, upload your proof, then confirm your order.");
           A.save();
         })
         .catch(function () { statusEl.textContent = "Still waiting for the store server. This page will check again."; });
@@ -1190,36 +1273,79 @@
   }
 
   function customerShiprocketPanel(order) {
-    if (!order || !order._srv || order.status === "Cancelled") return "";
+    if (!order || !order._srv || order.status === "Cancelled" || !order.paymentConfirmed) return "";
     return '<section class="shiprocket-customer card-inset"><h2>Book a courier</h2>' +
       '<p>Continue to Shiprocket to enter the shipment details and choose your courier.</p>' +
       '<a class="btn btn--primary btn--sm" href="https://www.shiprocket.in/">Book your courier</a></section>';
   }
   function successHtml(order) {
+    if (successPaymentTimer) { clearInterval(successPaymentTimer); successPaymentTimer = null; }
     var isCod = String(order.payment).toLowerCase() === "cod";
     var proofSubmitted = Boolean(order.paymentProofSubmitted);
     var paymentConfirmed = Boolean(order.paymentConfirmed);
+    var paymentRejected = Boolean(order.paymentProofRejected);
+    var awaitingVerification = proofSubmitted && !paymentConfirmed;
     var eta = A.fmtDate(order.eta);
     view.innerHTML =
       '<div class="success card">' +
       '<div class="success__burst" aria-hidden="true">' + '<i></i><i></i><i></i><i></i><i></i><i></i>' + '</div>' +
       '<div class="success__check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none"/><path fill="none" d="M14 27l8 8 16-16"/></svg></div>' +
-      '<h1>' + (proofSubmitted ? "Your order has been confirmed!" : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
-      '<p class="success__sub">' + (proofSubmitted && !paymentConfirmed ? "Your payment proof was submitted. The store will verify the transfer before processing your order." + (!order.shippingFinalized ? " The delivery charge will be confirmed after the address review." : "") : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : "We received your payment of <b>" + money(order.totals.total) + "</b>.")) + '</p>' +
+      '<h1>' + (paymentConfirmed ? "Your order has been placed." : paymentRejected ? "Payment proof needs an update" : awaitingVerification ? "Your order has been placed." : (isCod ? "Order confirmed!" : "Order successful!")) + '</h1>' +
+      '<p class="success__sub">' + (paymentRejected ? "Payment proof was rejected: " + esc(order.paymentRejectionReason || "Please upload a new screenshot.") + " Replace the screenshot and submit your order again." : awaitingVerification ? "Your payment proof was uploaded and your order is now placed. The store will verify the transfer before processing it." : (isCod ? "Keep " + money(order.totals.total) + ' ready at your doorstep.' : paymentConfirmed ? "Your payment was verified by the store." : "We received your order.")) + '</p>' +
       '<p class="success__sub" id="upiPaymentStatus">Current order status: <b>' + esc(order.status || "Placed") + '</b>.</p>' +
       '<div class="success__meta card-inset">' +
       '<div><span>Order ID</span><b>' + order.id + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(String(order.payment).toUpperCase()) + ' · ' + esc(order.paymentStatus) + '</b></div>' +
+      '<div><span>' + (awaitingVerification ? 'Amount submitted · customer-reported' : 'Total amount') + '</span><b>' + money(order.totals.total) + '</b></div>' +
+      (order.paymentReferenceId ? '<div><span>UPI reference ID</span><b>' + esc(order.paymentReferenceId) + '</b></div>' : '') +
       '<div><span>Delivery by</span><b>' + eta + '</b></div>' +
       '<div><span>Deliver to</span><b>' + esc(order.address.name) + ', ' + esc(order.address.city) + '</b></div>' +
       '</div>' +
       customerShiprocketPanel(order) +
       '<div class="success__cta">' +
-      '<a class="btn btn--primary" href="#/orders/' + order.id + '">Track order</a>' +
+      (paymentRejected ? '<a class="btn btn--primary" href="#/pay/' + encodeURIComponent(order.id) + '">Replace payment screenshot</a>' : '<a class="btn btn--primary" href="#/orders/' + order.id + '">Track order</a>') +
       '<button class="btn btn--ghost" type="button" data-invoice="' + esc(order.id) + '">Download invoice (PDF)</button>' +
       '<a class="btn btn--ghost" href="#/">Continue shopping</a>' +
       '</div></div>' +
       shelf("Complete your desk", "Frequently bought together", D.PRODUCTS.filter(function (p) { return p.tags.indexOf("bestseller") > -1; }).slice(0, 6));
+    if (awaitingVerification) {
+      successPaymentTimer = setInterval(function () {
+        if (location.hash !== "#/pay/" + encodeURIComponent(order.id) || !$("#upiPaymentStatus")) {
+          clearInterval(successPaymentTimer);
+          successPaymentTimer = null;
+          return;
+        }
+        fetch("/api/orders/" + encodeURIComponent(order.id), { cache: "no-store", credentials: "same-origin" })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(function (data) {
+            var latest = data && data.order;
+            if (!latest) return;
+            if (latest.payment_status === "REJECTED") {
+              order.paymentProofRejected = true;
+              order.paymentProofSubmitted = false;
+              order.paymentRejectionReason = latest.payment_rejection_reason || "Please upload a replacement screenshot.";
+              order.paymentStatus = "Payment proof rejected";
+              order.status = "Payment rejected";
+              A.save();
+              successHtml(order);
+              return;
+            }
+            if (latest.payment_status === "VERIFIED" || latest.payment_status === "PAID") {
+              var stageMap = { CONFIRMED: 0, PLACED: 0, PACKED: 1, SHIPPED: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+              var stage = stageMap[latest.status] == null ? 0 : stageMap[latest.status];
+              order.paymentConfirmed = true;
+              order.paymentProofSubmitted = false;
+              order.paymentProofRejected = false;
+              order.paymentStatus = "Paid ✓";
+              order.paymentVerifiedAt = latest.payment_verified_at || null;
+              order.status = latest.status === "CONFIRMED" ? "Confirmed" : A.STATUS_STAGES[stage];
+              order.stageIndex = stage;
+              A.save();
+              successHtml(order);
+            }
+          }).catch(function () {});
+      }, 5000);
+    }
   }
 
   function openCustomerInvoice(order) {
@@ -1397,6 +1523,8 @@
     var cancelled = o.status === "Cancelled";
     var timeline = cancelled
       ? '<div class="tl tl--cancelled"><p>❌ This order was cancelled. Any payment will be refunded to source in 3–5 working days.</p></div>'
+      : String(o.payment).toLowerCase() === "upi" && !o.paymentConfirmed
+        ? '<div class="tl tl--pending"><p>' + (o.paymentProofRejected ? 'Payment proof rejected: ' + esc(o.paymentRejectionReason || 'Upload a new screenshot and submit it again.') : o.paymentProofSubmitted ? 'Order placed. Payment proof is waiting for store verification.' : 'Complete payment and submit your payment screenshot to continue.') + '</p></div>'
       : '<div class="tl">' + A.STATUS_STAGES.map(function (s, i) {
           var done = i <= o.stageIndex;
           var cur = i === o.stageIndex;
@@ -1427,12 +1555,12 @@
       '</div></section>' +
       '<section class="card odetail__box"><h2>delivery address</h2>' +
       '<p class="odetail__addr"><b>' + esc(o.address.name) + '</b> · ' + esc(o.address.phone) + '<br/>' +
-      esc(o.address.line) + ', ' + esc(o.address.city) + ' — ' + esc(o.address.pin) + '</p></section>' +
+      esc(o.address.line) + ', ' + esc(o.address.city) + (o.address.state ? ', ' + esc(o.address.state) : '') + ' — ' + esc(o.address.pin) + '</p></section>' +
       '<section class="card odetail__box"><h2>payment summary</h2>' +
       '<div class="prow"><span>Items total</span><b>' + money(o.totals.subtotal) + '</b></div>' +
       '<div class="prow"><span>Delivery</span><b>' + (o.shippingFinalized ? (o.totals.shipping === 0 ? '<span class="green">FREE</span>' : money(o.totals.shipping)) : "Awaiting store quote") + '</b></div>' +
       '<div class="prow prow--total"><span>Total ' + (String(o.payment).toLowerCase() === "cod" ? "(pay on delivery)" : o.paymentConfirmed ? "(paid)" : o.shippingFinalized ? "(payment awaiting verification)" : "(not final yet)") + '</span><b>' + (o.shippingFinalized ? money(o.totals.total) : "—") + '</b></div>' +
-      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">Pay ' + money(o.totals.total) + ' by UPI</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. You can pay here when the final amount is ready.</p>' : "")) +
+      (!cancelled && o.shippingFinalized && !o.paymentConfirmed ? '<a class="btn btn--primary btn--block" href="#/pay/' + encodeURIComponent(o.id) + '">' + (o.paymentProofRejected ? 'Replace payment screenshot' : o.paymentProofSubmitted ? 'View payment status' : 'Pay ' + money(o.totals.total) + ' by UPI') + '</a>' : (!cancelled && !o.shippingFinalized ? '<p class="safe-note">The store will set the delivery charge after reviewing your address. You can pay here when the final amount is ready.</p>' : "")) +
       '</section></div>' +
       '<a class="linkbtn" href="#/orders">← All orders</a></div>';
   }
@@ -1885,20 +2013,20 @@
 
   function renderBadges() {
     var n = A.cartCount(), w = A.state.wishlist.length;
-    [["cartCount", n], ["cartCountM", n], ["wishCount", w], ["wishCountM", w]].forEach(function (pair) {
+    [["cartCount", n], ["wishCount", w], ["mobileCartCount", n]].forEach(function (pair) {
       var el = document.getElementById(pair[0]);
       if (el) { el.textContent = pair[1] > 99 ? "99+" : pair[1]; el.hidden = pair[1] === 0; }
     });
-    /* active state in bottom nav */
     var path = (location.hash || "#/").split("?")[0];
-    $$(".bnav").forEach(function (b) {
-      var id = b.getAttribute("data-nav");
+    $$(".mobile-quicknav__item[data-mnav]").forEach(function (b) {
+      var id = b.getAttribute("data-mnav");
       var on = (id === "home" && path === "#/") ||
         (id === "browse" && (path === "#/search" || path.indexOf("#/c/") === 0)) ||
         (id === "wishlist" && path === "#/wishlist") ||
-        (id === "orders" && path.indexOf("#/orders") === 0) ||
         (id === "cart" && path === "#/cart");
-      b.classList.toggle("bnav--on", on);
+      b.classList.toggle("is-active", on);
+      if (on) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
     });
   }
 
@@ -1910,24 +2038,31 @@
     var d = $("#mobileDrawer");
     if (d) d.classList.remove("drawer--open");
     if (b) b.classList.remove("backdrop--show");
+    var burger = $("#burger");
+    if (burger) {
+      burger.setAttribute("aria-expanded", "false");
+      burger.setAttribute("aria-label", "Open menu");
+    }
   }
 
   function renderHeaderCategories() {
     var categories = D.CATEGORIES || [];
-    function categoryLink(category) {
+    function categoryLink(category, child) {
       var slug = esc(String(category.slug || ""));
       var label = esc(String(category.label || category.name || category.slug || "Category"));
-      return '<a class="category-menu__item" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
+      return '<a class="category-menu__item' + (child ? ' category-menu__item--child' : '') + '" role="menuitem" href="#/c/' + slug + '">' + label + '</a>';
     }
-    var html = categories.filter(function (category) {
+    var parents = categories.filter(function (category) {
       return !category.parentSlug || !categories.some(function (parent) { return parent.slug === category.parentSlug; });
-    }).map(function (parent) {
-      return categoryLink(parent, false);
-    }).join("");
-    ["headerCategoryLinks", "mobileCategoryLinks"].forEach(function (id) {
-      var container = document.getElementById(id);
-      if (container) container.innerHTML = html;
     });
+    var headerHtml = parents.map(function (parent) { return categoryLink(parent, false); }).join("");
+    var mobileHtml = categories.map(function (category) {
+      return categoryLink(category, Boolean(category.parentSlug && categories.some(function (parent) { return parent.slug === category.parentSlug; })));
+    }).join("");
+    var headerContainer = document.getElementById("headerCategoryLinks");
+    var mobileContainer = document.getElementById("mobileCategoryLinks");
+    if (headerContainer) headerContainer.innerHTML = headerHtml;
+    if (mobileContainer) mobileContainer.innerHTML = mobileHtml;
   }
 
   function closeHeaderCategories() {
@@ -1970,6 +2105,14 @@
     var categoryPanel = $("#headerCategoryMenu");
     renderHeaderCategories();
     document.addEventListener("pt:catalog", renderHeaderCategories);
+    var categoryToggle = $("#mobileCategoryToggle");
+    var categoryList = $("#mobileCategoryLinks");
+    if (categoryToggle && categoryList) categoryToggle.addEventListener("click", function () {
+      var open = categoryList.hidden;
+      categoryList.hidden = !open;
+      categoryToggle.classList.toggle("is-open", open);
+      categoryToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
     if (categoryToggle && categoryPanel) {
       categoryToggle.addEventListener("click", function () {
         var open = categoryPanel.hidden;
@@ -1997,6 +2140,7 @@
       d.classList.toggle("drawer--open", open);
       $("#backdrop").classList.toggle("backdrop--show", open);
       burger.setAttribute("aria-expanded", open ? "true" : "false");
+      burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
     });
     $$("#mobileDrawer a").forEach(function (a) {
       a.addEventListener("click", closeDrawer);
@@ -2008,6 +2152,11 @@
     });
     var chip = $("#accountChip");
     if (chip) chip.addEventListener("click", function () {
+      if (A.state.user) A.navigateTo("#/account");
+      else A.openAuth("login", "");
+    });
+    var mobileAccount = $("#mobileAccountChip");
+    if (mobileAccount) mobileAccount.addEventListener("click", function () {
       if (A.state.user) A.navigateTo("#/account");
       else A.openAuth("login", "");
     });

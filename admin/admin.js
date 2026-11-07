@@ -291,6 +291,7 @@
     revenueMonth: "",
     revenueSelectedDay: "",
     orders: [],
+    checkoutRequests: [],
     customers: [],
     filters: { q: "", cat: "", status: "live" },
     orderFilter: "",
@@ -340,7 +341,7 @@
   });
 
   $("#logoutBtn").addEventListener("click", async function () {
-    try { await api("POST", "/api/auth/logout", {}, { quiet: true }); } catch (_e) { /* already gone */ }
+    try { await api("POST", "/api/auth/admin/logout", {}, { quiet: true }); } catch (_e) { /* already gone */ }
     showLogin("");
     toast("Logged out.", true);
   });
@@ -447,7 +448,7 @@
   function liveSnapshot(route) {
     if (route === "products") return JSON.stringify(state.products);
     if (route === "categories") return JSON.stringify(state.categories);
-    if (route === "orders") return JSON.stringify(state.orders);
+    if (route === "orders") return JSON.stringify({ orders: state.orders, checkoutRequests: state.checkoutRequests });
     if (route === "dashboard") return JSON.stringify(state.stats);
     if (route === "revenue") return JSON.stringify(state.revenueReport);
     return "";
@@ -462,6 +463,7 @@
     } else if (route === "orders") {
       const o = await api("GET", "/api/admin/orders" + (state.orderFilter ? "?status=" + state.orderFilter : ""));
       state.orders = o.orders;
+      state.checkoutRequests = [];
     } else if (route === "dashboard") {
       const s = await api("GET", "/api/admin/stats"); state.stats = s.stats;
     } else if (route === "revenue") {
@@ -489,10 +491,10 @@
     if (p.imageUrl) return '<img src="' + esc(p.imageUrl) + '" alt="" loading="lazy" style="width:' + s + "px;height:" + s + 'px">';
     return '<span style="width:' + s + "px;height:" + s + 'px;border-radius:10px;background:var(--brand-soft);display:grid;place-items:center;font-size:' + Math.round(s / 2.2) + 'px;flex:none">' + esc(p.emoji || "📦") + "</span>";
   }
-  const ORDER_STATUSES = [["AWAITING_PAYMENT", "Awaiting payment"], ["PLACED", "Placed"], ["PACKED", "Packed"], ["SHIPPED", "Shipped"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"]];
-  function orderLabel(s) { const f = ORDER_STATUSES.find(function (x) { return x[0] === s; }); return f ? f[1] : s; }
+  const ORDER_STATUSES = [["AWAITING_PAYMENT", "Awaiting payment"], ["AWAITING_PAYMENT_VERIFICATION", "Awaiting payment verification"], ["PLACED", "Order received"], ["PACKED", "Packed"], ["SHIPPED", "Shipped"], ["OUT_FOR_DELIVERY", "Out for delivery"], ["DELIVERED", "Delivered"], ["CANCELLED", "Cancelled"]];
+  function orderLabel(s) { if (s === "CONFIRMED") return "Order received"; const f = ORDER_STATUSES.find(function (x) { return x[0] === s; }); return f ? f[1] : s; }
   function orderBadge(s) {
-    const tone = { AWAITING_PAYMENT: "amber", PLACED: "green", PACKED: "green", SHIPPED: "amber", OUT_FOR_DELIVERY: "amber", DELIVERED: "green", CANCELLED: "red" }[s] || "grey";
+    const tone = { AWAITING_PAYMENT: "amber", AWAITING_PAYMENT_VERIFICATION: "amber", CONFIRMED: "green", PLACED: "green", PACKED: "green", SHIPPED: "amber", OUT_FOR_DELIVERY: "amber", DELIVERED: "green", CANCELLED: "red" }[s] || "grey";
     return '<span class="badge badge--' + tone + '">' + orderLabel(s) + "</span>";
   }
 
@@ -1412,7 +1414,7 @@
       await loadState("orders");
     }
     content.innerHTML =
-      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " orders · Review uploaded payment proofs in each invoice and verify transfers in PhonePe before progressing an unpaid UPI order.</p></div>" +
+      '<div class="page-head"><div><h3>Orders</h3><p>' + state.orders.length + " placed orders · Review submitted payment proofs in each invoice and verify transfers in PhonePe before processing.</p></div>" +
       '<div class="filters"><select id="ordFilter" aria-label="Filter by status"><option value="">All statuses</option>' +
       ORDER_STATUSES.map(function (s) {
         return '<option value="' + s[0] + '"' + (state.orderFilter === s[0] ? " selected" : "") + ">" + s[1] + "</option>";
@@ -1420,7 +1422,7 @@
       '<section class="panel"><div class="table-wrap"><table class="tbl" style="min-width:820px"><thead><tr>' +
       "<th>Order</th><th>Customer</th><th>Items</th><th class=\"num\">Total</th><th>Status</th><th style=\"text-align:right\">Invoice</th>" +
       '</tr></thead><tbody id="ordRows">' +
-      (state.orders.length ? state.orders.map(orderRowHtml).join("") : '<tr><td colspan="6" class="empty"><b>No orders yet</b>Orders placed on the storefront appear here instantly.</td></tr>') +
+      (state.orders.length ? state.orders.map(orderRowHtml).join("") : '<tr><td colspan="6" class="empty"><b>No placed orders yet</b>Orders appear here after customers upload payment proof and confirm.</td></tr>') +
       "</tbody></table></div></section>";
     renderIcons(content);
     $("#ordFilter").addEventListener("change", async function (e) {
@@ -1428,21 +1430,36 @@
       await repaint(VIEWS.orders);
     });
   };
+  function checkoutRequestRowHtml(o) {
+    const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
+    const addr = orderAddress(o);
+    const total = Number(o.shipping_finalized) === 0 ? "Delivery pending" : money(o.total_amount);
+    return '<tr data-checkout-request="' + esc(o.id) + '">' +
+      '<td><b>' + esc(o.id) + '</b><br><small>' + esc(fmtDateTime(o.created_at)) + ' · Not placed</small></td>' +
+      '<td>' + esc(addr.name || "—") + '<br><small>' + esc(addr.phone || o.mobile_number || "") + ' · ' + esc(addr.city || "") + '</small></td>' +
+      '<td>' + count + ' item' + (count === 1 ? "" : "s") + '</td>' +
+      '<td class="num"><b>' + total + '</b></td>' +
+      '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="Review delivery quote for checkout ' + esc(o.id) + '">' + (Number(o.shipping_finalized) === 0 ? 'Set charge' : 'View') + '</button></td></tr>';
+  }
   function orderRowHtml(o) {
     const count = o.items.reduce(function (a, i) { return a + i.quantity; }, 0);
     const addr = orderAddress(o);
-    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && o.payment_status !== "PAID" && o.status !== "CANCELLED";
+    const paymentVerified = o.payment_status === "PAID" || o.payment_status === "VERIFIED";
+    const awaitingUpi = String(o.payment_method).toUpperCase() === "UPI" && !paymentVerified && o.status !== "CANCELLED";
     const quotePending = Number(o.shipping_finalized) === 0;
     const proofReported = Boolean(o.payment_proof_sent_at);
     const proofUploaded = Boolean(o.payment_proof_file_name);
-    const paymentNote = awaitingUpi ? (proofUploaded ? " · Awaiting admin approval · Payment proof uploaded" : " · Payment pending" + (proofReported ? " · Proof reported" : "")) : "";
+    const proofRejected = o.payment_status === "REJECTED";
+    const displayStatus = o.status === "CONFIRMED" ? "PLACED" : o.status;
+    const canReviewPayment = awaitingUpi && proofUploaded && proofReported && !proofRejected;
+    const paymentNote = awaitingUpi ? (proofRejected ? " · Payment proof rejected · Replacement requested" : proofUploaded && proofReported ? " · Awaiting admin verification" : " · Payment pending") : "";
     const paymentInstruction = quotePending
       ? "Set the delivery charge in the invoice first."
-      : proofUploaded
-        ? 'Customer confirmed the order. Approval is pending: verify the transfer in PhonePe, then click "Confirm verified payment" to continue processing.'
-        : proofReported
-          ? "Wait for the customer to upload the payment proof, then verify the transfer in PhonePe."
-          : "Wait for the customer to pay and upload proof, then verify the transfer in PhonePe.";
+      : proofRejected
+        ? "Payment rejected. Waiting for the customer to upload a replacement screenshot. " + (o.payment_rejection_reason || "")
+        : proofUploaded && proofReported
+          ? 'Customer submitted payment proof. Verify the transfer in PhonePe Business before approving or rejecting it.'
+          : "Wait for the customer to pay, upload the screenshot and submit the order for verification.";
     return '<tr data-orow="' + esc(o.id) + '">' +
       "<td><b>" + esc(o.id) + "</b><br><small>" + esc(fmtDateTime(o.created_at)) + " · " + esc(o.payment_method) + paymentNote + "</small></td>" +
       "<td>" + esc(addr.name || "—") + "<br><small>" + esc(addr.phone || o.mobile_number || "") + " · " + esc(addr.city || "") + "</small></td>" +
@@ -1451,8 +1468,8 @@
       '<td><select class="ostat" data-oid="' + esc(o.id) + '" aria-label="Order status for ' + esc(o.id) + '"' + (awaitingUpi ? ' disabled aria-describedby="order-payment-hold-' + esc(o.id) + '"' : '') + '>' +
       ORDER_STATUSES.map(function (s) {
         const blockedUntilPaid = awaitingUpi && s[0] !== "CANCELLED";
-        return '<option value="' + s[0] + '"' + (o.status === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
-      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !proofUploaded ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Confirm verified payment</button>') : "") +
+        return '<option value="' + s[0] + '"' + (displayStatus === s[0] ? " selected" : "") + (blockedUntilPaid ? " disabled" : "") + ">" + s[1] + "</option>";
+      }).join("") + "</select>" + (awaitingUpi ? '<small class="order-workflow-note" id="order-payment-hold-' + esc(o.id) + '">' + paymentInstruction + (proofUploaded ? ' Payment proof: ' + esc(o.payment_proof_file_name) + '.' : '') + '</small>' + (quotePending || !canReviewPayment ? '' : '<button class="btn btn--primary btn--sm order-place-action" type="button" data-confirm-place="' + esc(o.id) + '">Approve payment</button><button class="btn btn--ghost btn--sm order-reject-action" type="button" data-reject-payment="' + esc(o.id) + '">Reject payment</button>') : "") +
       "</td>" +
       '<td style="text-align:right"><button class="btn btn--ghost btn--sm" data-invoice="' + esc(o.id) + '" aria-label="View and print invoice for order ' + esc(o.id) + '">View</button></td></tr>';
   }
@@ -1460,6 +1477,17 @@
     if (!order || !order.address_json) return {};
     if (typeof order.address_json === "object") return order.address_json || {};
     try { return JSON.parse(order.address_json) || {}; } catch (_e) { return {}; }
+  }
+  function adminOrderById(orderId) {
+    const id = String(orderId);
+    return state.orders.find(function (item) { return String(item.id) === id; }) ||
+      state.checkoutRequests.find(function (item) { return String(item.id) === id; }) || null;
+  }
+  function replaceAdminOrder(updated) {
+    [state.orders, state.checkoutRequests].forEach(function (list) {
+      const index = list.findIndex(function (item) { return String(item.id) === String(updated.id); });
+      if (index >= 0) list[index] = updated;
+    });
   }
   function invoiceImageUrl(value) {
     const src = String(value || "").trim();
@@ -1484,7 +1512,7 @@
     const buyerName = address.name || order.customer_name || "Customer";
     const email = address.email || order.customer_email || "—";
     const phone = address.phone || order.customer_mobile_number || order.mobile_number || "—";
-    const paymentStatus = order.payment_status === "PAID" ? "Paid" : (order.payment_proof_sent_at ? "Awaiting admin approval" : (order.status === "AWAITING_PAYMENT" || String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting payment" : String(order.payment_status || "PENDING").replace(/[_-]/g, " ")));
+    const paymentStatus = order.payment_status === "PAID" || order.payment_status === "VERIFIED" ? "Verified" : order.payment_status === "REJECTED" ? "Rejected" : order.payment_status === "PENDING_VERIFICATION" ? "Pending verification" : (order.payment_proof_sent_at ? "Awaiting admin approval" : (order.status === "AWAITING_PAYMENT" || String(order.payment_method).toUpperCase() === "UPI" ? "Awaiting payment" : String(order.payment_status || "PENDING").replace(/[_-]/g, " ")));
     const proofName = order.payment_proof_file_name ? String(order.payment_proof_file_name) : "";
     const proofMime = String(order.payment_proof_mime || "").toLowerCase();
     const proofUrl = proofName ? "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment-proof" : "";
@@ -1511,10 +1539,13 @@
       '<div><span>Order status</span><b>' + esc(orderLabel(order.status)) + '</b></div>' +
       '<div><span>Payment</span><b>' + esc(order.payment_method || "—") + ' · ' + esc(paymentStatus) + '</b></div>' +
       '<div><span>Payment proof</span><b>' + (proofName ? 'Uploaded · ' + esc(fmtDateTime(order.payment_proof_created_at || order.payment_proof_sent_at)) : order.payment_proof_sent_at ? 'Previously reported · ' + esc(fmtDateTime(order.payment_proof_sent_at)) : 'Not uploaded') + '</b></div>' +
+      '<div><span>UPI reference ID</span><b>' + esc(order.payment_reference_id || 'Not provided') + '</b></div>' +
+      (order.payment_verified_at ? '<div><span>Payment verified</span><b>' + esc(fmtDateTime(order.payment_verified_at)) + '</b></div>' : '') +
+      (order.payment_rejection_reason ? '<div class="invoice__rejection"><span>Payment rejection reason</span><b>' + esc(order.payment_rejection_reason) + '</b></div>' : '') +
       '<div><span>Place of supply</span><b>' + esc(address.state || "Not provided") + '</b></div><div><span>Reverse charge</span><b>Not recorded</b></div></div>' +
       '<div class="invoice__parties"><section><h3>Billed to</h3><b>' + esc(buyerName) + '</b><span>Phone: ' + esc(phone) + '</span><span>Email: ' + esc(email) + '</span><span>Customer GSTIN: ' + esc(address.gstin || "Not provided") + '</span></section>' +
       '<section><h3>Delivery address</h3><b>' + esc(buyerName) + '</b><span>' + (addressLines.length ? addressLines.map(esc).join("<br>") : "Address not provided") + '</span></section></div>' +
-      (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview">' + proofPreview + '</div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
+      (proofName ? '<section class="invoice__proof"><h3>Payment proof · ' + esc(proofName) + '</h3>' + (proofPreview ? '<div class="invoice__proof-preview"><a href="' + esc(proofUrl) + '" target="_blank" rel="noopener" aria-label="Open original payment proof for order ' + esc(order.id) + '">' + proofPreview + '</a></div>' : '<p>This file format is available as a download.</p>') + '<a href="' + esc(proofUrl) + '" download>Download payment proof</a></section>' : '') +
       '<div class="invoice__table-wrap"><table class="invoice__table"><thead><tr><th class="invoice__rownum">No.</th><th class="invoice__image">Image</th><th>Product</th><th class="invoice__num">Unit price</th><th class="invoice__qty">Qty</th><th class="invoice__num">Price</th></tr></thead><tbody>' +
       (items.length ? items.map(function (item, index) {
         const quantity = Number(item.quantity) || 0;
@@ -1541,12 +1572,14 @@
       '<p class="invoice__thanks">Thank you for shopping with UVID Art and Craft.</p></article>';
   }
   function openOrderInvoice(order) {
-    const awaitingUpi = String(order.payment_method).toUpperCase() === "UPI" && order.payment_status !== "PAID" && order.status !== "CANCELLED";
+    const paymentVerified = order.payment_status === "PAID" || order.payment_status === "VERIFIED";
+    const awaitingUpi = String(order.payment_method).toUpperCase() === "UPI" && !paymentVerified && order.status !== "CANCELLED";
     const quotePending = Number(order.shipping_finalized) === 0;
+    const canReviewPayment = awaitingUpi && !quotePending && Boolean(order.payment_proof_file_name && order.payment_proof_sent_at) && order.payment_status !== "REJECTED";
     const back = openModal(
       '<div class="modal__head"><h3>Invoice · ' + esc(order.id) + '</h3><button class="iconbtn" data-close aria-label="Close invoice">' + ICONS.x + '</button></div>' +
       '<div class="modal__body invoice-modal__body">' + orderInvoiceHtml(order) + '</div>' +
-      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (awaitingUpi && !quotePending && order.payment_proof_file_name ? '<button class="btn btn--soft" type="button" data-confirm-upi>Confirm verified payment</button>' : "") + ((order.payment_status === "PAID" || order.payment_proof_sent_at) ? '<button class="btn btn--soft" type="button" data-send-order-email>' + (order.payment_status === "PAID" ? "Resend payment email" : "Resend order email") + '</button>' : "") + (order.payment_status === "PAID" ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
+      '<div class="modal__foot invoice-modal__foot"><button class="btn btn--ghost" data-close>Close</button>' + (quotePending ? '<button class="btn btn--soft" type="button" data-save-delivery>Save delivery charge</button>' : "") + (canReviewPayment ? '<button class="btn btn--soft" type="button" data-confirm-upi>Approve payment</button><button class="btn btn--ghost" type="button" data-reject-upi>Reject payment</button>' : "") + ((paymentVerified || order.payment_proof_sent_at) ? '<button class="btn btn--soft" type="button" data-send-order-email>' + (paymentVerified ? "Resend payment email" : "Resend order email") + '</button>' : "") + (paymentVerified ? '<button class="btn btn--soft" type="button" data-send-order-push>Send phone alert</button>' : "") + '<button class="btn btn--primary" type="button" data-print-invoice>Print invoice</button></div>',
       "modal--wide"
     );
     const saveDeliveryButton = back.querySelector("[data-save-delivery]");
@@ -1561,8 +1594,7 @@
       try {
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/delivery", { shipping: Number(input.value) });
         const updated = result.order;
-        const index = state.orders.findIndex(function (item) { return String(item.id) === String(order.id); });
-        if (index >= 0) state.orders[index] = updated;
+        replaceAdminOrder(updated);
         toast("Delivery charge saved. The customer can now pay the updated total.", true);
         closeModal();
         openOrderInvoice(updated);
@@ -1602,7 +1634,7 @@
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
         const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
         const phoneSent = Boolean(result.notification && result.notification.sent);
-        const message = "UPI payment confirmed. " + (emailSent
+        const message = "UPI payment verified; order confirmed. " + (emailSent
           ? "Email alert sent to the admin inbox."
           : "Email alert could not be sent; check the email service setup.") + (phoneSent
           ? " Phone alert sent to " + result.notification.count + " device(s)."
@@ -1612,6 +1644,8 @@
         await repaint(VIEWS.orders);
       } catch (ex) { toast(ex.message, false); }
     });
+    const rejectButton = back.querySelector("[data-reject-upi]");
+    if (rejectButton) rejectButton.addEventListener("click", function () { rejectPaymentProof(order); });
     const pushButton = back.querySelector("[data-send-order-push]");
     if (pushButton) pushButton.addEventListener("click", async function () {
       const verified = await confirmDialog("Send this paid order's customer name, order number and total to the phones subscribed for order notifications?", { yes: "Send phone alert", danger: false });
@@ -1626,10 +1660,27 @@
       }
     });
   }
+  async function rejectPaymentProof(order) {
+    const reason = window.prompt("Why are you rejecting this payment screenshot? The customer will see this reason.");
+    if (reason === null) return;
+    if (String(reason).trim().length < 5) { toast("Enter a clear rejection reason of at least 5 characters.", false); return; }
+    try {
+      await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment/reject", { reason: String(reason).trim() });
+      toast("Payment rejected. The customer can see the reason and upload a replacement screenshot.", true);
+      closeModal();
+      await repaint(VIEWS.orders);
+    } catch (ex) { toast(ex.message || "Could not reject the payment proof.", false); }
+  }
   content.addEventListener("click", async function (e) {
+    const reject = e.target.closest("[data-reject-payment]");
+    if (reject) {
+      const order = adminOrderById(reject.dataset.rejectPayment);
+      if (order) await rejectPaymentProof(order);
+      return;
+    }
     const place = e.target.closest("[data-confirm-place]");
     if (place) {
-      const order = state.orders.find(function (item) { return String(item.id) === place.dataset.confirmPlace; });
+      const order = adminOrderById(place.dataset.confirmPlace);
       if (!order || order.status === "CANCELLED") return;
       if (Number(order.shipping_finalized) === 0) { toast("Set the delivery charge in the invoice before confirming payment.", false); return; }
       const verified = await confirmDialog("Review the uploaded payment proof in this invoice and check the exact total in PhonePe Business before confirming. This marks the payment as paid and allows processing.", { yes: "Confirm verified payment", danger: false });
@@ -1639,7 +1690,7 @@
         const result = await api("PUT", "/api/admin/orders/" + encodeURIComponent(order.id) + "/payment", {});
         const emailSent = Boolean(result.emailNotification && result.emailNotification.sent);
         const phoneSent = Boolean(result.notification && result.notification.sent);
-        toast("Payment confirmed; order placed. " + (emailSent ? "Customer email sent." : "Email alert could not be sent; check the email service setup.") + (phoneSent ? " Phone alert sent." : ""), emailSent);
+        toast("Payment verified; order confirmed. " + (emailSent ? "Customer email sent." : "Email alert could not be sent; check the email service setup.") + (phoneSent ? " Phone alert sent." : ""), emailSent);
         await repaint(VIEWS.orders);
       } catch (ex) { undo(); toast(ex.message, false); }
       return;
@@ -1647,11 +1698,11 @@
     const t = e.target.closest("[data-invoice]");
     if (!t) return;
     const orderId = t.dataset.invoice;
-    const order = state.orders.find(function (item) { return String(item.id) === orderId; });
+    const order = adminOrderById(orderId);
     if (!order) return;
     try {
       await loadState("orders");
-      const latest = state.orders.find(function (item) { return String(item.id) === orderId; });
+      const latest = adminOrderById(orderId);
       openOrderInvoice(latest || order);
     } catch (_error) {
       openOrderInvoice(order);

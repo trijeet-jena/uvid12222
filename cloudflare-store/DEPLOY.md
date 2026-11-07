@@ -40,13 +40,17 @@ be a real email inbox. Email one-time-code sign-in is disabled. `ADMIN_EMAIL`
 remains the actual inbox for order alerts. Keep the password out of source code
 and chat.
 
-After the customer sends their payment screenshot and order ID to WhatsApp and
-checks the confirmation box, an email goes to that address with the order ID,
-items, final amount, and a note that payment is still pending verification. A
-second email is sent after an admin verifies the UPI transfer. The screenshot
-is sent through WhatsApp; the website stores only the customer's confirmation
-timestamp. An admin checks the screenshot and transfer in PhonePe before
-marking the payment paid.
+After checkout, the customer sees the existing UPI QR and final amount, uploads
+a JPG, JPEG, PNG, or WebP payment screenshot (maximum 1.4 MB), and confirms the
+order. Before this final confirmation, the checkout is kept as a delivery-quote
+request and is not listed as a placed order or emailed to the admin. The
+screenshot is stored as a private D1 BLOB linked to the order; it is not exposed
+through a public URL. On customer confirmation, the order becomes `PLACED` with
+payment status `PENDING_VERIFICATION`, appears in Admin → Orders, and triggers
+the admin email. The admin can view or download the screenshot from the
+invoice. After checking the real transfer in PhonePe, the admin approves the
+payment to set payment status `VERIFIED` and order status `CONFIRMED`, or
+rejects it with a reason so the customer can upload a replacement.
 
 SMTP2GO's free plan supports transactional email. In SMTP2GO, verify either a
 sender domain or a single sender email address, then create an API key with
@@ -93,12 +97,24 @@ verified sender address. Enter the key directly when Wrangler prompts; never
 put it in source control or chat. Once configured, SMTP2GO is selected ahead
 of the Brevo and Resend fallbacks.
 
-Deploy the backend:
+## Deploy the payment-verification workflow
+
+For the existing production D1 database, apply the new migration exactly once,
+then deploy the Worker. This migration only adds columns and an idempotency
+index; it does not remove or rewrite existing products, orders, customers, or
+proof files. Do not run this migration on a brand-new database initialized
+from the current `schema.sql`, because that schema already contains these
+columns.
 
 ```powershell
-npx wrangler --config wrangler.toml d1 execute uvid-store --remote --file=migrations/0033_admin_password_login_attempts.sql
-npx wrangler --config wrangler.toml deploy
+npx wrangler -c wrangler.toml d1 execute uvid-store --remote --file=migrations/0034_payment_verification_workflow.sql
+npx wrangler -c wrangler.toml deploy
 ```
+
+No new environment variables or external storage service are required for
+payment screenshots. The existing `ADMIN_EMAIL` and email-provider settings
+continue to send the submitted-order review email. The existing admin session
+protects the invoice proof endpoint.
 
 Wrangler prints a URL similar to:
 
@@ -167,11 +183,11 @@ marked paid even if a notification cannot be delivered.
 
 ## After changing backend code
 
-From the `cloudflare-store` folder run:
+From the `cloudflare-store` folder, after applying any pending one-time D1
+migration described above, run:
 
 ```powershell
-npx wrangler --config wrangler.toml d1 migrations apply uvid-store --remote
-npx wrangler --config wrangler.toml deploy
+npx wrangler -c wrangler.toml deploy
 ```
 
 The schema adds the metadata tables used to link images to Supabase objects and
@@ -180,8 +196,9 @@ a persistent order-number counter. New orders receive IDs such as `UVID001`,
 already numbered `UVID` orders, the counter continues after the highest one.
 Cancelled orders keep their number, so IDs are never reused.
 
-The migration command applies any new tables without deleting existing
-products, images, users, or orders. Netlify redeploys automatically after the
-website files are pushed.
+Netlify redeploys the website files after they are pushed to the connected
+GitHub branch. The checkout screen, customer order status, and admin invoice
+changes are static-site files; the Worker and D1 migration must also be
+deployed as shown above.
 
 Customer delivery addresses are saved under the signed-in Gmail account in D1.
